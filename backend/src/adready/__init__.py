@@ -1,1 +1,0 @@
-"""AdReady AI backend processes."""
