@@ -4,16 +4,14 @@ version = "0.1.0"
 description = "AdReady AI orchestration and worker processes"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.116,<1",
+    "uvicorn[standard]>=0.35,<1",
     "httpx>=0.28,<1",
     "pydantic>=2.11,<3",
     "structlog>=25,<26",
 ]
 
 [project.optional-dependencies]
-orchestrator = [
-    "fastapi>=0.116,<1",
-    "uvicorn[standard]>=0.35,<1",
-]
 media = [
     "numpy>=2.0,<3",
     "opencv-python-headless>=4.10,<5",
