@@ -25,10 +25,19 @@ export default function CampaignForm() {
   const [creativeBrief, setCreativeBrief] = useState("");
   const [selectedCampaign, setSelectedCampaign] = useState("");
 
-    return (
-    <div className="mt-4 space-y-6">
+  const isCreateValid = productUrl.trim() && campaignGoal && creativeBrief.trim();
+  const isExistingValid = selectedCampaign;
+  const isFormValid = mode === "create" ? isCreateValid : isExistingValid;
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-4 space-y-6">
       <div className="flex rounded-lg border border-slate-200 bg-slate-50">
         <button
+          type="button"
           onClick={() => setMode("create")}
           className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
             mode === "create"
@@ -39,6 +48,7 @@ export default function CampaignForm() {
           Create new campaign
         </button>
         <button
+          type="button"
           onClick={() => setMode("existing")}
           className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
             mode === "existing"
@@ -120,10 +130,14 @@ export default function CampaignForm() {
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-[#9B9A97]">🔒  Your videos are secure and never shared.</p>
-        <button className="rounded-lg bg-[#534AB7] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#463E9E] transition-colors">
+        <button
+          type="submit"
+          disabled={!isFormValid}
+          className="rounded-lg bg-[#534AB7] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#463E9E] transition-colors disabled:text-[#808080] disabled:bg-[#CCCCCC] disabled:cursor-not-allowed"
+        >
           Run AdReady Review  →
         </button>
       </div>
-    </div>
+    </form>
   );
 }
