@@ -2,9 +2,9 @@
 // TODO: build the upload form here — file input for the video, brand/title
 // fields, a submit handler that uploads to Supabase Storage and inserts an
 // `evaluations` row, then navigates to /loading.
-import CampaignSection from "../components/upload/CampaignSection";
+import CampaignSection from "../components/upload/campaign_section/CampaignSection";
 import Sidebar from "../components/upload/Sidebar";
-import UploadSection from "../components/upload/UploadSection";
+import UploadSection from "../components/upload/upload_section/UploadSection";
 
 const mockVideos = [
 {
@@ -35,7 +35,7 @@ const mockVideos = [
 
 export default function UploadPage() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
         <h1 className="text-4xl font-bold text-slate-900">
           Let's review your ad creatives.
