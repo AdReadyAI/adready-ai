@@ -115,7 +115,7 @@ openai_api_key = "env(OPENAI_API_KEY)"
 [storage]
 enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
-file_size_limit = "50MiB"
+file_size_limit = "500MiB"
 
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]
@@ -123,6 +123,11 @@ file_size_limit = "50MiB"
 # file_size_limit = "50MiB"
 # allowed_mime_types = ["image/png", "image/jpeg"]
 # objects_path = "./images"
+
+[storage.buckets.videos]
+public = false
+file_size_limit = "500MiB"
+allowed_mime_types = ["video/mp4", "video/quicktime", "video/webm"]
 
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]
