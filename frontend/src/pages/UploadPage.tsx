@@ -45,6 +45,14 @@ export default function UploadPage() {
     );
   }
 
+  async function removeVideo(id: string) {
+    const video = videos.find((v) => v.id === id);
+    if (video?.storagePath) {
+      await supabase.storage.from("videos").remove([video.storagePath]);
+    }
+    setVideos((prev) => prev.filter((v) => v.id !== id));
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -57,7 +65,7 @@ export default function UploadPage() {
       </div>
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <UploadSection videos={videos} onFilesSelected={handleFilesSelected} />
+          <UploadSection videos={videos} onFilesSelected={handleFilesSelected} onRemoveVideo={removeVideo} />
           <CampaignSection videos={videos} />
         </div>
         <Sidebar />

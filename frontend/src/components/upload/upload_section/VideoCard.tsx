@@ -1,13 +1,22 @@
 type VideoCardProps = {
   filename: string
   status: "uploading" | "done" | "error"
+  onRemove: () => void
 }
 
-export default function VideoCard({ filename, status }: VideoCardProps) {
+export default function VideoCard({ filename, status, onRemove }: VideoCardProps) {
 
     return (
         <div className=" bg-white w-full">
             <div className="border rounded-lg border-[#E2E1DC] relative aspect-video w-full bg-[#F0EFEB]">
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    aria-label={`Remove ${filename}`}
+                    className="absolute top-2 left-2 bg-white/90 text-slate-600 w-6 h-6 rounded-full text-center text-xs hover:bg-white"
+                >
+                    ✕
+                </button>
                 <div className="absolute top-2 right-2">
                     {status === "done" && (
                         <div className="bg-[#1D9E75] w-6 h-6 p-1 rounded-full text-white text-center text-xs">
