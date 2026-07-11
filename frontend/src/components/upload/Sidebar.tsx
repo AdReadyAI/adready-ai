@@ -49,7 +49,7 @@ export default function Sidebar() {
             </li>
             <li className="flex items-center">
                 <div className="bg-[#EEEDFE] text-[#534AB7] w-6 h-6 p-1 rounded-full text-center text-xs mr-2">3</div>
-                Recieve scorecard and repair guide
+                Receive scorecard and repair guide
             </li>
         </ol>
       </section>
