@@ -1,39 +1,50 @@
-// Route: /upload — entry point of the flow.
-// TODO: build the upload form here — file input for the video, brand/title
-// fields, a submit handler that uploads to Supabase Storage and inserts an
-// `evaluations` row, then navigates to /loading.
+import { useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 import CampaignSection from "../components/upload/campaign_section/CampaignSection";
 import Sidebar from "../components/upload/Sidebar";
 import UploadSection from "../components/upload/upload_section/UploadSection";
 
-const mockVideos = [
-{
-  id: 1,
-  filename: "Video_1.mp4",
-  thumbnailClassName: "#DDD6FE",
-  uploaded: true,
-},
-{
-  id: 2,
-  filename: "Video_2.mp4",
-  thumbnailClassName: "#BBF7D0",
-  uploaded: true,
-},
-{
-  id: 3,
-  filename: "Video_3.mp4",
-  thumbnailClassName: "#FDE68A",
-  uploaded: true,
-},
-{
-  id: 4,
-  filename: "Video_4.mp4",
-  thumbnailClassName: "#FECACA",
-  uploaded: true,
-}
-]
+export type UploadedVideo = {
+  id: string;
+  file: File;
+  filename: string;
+  storagePath: string | null;
+  status: "uploading" | "done" | "error";
+};
 
 export default function UploadPage() {
+  const [videos, setVideos] = useState<UploadedVideo[]>([]);
+
+  function handleFilesSelected(files: File[]) {
+    const validFiles = files.filter((f) => f.type.startsWith("video/"));
+
+    const newVideos: UploadedVideo[] = validFiles.map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+      filename: file.name,
+      storagePath: null,
+      status: "uploading",
+    }));
+
+    setVideos((prev) => [...prev, ...newVideos]);
+    newVideos.forEach(uploadVideo);
+  }
+
+  async function uploadVideo(video: UploadedVideo) {
+    const path = `anon/${video.id}/${video.file.name}`;
+    const { error } = await supabase.storage
+      .from("videos")
+      .upload(path, video.file, { contentType: video.file.type });
+
+    setVideos((prev) =>
+      prev.map((v) =>
+        v.id === video.id
+          ? { ...v, status: error ? "error" : "done", storagePath: error ? null : path }
+          : v
+      )
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -46,8 +57,8 @@ export default function UploadPage() {
       </div>
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <UploadSection videos={mockVideos} />
-          <CampaignSection />
+          <UploadSection videos={videos} onFilesSelected={handleFilesSelected} />
+          <CampaignSection videos={videos} />
         </div>
         <Sidebar />
       </div>
