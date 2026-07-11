@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type { UploadedVideo } from "../../../pages/UploadPage";
 
 type CampaignMode = "create" | "existing";
 
@@ -18,19 +20,39 @@ const MOCK_CAMPAIGNS = [
   "Brand Refresh",
 ];
 
-export default function CampaignForm() {
+type CampaignFormProps = {
+  videos: UploadedVideo[];
+};
+
+export default function CampaignForm({ videos }: CampaignFormProps) {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<CampaignMode>("create");
   const [productUrl, setProductUrl] = useState("");
   const [campaignGoal, setCampaignGoal] = useState("");
   const [creativeBrief, setCreativeBrief] = useState("");
   const [selectedCampaign, setSelectedCampaign] = useState("");
 
+  const hasCompletedVideo = videos.some((v) => v.status === "done");
+  const noneUploading = videos.every((v) => v.status !== "uploading");
+
   const isCreateValid = productUrl.trim() && campaignGoal && creativeBrief.trim();
   const isExistingValid = selectedCampaign;
-  const isFormValid = mode === "create" ? isCreateValid : isExistingValid;
+  const isFormValid =
+    (mode === "create" ? isCreateValid : isExistingValid) && hasCompletedVideo && noneUploading;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    const videoPaths = videos
+      .filter((v) => v.status === "done" && v.storagePath)
+      .map((v) => v.storagePath as string);
+
+    navigate("/loading", {
+      state:
+        mode === "create"
+          ? { videoPaths, productUrl, campaignGoal, creativeBrief }
+          : { videoPaths, selectedCampaign },
+    });
   }
 
   return (
