@@ -1,14 +1,8 @@
 import VideoCard from "./VideoCard";
-
-type Video = {
-  id: number
-  filename: string
-  thumbnailClassName: string
-  uploaded: boolean
-}
+import type { UploadedVideo } from "../../../pages/UploadPage";
 
 type UploadedVideosProps = {
-    videos: Video[]
+    videos: UploadedVideo[]
 }
 
 export default function UploadedVideos({ videos }: UploadedVideosProps) {
@@ -18,8 +12,7 @@ export default function UploadedVideos({ videos }: UploadedVideosProps) {
                 <VideoCard
                     key={video.id}
                     filename={video.filename}
-                    thumbnailClassName={video.thumbnailClassName}
-                    uploaded={video.uploaded}
+                    status={video.status}
                 />
             ))}
         </div>
