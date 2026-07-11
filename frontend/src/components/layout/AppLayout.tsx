@@ -18,7 +18,7 @@ export default function AppLayout() {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-4xl px-6 py-8">
+      <main className="mx-auto px-6 py-8 lg:px-13">
         <Outlet />
       </main>
     </div>

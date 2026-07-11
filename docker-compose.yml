@@ -1,0 +1,14 @@
+services:
+  worker:
+    build: ./worker
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:54322/postgres
+      - QUEUE_NAME=jobs
+      - CHANNEL_NAME=new_job
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import psycopg2; c=psycopg2.connect('postgresql://postgres:postgres@host.docker.internal:54322/postgres'); c.close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
