@@ -3,9 +3,9 @@ import signal
 import select
 import psycopg2
 
-from worker.config.config import logger, QUEUE_NAME, CHANNEL_NAME, VISIBILITY_TIMEOUT, POLL_TIMEOUT, MAX_RETRIES
-from worker.config.connection import connect
-from worker.config.worker_queue import drain_queue, set_running
+from config.settings import logger, QUEUE_NAME, CHANNEL_NAME, VISIBILITY_TIMEOUT, POLL_TIMEOUT, MAX_RETRIES
+from config.connection import connect
+from config.worker_queue import drain_queue, set_running
 
 
 def shutdown(signum, frame):

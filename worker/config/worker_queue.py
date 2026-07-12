@@ -1,5 +1,6 @@
-from worker.config.config import logger, QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES
-from worker.config.handler import process_message
+from .settings import logger, QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES
+from .handler import process_message
+from .heartbeat import HeartBeat
 
 running = True
 
@@ -29,8 +30,8 @@ def drain_queue(cur):
             continue
 
         try:
-
-            process_message(msg_id, payload)
+            with HeartBeat(msg_id=msg_id):
+                process_message(msg_id, payload)
             cur.execute("SELECT pgmq.delete(%s, %s);", (QUEUE_NAME, msg_id))
             processed += 1
         except Exception as e:
