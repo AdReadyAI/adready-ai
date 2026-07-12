@@ -1,5 +1,5 @@
-from config import logger, QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES
-from handler import process_message
+from worker.config.config import logger, QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES
+from worker.config.handler import process_message
 
 running = True
 
@@ -29,6 +29,7 @@ def drain_queue(cur):
             continue
 
         try:
+
             process_message(msg_id, payload)
             cur.execute("SELECT pgmq.delete(%s, %s);", (QUEUE_NAME, msg_id))
             processed += 1

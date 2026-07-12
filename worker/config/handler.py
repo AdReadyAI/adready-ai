@@ -1,4 +1,4 @@
-from config import logger
+from worker.config.config import logger
 
 
 def process_message(msg_id, payload):

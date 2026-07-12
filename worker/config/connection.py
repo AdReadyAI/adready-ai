@@ -1,5 +1,5 @@
 import psycopg2
-from config import DATABASE_URL
+from worker.config.config import DATABASE_URL
 
 
 def connect():
