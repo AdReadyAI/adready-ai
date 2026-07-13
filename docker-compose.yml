@@ -6,6 +6,8 @@ services:
       - QUEUE_NAME=jobs
       - CHANNEL_NAME=new_job
     restart: unless-stopped
+    # deploy:
+    #   replicas: 2
     healthcheck:
       test: ["CMD", "python", "-c", "import psycopg2; c=psycopg2.connect('postgresql://postgres:postgres@host.docker.internal:54322/postgres'); c.close()"]
       interval: 30s
