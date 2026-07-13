@@ -1,5 +1,5 @@
-from .settings import logger, QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES
-from .handler import process_message
+from config.settings import logger, QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES
+from .processor import process_message
 from .heartbeat import HeartBeat
 
 running = True
