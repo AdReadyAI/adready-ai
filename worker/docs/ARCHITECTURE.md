@@ -87,15 +87,19 @@ flowchart TD
     R["pgmq.read(vt=VISIBILITY_TIMEOUT)"] --> C{"read_ct > MAX_RETRIES?"}
     C -->|yes| A["pgmq.archive (give up)"]
     C -->|no| H["with HeartBeat(msg_id):"]
-    H --> P["process_message"]
+    H --> P["process_message(cur, …)"]
     P -->|success| DEL["pgmq.delete ✅"]
-    P -->|exception| LOG["log failure — message stays,<br/>reappears after vt for retry"]
+    P -->|exception| BO["log failure + pgmq.set_vt<br/>backoff = RETRY_BASE_DELAY × 2^(read_ct-1)"]
+    BO --> RE["message reappears after backoff for retry"]
 ```
 
 - `pgmq.read` makes a message **invisible** for `VISIBILITY_TIMEOUT`, it is **not**
   a pop. The message is only removed on `pgmq.delete` after success.
-- If processing raises, the message is left untouched; after the visibility
-  window it reappears and is retried — **at-least-once delivery**.
+- If processing raises, the failure is logged (with a full traceback when `DEBUG`
+  is on) and the message's visibility is reset via `pgmq.set_vt` to an
+  **exponential backoff** — `RETRY_BASE_DELAY × 2^(read_ct-1)` seconds — so the
+  retry is delayed and spaced out rather than waiting the full
+  `VISIBILITY_TIMEOUT`. Delivery is **at-least-once**.
 - `read_ct > MAX_RETRIES` archives poison messages so they don't loop forever.
 
 ---
@@ -186,7 +190,7 @@ Two independent retry layers guard against different failures — **both are kep
 ```mermaid
 flowchart TD
     A["analyzer call"] --> R1{"transient error?<br/>(429/5xx/timeout)"}
-    R1 -->|yes| RT["inner retry x ANALYSIS_TASK_MAX_RETRIES<br/>exp backoff + jitter"]
+    R1 -->|yes| RT["inner retry x ANALYSIS_TASK_MAX_ATTEMPTS<br/>exp backoff + jitter"]
     RT --> A
     R1 -->|permanent / exhausted| ERR["record in errors{}"]
     ERR --> PP["persist partial results"]
@@ -200,7 +204,7 @@ flowchart TD
 | Layer | Scope | Catches | Mechanism |
 |-------|-------|---------|-----------|
 | **Inner** | one analyzer call | transient API blips (429, 5xx, timeout) | `_with_retry` + exponential backoff/jitter, only on `TransientError` |
-| **Outer** | whole job | process crash/OOM, prep failure, exhausted inner retries, poison messages | pgmq visibility timeout + `read_ct`/`MAX_RETRIES` → archive |
+| **Outer** | whole job | process crash/OOM, prep failure, exhausted inner retries, poison messages | pgmq redelivery via `pgmq.set_vt` exponential backoff (`RETRY_BASE_DELAY × 2^(read_ct-1)`) + `read_ct`/`MAX_RETRIES` → archive |
 
 - Inner retry recovers most failures instantly without redoing successful work.
 - Outer retry is the only defense against a **dead process** (no in-code retry can
@@ -252,25 +256,32 @@ through the Supabase transaction pooler under load.
 | Setting | Default | Purpose |
 |---------|---------|---------|
 | `DATABASE_URL` | — (required) | Postgres/Supabase connection string |
+| `DEBUG` | `False` | enables `DEBUG`-level logs and failure tracebacks (`exc_info`); set via `1`/`true`/`yes` |
 | `QUEUE_NAME` | `jobs` | pgmq queue name |
 | `CHANNEL_NAME` | `new_job` | LISTEN/NOTIFY channel |
 | `VISIBILITY_TIMEOUT` | `60` | seconds a read message stays invisible |
 | `HEARTBEAT_INTERVAL` | `20` | seconds between visibility renewals (< timeout) |
 | `POLL_TIMEOUT` | `5` | max seconds to block in `select()` |
 | `MAX_RETRIES` | `3` | job-level attempts before archiving |
-| `ANALYSIS_TASK_MAX_RETRIES` | `3` | inner per-analyzer retry attempts |
+| `ANALYSIS_TASK_MAX_ATTEMPTS` | `3` | inner per-analyzer total attempts (1 initial + 2 retries) |
+| `RETRY_BASE_DELAY` | `5` | base seconds for outer-layer backoff (`× 2^(read_ct-1)`) on job failure |
 
 ---
 
 ## 11. Job payload contract (`app/schemas.py`)
 
 ```jsonc
-{ "request_id": "uuid" }   // worker resolves video location from the DB
+{
+  "request_id": "uuid",                    // job identifier
+  "bucket": "videos",                      // Storage bucket holding the inputs
+  "video_path": "path/to/video.mp4",       // video object key within the bucket
+  "product_imgs_folder_path": "path/imgs"  // folder of product images for detection
+}
 ```
 
-Validated with pydantic (`JobPayload.model_validate`). A structurally invalid
-payload fails identically on every retry and is archived after `MAX_RETRIES`
-(poison-message handling).
+Validated with pydantic (`JobPayload.model_validate`) — all four fields are
+required. A structurally invalid payload fails identically on every retry and is
+archived after `MAX_RETRIES` (poison-message handling).
 
 ---
 
