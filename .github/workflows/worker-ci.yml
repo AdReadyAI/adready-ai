@@ -138,7 +138,7 @@ jobs:
     needs: [quality, unit-tests, integration-tests, container]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    environment: production
+    environment: adready-ai/production
     concurrency:
       group: railway-worker-production
       cancel-in-progress: false

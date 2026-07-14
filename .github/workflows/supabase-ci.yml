@@ -109,7 +109,7 @@ jobs:
     needs: [validate-migrations, edge-unit-tests, edge-integration-tests]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    environment: production
+    environment: adready-ai/production
     concurrency:
       group: supabase-production
       cancel-in-progress: false
