@@ -12,4 +12,4 @@ RUN uv sync --no-dev --no-install-project --frozen
 COPY . .
 RUN uv sync --no-dev --frozen
 
-CMD ["/app/.venv/bin/python", "main.py"]
+CMD ["uv", "run", "python", "-m", "app.main"]

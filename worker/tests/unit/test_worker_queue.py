@@ -8,7 +8,7 @@ import pytest
 # Worker configuration is loaded at import time, but unit tests never connect to this URL.
 os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
 
-import worker_queue  # noqa: E402  (configuration must be initialized before this import)
+import app.worker_queue as worker_queue  # noqa: E402  (configuration must be initialized before this import)
 
 
 @pytest.mark.unit
@@ -27,5 +27,9 @@ def test_successful_message_is_processed_and_deleted(monkeypatch: pytest.MonkeyP
     processed = worker_queue.drain_queue(cursor)
 
     assert processed == 1
-    process_message.assert_called_once_with(42, {"review_id": "review-1"})
+    process_message.assert_called_once_with(
+        cursor,
+        42,
+        {"review_id": "review-1"},
+    )   
     cursor.execute.assert_any_call("SELECT pgmq.delete(%s, %s);", ("jobs", 42))

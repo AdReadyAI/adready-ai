@@ -3,9 +3,9 @@ import signal
 import select
 import psycopg2
 
-from config import logger, QUEUE_NAME, CHANNEL_NAME, VISIBILITY_TIMEOUT, POLL_TIMEOUT, MAX_RETRIES
-from connection import connect
-from worker_queue import drain_queue, set_running
+from config.settings import logger, QUEUE_NAME, CHANNEL_NAME, VISIBILITY_TIMEOUT, POLL_TIMEOUT, MAX_RETRIES
+from config.connection import connect
+from app.worker_queue import drain_queue, set_running
 
 
 def shutdown(signum, frame):
@@ -35,7 +35,7 @@ def main():
         logger.info("Cleared %d backlog messages", backlog)
 
     while True:
-        import worker_queue
+        import app.worker_queue as worker_queue
         if not worker_queue.running:
             break
 
