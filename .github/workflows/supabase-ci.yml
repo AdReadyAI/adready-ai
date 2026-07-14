@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
         with:
           version: 2.109.1 # Took the latest one as of 14/7/2026
 
@@ -82,7 +82,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v1
         with:
           version: 2.109.1 # Took the latest one as of 14/7/2026
 
@@ -123,7 +123,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v1
         with:
           version: 2.109.1 # Took the latest one as of 14/7/2026
 
