@@ -158,6 +158,6 @@ jobs:
 
       # The project token is scoped to one Railway project and environment.
       - name: Deploy media worker
-        run: railway up worker --path-as-root --service "${{ vars.RAILWAY_SERVICE }}" --ci
+        run: railway up . --path-as-root --service "$RAILWAY_SERVICE" --ci
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
