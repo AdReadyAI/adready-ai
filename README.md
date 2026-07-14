@@ -235,7 +235,7 @@ browser tests under `frontend/tests/integration/`.
 Install the development dependencies and run the isolated unit suite from `worker/`:
 
 ```bash
-uv sync --frozen
+uv sync --locked
 uv run pytest -m unit
 ```
 

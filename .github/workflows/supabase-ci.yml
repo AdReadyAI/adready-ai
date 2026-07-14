@@ -6,11 +6,13 @@ on:
     branches: [main]
     paths:
       - "supabase/**"
+      - ".dvmrc"
       - ".github/workflows/supabase-ci.yml"
   push:
     branches: [main]
     paths:
       - "supabase/**"
+      - ".dvmrc"
       - ".github/workflows/supabase-ci.yml"
 
 permissions:
@@ -22,17 +24,17 @@ concurrency:
 
 jobs:
   validate-migrations:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
         with:
-          version: latest
+          version: 2.109.1 # Took the latest one as of 14/7/2026
 
       # The database-only stack is enough to replay migrations and run schema linting.
       - name: Start local database
@@ -50,17 +52,17 @@ jobs:
         run: supabase stop --no-backup
 
   edge-unit-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Deno
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
         with:
-          deno-version: latest
+          deno-version-file: .dvmrc
 
       - name: Check Edge Function formatting
         run: deno fmt --config supabase/deno.json --check
@@ -72,22 +74,22 @@ jobs:
         run: deno task --config supabase/deno.json test:unit
 
   edge-integration-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
         with:
-          version: latest
+          version: 2.109.1 # Took the latest one as of 14/7/2026
 
       - name: Set up Deno
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
         with:
-          deno-version: latest
+          deno-version-file: .dvmrc
 
       # The full stack serves Edge Functions and exposes Auth, Storage, and Postgres locally.
       - name: Start local Supabase stack
@@ -105,7 +107,7 @@ jobs:
   deploy:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: [validate-migrations, edge-unit-tests, edge-integration-tests]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: production
     concurrency:
@@ -118,12 +120,12 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1 # v1
         with:
-          version: latest
+          version: 2.109.1 # Took the latest one as of 14/7/2026
 
       - name: Link production project
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
