@@ -5,6 +5,7 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:54322/postgres
       - QUEUE_NAME=jobs
       - CHANNEL_NAME=new_job
+      - DEBUG=True
     restart: unless-stopped
     # deploy:
     #   replicas: 2

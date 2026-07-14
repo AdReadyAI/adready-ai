@@ -1,1 +1,0 @@
-SELECT pgmq.send('jobs', '{"user_id": "test2", "prompt": "hello"}');
