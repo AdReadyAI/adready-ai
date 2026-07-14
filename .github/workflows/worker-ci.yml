@@ -48,7 +48,7 @@ jobs:
 
       # Compile every module so syntax errors fail before the container is deployed.
       - name: Compile Python sources
-        run: uv run python -m py_compile *.py
+        run: uv run python -m compileall -q app config analyzer
 
   unit-tests:
     runs-on: ubuntu-24.04
@@ -100,7 +100,7 @@ jobs:
         run: uv sync --locked
 
       - name: Set up Supabase CLI
-        uses: supabase/setup-cli@ab058987d8d6c725971f6cf9d0b5c98467e30bd1
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
         with:
           version: 2.109.1 # Took the latest one as of 14/7/2026
 
