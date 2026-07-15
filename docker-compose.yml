@@ -1,6 +1,7 @@
 services:
   worker:
     build: ./worker
+    restart: unless-stopped
     env_file:
       - ./worker/.env
     # deploy:

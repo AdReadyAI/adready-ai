@@ -11,8 +11,7 @@ def connect():
 
 
 @lru_cache(maxsize=1)
-def get_openrouter_client():
-    #print("Creating OpenRouter client...") 
+def get_openrouter_client(): 
     return OpenAI(
         base_url=OPENROUTER_BASE_URL,
         api_key=OPENROUTER_API_KEY,
