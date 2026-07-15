@@ -9,6 +9,6 @@ export const anthropic = new Anthropic({
 });
 
 // Model constants
-export const HAIKU  = "claude-3-haiku-20240307";
+export const HAIKU = "claude-3-haiku-20240307";
 export const SONNET = "claude-3-5-sonnet-latest";
-export const OPUS   = "claude-3-opus-20240229";
+export const OPUS = "claude-3-opus-20240229";
