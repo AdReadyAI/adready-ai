@@ -119,7 +119,7 @@
  */
 
 import { verifyAuth } from "../shared/auth.ts";
-import { anthropic, HAIKU, SONNET, OPUS } from "../shared/claude.ts";
+import { anthropic, HAIKU, OPUS, SONNET } from "../shared/claude.ts";
 import type { EvidenceBundle, MetricResult } from "../shared/schemas.ts";
 
 Deno.serve(async (req: Request): Promise<Response> => {

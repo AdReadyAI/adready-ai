@@ -43,10 +43,10 @@ export type SceneSegment = {
   visual_description: string; // 1-3 sentences describing visual action
   // Richer description object for demographic, palette, and mood checks
   visual_elements?: {
-    detected_people?: string[];   // e.g. ["adult female (25-30)"]
-    clothing_style?: string;      // e.g. "casual athletic wear"
-    dominant_colors?: string[];   // e.g. ["#FF5733", "#C70039"]
-    tone_mood?: string;           // e.g. "energetic, bright"
+    detected_people?: string[]; // e.g. ["adult female (25-30)"]
+    clothing_style?: string; // e.g. "casual athletic wear"
+    dominant_colors?: string[]; // e.g. ["#FF5733", "#C70039"]
+    tone_mood?: string; // e.g. "energetic, bright"
   };
 };
 
@@ -169,6 +169,10 @@ export type MetricResult = {
   evidence?: EvidenceRef[];
   explanation?: string;
   suggested_correction?: string;
-  correction_type?: "rewrite" | "edit_recommendation" | "technical_fix" | "none";
+  correction_type?:
+    | "rewrite"
+    | "edit_recommendation"
+    | "technical_fix"
+    | "none";
   sub_checks?: SubCheckResult[]; // Granular sub-checks evaluated by the agent
 };
