@@ -4,7 +4,8 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-from openai import APIError, APITimeoutError, RateLimitError
+import httpx
+from openai import APIStatusError, APITimeoutError, RateLimitError
 
 os.environ["DATABASE_URL"] = "mock_db"
 os.environ["OPENROUTER_API_KEY"] = "mock_key"
@@ -35,26 +36,28 @@ class TestVideoAnalyzer(unittest.TestCase):
             self.mock_response
         )
 
-        self.analyzer = VideoAnalyzer(
-            self.mock_artifacts,
-            client=self.mock_client,
-        )
+    def create_analyzer(self):
+        with patch(
+            "analyzer.video_analyzer.get_openrouter_client",
+            return_value=self.mock_client,
+        ):
+            return VideoAnalyzer(self.mock_artifacts)
 
     @patch("os.path.exists", return_value=True)
     def test_transcribe_success(self, mock_exists):
+
+        analyzer = self.create_analyzer()
 
         with patch(
             "builtins.open",
             return_value=io.BytesIO(b"fake audio"),
         ):
-
-            result = self.analyzer.transcribe()
+            result = analyzer.transcribe()
 
         self.assertEqual(result, "Test transcription")
 
         self.mock_client.audio.transcriptions.create.assert_called_once()
 
-        # Vérifie également les arguments passés au SDK
         _, kwargs = self.mock_client.audio.transcriptions.create.call_args
 
         self.assertEqual(
@@ -65,17 +68,21 @@ class TestVideoAnalyzer(unittest.TestCase):
     @patch("os.path.exists", return_value=False)
     def test_transcribe_file_not_found(self, mock_exists):
 
+        analyzer = self.create_analyzer()
+
         with self.assertRaises(PermanentError):
-            self.analyzer.transcribe()
+            analyzer.transcribe()
 
     @patch("os.path.exists", return_value=True)
     def test_transcribe_rate_limit(self, mock_exists):
+
+        analyzer = self.create_analyzer()
 
         self.mock_client.audio.transcriptions.create.side_effect = (
             RateLimitError(
                 "Too many requests",
                 response=MagicMock(),
-                body={}
+                body={},
             )
         )
 
@@ -84,10 +91,12 @@ class TestVideoAnalyzer(unittest.TestCase):
             return_value=io.BytesIO(b"fake audio"),
         ):
             with self.assertRaises(TransientError):
-                self.analyzer.transcribe()
+                analyzer.transcribe()
 
     @patch("os.path.exists", return_value=True)
     def test_transcribe_timeout(self, mock_exists):
+
+        analyzer = self.create_analyzer()
 
         self.mock_client.audio.transcriptions.create.side_effect = (
             APITimeoutError(request=MagicMock())
@@ -98,17 +107,28 @@ class TestVideoAnalyzer(unittest.TestCase):
             return_value=io.BytesIO(b"fake audio"),
         ):
             with self.assertRaises(TransientError):
-                self.analyzer.transcribe()
+                analyzer.transcribe()
 
     @patch("os.path.exists", return_value=True)
     def test_transcribe_api_error_500(self, mock_exists):
 
-        error = APIError(
-            "Internal Server Error",
-            request=MagicMock(),
-            body={}
+        analyzer = self.create_analyzer()
+
+        request = httpx.Request(
+            "POST",
+            "https://openrouter.ai/api/v1/audio/transcriptions",
         )
-        error.status_code = 500
+
+        response = httpx.Response(
+            status_code=500,
+            request=request,
+        )
+
+        error = APIStatusError(
+            "Internal Server Error",
+            response=response,
+            body={},
+        )
 
         self.mock_client.audio.transcriptions.create.side_effect = error
 
@@ -117,17 +137,28 @@ class TestVideoAnalyzer(unittest.TestCase):
             return_value=io.BytesIO(b"fake audio"),
         ):
             with self.assertRaises(TransientError):
-                self.analyzer.transcribe()
+                analyzer.transcribe()
 
     @patch("os.path.exists", return_value=True)
     def test_transcribe_api_error_400(self, mock_exists):
 
-        error = APIError(
-            "Bad Request",
-            request=MagicMock(),
-            body={}
+        analyzer = self.create_analyzer()
+
+        request = httpx.Request(
+            "POST",
+            "https://openrouter.ai/api/v1/audio/transcriptions",
         )
-        error.status_code = 400
+
+        response = httpx.Response(
+            status_code=400,
+            request=request,
+        )
+
+        error = APIStatusError(
+            "Bad Request",
+            response=response,
+            body={},
+        )
 
         self.mock_client.audio.transcriptions.create.side_effect = error
 
@@ -136,10 +167,12 @@ class TestVideoAnalyzer(unittest.TestCase):
             return_value=io.BytesIO(b"fake audio"),
         ):
             with self.assertRaises(PermanentError):
-                self.analyzer.transcribe()
+                analyzer.transcribe()
 
     @patch("os.path.exists", return_value=True)
     def test_transcribe_unexpected_error(self, mock_exists):
+
+        analyzer = self.create_analyzer()
 
         self.mock_client.audio.transcriptions.create.side_effect = Exception(
             "Boom"
@@ -150,7 +183,7 @@ class TestVideoAnalyzer(unittest.TestCase):
             return_value=io.BytesIO(b"fake audio"),
         ):
             with self.assertRaises(PermanentError):
-                self.analyzer.transcribe()
+                analyzer.transcribe()
 
 
 if __name__ == "__main__":

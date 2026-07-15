@@ -1,10 +1,10 @@
 import inspect
 import os
 
-from openai import OpenAI, APIError, APITimeoutError, RateLimitError
+from openai import  APIStatusError, APITimeoutError, RateLimitError
 
 from analyzer.types import Artifacts
-from config.settings import OPENROUTER_API_KEY
+from config.connection import get_openrouter_client
 from app.errors import PermanentError, TransientError
 
 
@@ -17,13 +17,9 @@ def analysis_task(name: str):
 
 
 class VideoAnalyzer:
-    def __init__(self, artifacts: Artifacts, client=None):
+    def __init__(self, artifacts: Artifacts):
         self.artifacts = artifacts
-
-        self.client = client or OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=OPENROUTER_API_KEY,
-        )
+        self.client = get_openrouter_client()
 
     @analysis_task("transcription")
     def transcribe(self):
@@ -48,7 +44,7 @@ class VideoAnalyzer:
         except APITimeoutError as e:
             raise TransientError(f"Request timed out: {e}")
 
-        except APIError as e:
+        except APIStatusError as e:
             if e.status_code and e.status_code >= 500:
                 raise TransientError(
                     f"OpenRouter server error ({e.status_code}): {e}"
