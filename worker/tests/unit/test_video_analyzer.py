@@ -3,9 +3,11 @@ import os
 import sys
 import unittest
 from unittest.mock import MagicMock, patch
-
 import httpx
 from openai import APIStatusError, APITimeoutError, RateLimitError
+import pytest
+
+pytestmark = pytest.mark.unit
 
 os.environ["DATABASE_URL"] = "mock_db"
 os.environ["OPENROUTER_API_KEY"] = "mock_key"

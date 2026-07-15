@@ -1,7 +1,7 @@
 import psycopg2
-from .settings import DATABASE_URL
 from openai import OpenAI
-from config.settings import OPENROUTER_API_KEY
+from config.settings import OPENROUTER_API_KEY ,DATABASE_URL , OPENROUTER_BASE_URL
+from functools import lru_cache
 
 def connect():
     conn = psycopg2.connect(DATABASE_URL)
@@ -10,8 +10,10 @@ def connect():
 
 
 
+@lru_cache(maxsize=1)
 def get_openrouter_client():
+    #print("Creating OpenRouter client...") 
     return OpenAI(
-        base_url="https://openrouter.ai/api/v1",
+        base_url=OPENROUTER_BASE_URL,
         api_key=OPENROUTER_API_KEY,
     )
