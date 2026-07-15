@@ -1,0 +1,227 @@
+{
+  "record_id": "GOLD-MM-A2",
+  "schema_version": "0.1",
+  "rubric_version": "0.1",
+  "assets": {
+    "brand_id": "mango-moon",
+    "product_page_id": "mango-moon-bites",
+    "brief_id": "brief-a",
+    "video_id": "MM-A2",
+    "video_type": "obvious_fail",
+    "source": "Synthetic benchmark, Eval Strategy v0.1",
+    "video_ref": "samples/mango-moon-a2.mp4",
+    "duration_seconds": 15,
+    "notes": "Mango Moon Bites TikTok awareness ad with planted failures.",
+    "planted_failure_modes": [
+      "Unsupported forbidden claim in voiceover",
+      "Required CTA missing"
+    ],
+    "rights": {
+      "source": "internal synthetic",
+      "license": "proprietary-internal",
+      "commercial_use_allowed": true,
+      "derivative_use_allowed": true,
+      "ai_dataset_use_allowed": true,
+      "attribution_required": false,
+      "transformation_notes": "Fully synthetic video generated for benchmark; no third-party footage."
+    }
+  },
+  "context": {
+    "campaign_objective": "awareness",
+    "platform": "TikTok",
+    "video_length_seconds": 15,
+    "target_audience": "Gen Z snackers",
+    "brief_ref": "briefs/mango-moon-brief-a.md",
+    "product_page_ref": "product-pages/mango-moon-bites.md",
+    "required_cta": "Try Mango Moon",
+    "required_messages": ["fun tropical snack energy"],
+    "approved_claims": ["8g plant protein per serving"],
+    "forbidden_claims": ["clinically proven to reduce cravings"],
+    "required_disclaimers": [],
+    "reference_assets": ["refs/mango-moon-logo.png"]
+  },
+  "metric_results": [
+    {
+      "metric_id": "policy_compliance",
+      "agent": "claims_accuracy",
+      "metric_name": "Policy / Compliance Readiness",
+      "question": "Does the video avoid obvious policy, compliance, or disclosure issues?",
+      "result": "true",
+      "severity": "none"
+    },
+    {
+      "metric_id": "product_truth",
+      "agent": "claims_accuracy",
+      "metric_name": "Product Truth / Claim Support",
+      "question": "Are all explicit product claims supported by product page or source materials?",
+      "result": "false",
+      "severity": "critical",
+      "confidence": "high",
+      "evidence": [
+        {
+          "type": "transcript",
+          "text": "clinically proven to reduce cravings",
+          "timestamp": "00:08"
+        },
+        {
+          "type": "product_page",
+          "text": "Forbidden claim list includes 'clinically proven to reduce cravings'",
+          "timestamp": ""
+        }
+      ],
+      "explanation": "Voiceover states a forbidden claim that is not on the approved claims list and contradicts the product page.",
+      "suggested_correction": "Replace with the approved claim: '8g plant protein per serving'.",
+      "correction_type": "rewrite"
+    },
+    {
+      "metric_id": "channel_readiness",
+      "agent": "storyline_clarity",
+      "metric_name": "Channel / Placement Readiness",
+      "question": "Does the video fit the intended platform, placement, length, and viewing context?",
+      "result": "true",
+      "severity": "none"
+    },
+    {
+      "metric_id": "creative_effectiveness",
+      "agent": "storyline_clarity",
+      "metric_name": "Creative Effectiveness Basics",
+      "question": "Does the ad have a clear hook, coherent message flow, and enough stopping power?",
+      "result": "true",
+      "severity": "none"
+    },
+    {
+      "metric_id": "audience_fit",
+      "agent": "brand_brief_alignment",
+      "metric_name": "Audience Fit",
+      "question": "Does the video speak to the intended audience's needs, motivations, or context?",
+      "result": "true",
+      "severity": "none"
+    },
+    {
+      "metric_id": "brand_fit",
+      "agent": "brand_brief_alignment",
+      "metric_name": "Brand Fit",
+      "question": "Does the video align with brand voice, positioning, and visual expectations?",
+      "result": "true",
+      "severity": "none"
+    },
+    {
+      "metric_id": "brief_adherence",
+      "agent": "brand_brief_alignment",
+      "metric_name": "Brief Adherence",
+      "question": "Does the video satisfy the core campaign objective and required message from the creative brief?",
+      "result": "false",
+      "severity": "medium",
+      "confidence": "high",
+      "evidence": [
+        {
+          "type": "brief",
+          "text": "Required message: communicate fun tropical snack energy",
+          "timestamp": ""
+        },
+        {
+          "type": "transcript",
+          "text": "Ad focuses on clinical craving reduction rather than fun tropical energy",
+          "timestamp": "00:05"
+        }
+      ],
+      "explanation": "The ad messaging emphasizes clinical benefits instead of the brief's required fun tropical snack energy message.",
+      "suggested_correction": "Revise voiceover to lead with tropical, fun snack energy aligned to Gen Z tone.",
+      "correction_type": "rewrite"
+    },
+    {
+      "metric_id": "product_clarity",
+      "agent": "product_representation",
+      "metric_name": "Product Clarity",
+      "question": "Can a viewer clearly identify what product is being advertised?",
+      "result": "true",
+      "severity": "none"
+    },
+    {
+      "metric_id": "production_readiness",
+      "agent": "visual_quality",
+      "metric_name": "Production / Asset Readiness",
+      "question": "Is the video technically complete enough to be reviewed or launched?",
+      "result": "true",
+      "severity": "none"
+    },
+    {
+      "metric_id": "cta_clarity",
+      "agent": "cta_effectiveness",
+      "metric_name": "CTA Clarity",
+      "question": "Is there a clear and appropriate next step for the viewer?",
+      "result": "false",
+      "severity": "critical",
+      "confidence": "high",
+      "evidence": [
+        {
+          "type": "brief",
+          "text": "Required CTA: Try Mango Moon",
+          "timestamp": ""
+        },
+        {
+          "type": "visual",
+          "text": "No spoken or on-screen CTA anywhere in the video",
+          "timestamp": ""
+        }
+      ],
+      "explanation": "Brief requires CTA 'Try Mango Moon' but the video contains no call to action.",
+      "suggested_correction": "Add end-card text and voiceover: 'Try Mango Moon'.",
+      "correction_type": "edit_recommendation"
+    }
+  ],
+
+  
+  "expected": {
+    "ad_readiness_score": 55,
+    "readiness_status": "High Risk",
+    "readiness_status_rationale": "Two gating failures: unsupported forbidden claim and missing required CTA. Score alone would not justify Ready status.",
+    "gating_failures": [
+      {
+        "metric": "product_truth",
+        "reason": "Forbidden unsupported claim in voiceover",
+        "evidence": "clinically proven to reduce cravings",
+        "timestamp": "00:08"
+      },
+      {
+        "metric": "cta_clarity",
+        "reason": "Required CTA 'Try Mango Moon' is missing",
+        "evidence": "No CTA in voiceover, OCR, or end card",
+        "timestamp": ""
+      }
+    ],
+    "priority_fix_list": [
+      {
+        "priority": 1,
+        "metric_id": "product_truth",
+        "issue": "Forbidden unsupported claim",
+        "why_it_matters": "Compliance and product-truth risk; claim is explicitly forbidden on the product page.",
+        "recommended_fix": "Replace with approved claim: '8g plant protein per serving'.",
+        "owner": "copywriter"
+      },
+      {
+        "priority": 2,
+        "metric_id": "cta_clarity",
+        "issue": "Missing required CTA",
+        "why_it_matters": "Viewer has no next step; brief requires 'Try Mango Moon'.",
+        "recommended_fix": "Add end-card and voiceover CTA: 'Try Mango Moon'.",
+        "owner": "editor"
+      },
+      {
+        "priority": 3,
+        "metric_id": "brief_adherence",
+        "issue": "Wrong primary message",
+        "why_it_matters": "Ad does not communicate the brief's fun tropical snack energy message.",
+        "recommended_fix": "Revise copy to emphasize fun tropical snack energy for Gen Z.",
+        "owner": "creative"
+      }
+    ]
+  },
+  "labeling": {
+    "labeler": "Leijie",
+    "date": "2026-07-10",
+    "second_labeler": "",
+    "adjudication_notes": "",
+    "inter_rater_notes": ""
+  }
+}

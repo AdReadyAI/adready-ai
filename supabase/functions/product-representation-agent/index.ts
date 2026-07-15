@@ -11,10 +11,11 @@
  *      [ ] product_appearance_wrong: Product color, label design, or shape does not match reference assets.
  *      [ ] product_name_unspoken: Brand or product name is never voiced or displayed in overlay text.
  *
- * DB CONTEXT:
- *   - Loads product frames, logo frames, transcript/OCR, visual frames, and
- *     product context by request_id.
- *   - Uses product_frames, logo_frames, and frame-level visual context.
+ * INPUT (From EvidenceBundle):
+ *   - keyframes[]: Images of selected video frames (with image_url pointing to CDN).
+ *   - product_moments[]: Time ranges where the product appears in the video.
+ *   - reference_assets[]: Approved product/packaging images (type: "product_image").
+ *   - transcript_segments[]: Spoken brand or product name references.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -35,7 +36,7 @@
  *       ],
  *       "explanation": "Product label is blurry and name is not clearly visible when packaging is shown.",
  *       "suggested_correction": "Ensure the high-resolution reference packaging assets are properly rendered and focused during the pack shot.",
- *       "correction_type": "edit_recommendation",
+ *       "correction_type": "technical_fix",
  *       "sub_checks": [
  *         {
  *           "check_id": "product_not_shown",
@@ -67,17 +68,10 @@
  *   ]
  */
 
-// import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { AgentRunRequestSchema } from "../shared/schemas.ts";
-// import type { MetricResult } from "../shared/schemas.ts";
-// // import { chat } from "../shared/llm.ts";
+// import { verifyAuth } from "../shared/auth.ts";
+// import { anthropic, SONNET } from "../shared/claude.ts";
+// import type { EvidenceBundle, MetricResult } from "../shared/schemas.ts";
 
-// createEdgeHandler("product-representation-agent", AgentRunRequestSchema, async (req, ctx) => {
-//   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by request_id.
-
-//   // TODO: Evaluate product and logo clarity from DB-loaded frame context.
-
-//   const results: MetricResult[] = [];
-//   return ok(results);
+// Deno.serve(async (req: Request): Promise<Response> => {
+//   return new Response("not implemented", { status: 501 });
 // });

@@ -13,13 +13,11 @@
  *      [ ] objective_missed: Primary video goal deviates from objective (e.g. calls for conversion when objective is awareness).
  *      [ ] required_message_missing: Core mandatory messaging statements or features from creative brief are omitted.
  *
- * DB CONTEXT:
- *   - Loads parsed creative brief, campaign goal, transcript/OCR, visual frames,
- *     product frames, and platform context by request_id.
- *   - The parsed creative brief is joined via requests.batch_id →
- *     parsed_creative_briefs.batch_id (one brief per batch, not per request).
- *   - Uses parsed brief fields rather than treating the raw brief as the only
- *     source of truth.
+ * INPUT (From EvidenceBundle):
+ *   - creative_brief: Target audience profile, core campaign objectives, required messaging points.
+ *   - transcript_segments[]: Spoken narrative/dialogue text.
+ *   - ocr_segments[]: On-screen text.
+ *   - scene_segments[]: Visual descriptions of scenes.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -99,17 +97,10 @@
  *   ]
  */
 
-// import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { AgentRunRequestSchema } from "../shared/schemas.ts";
-// import type { MetricResult } from "../shared/schemas.ts";
-// // import { chat } from "../shared/llm.ts";
+// import { verifyAuth } from "../shared/auth.ts";
+// import { anthropic, SONNET } from "../shared/claude.ts";
+// import type { EvidenceBundle, MetricResult } from "../shared/schemas.ts";
 
-// createEdgeHandler("brief-alignment-agent", AgentRunRequestSchema, async (req, ctx) => {
-//   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by request_id.
-
-//   // TODO: Evaluate audience fit and brief adherence from DB-loaded context.
-
-//   const results: MetricResult[] = [];
-//   return ok(results);
+// Deno.serve(async (req: Request): Promise<Response> => {
+//   return new Response("not implemented", { status: 501 });
 // });
