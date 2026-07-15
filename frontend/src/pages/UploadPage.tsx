@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../contexts/AuthContext";
 import CampaignSection from "../components/upload/campaign_section/CampaignSection";
 import Sidebar from "../components/upload/Sidebar";
 import UploadSection from "../components/upload/upload_section/UploadSection";
@@ -13,6 +14,7 @@ export type UploadedVideo = {
 };
 
 export default function UploadPage() {
+  const { user } = useAuth();
   const [videos, setVideos] = useState<UploadedVideo[]>([]);
 
   function handleFilesSelected(files: File[]) {
@@ -31,7 +33,11 @@ export default function UploadPage() {
   }
 
   async function uploadVideo(video: UploadedVideo) {
-    const path = `anon/${video.id}/${video.file.name}`;
+    if (!user) {
+      console.error("User not authenticated");
+      return;
+    }
+    const path = `${user.id}/${video.id}/${video.file.name}`;
     const { error } = await supabase.storage
       .from("videos")
       .upload(path, video.file, { contentType: video.file.type });
