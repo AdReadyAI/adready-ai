@@ -6,9 +6,10 @@ WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --no-install-project --frozen
+# Railway needs only runtime media-processing dependencies; test tools stay in CI.
+RUN uv sync --no-dev --no-install-project --frozen
 
 COPY . .
-RUN uv sync --frozen
+RUN uv sync --no-dev --frozen
 
-CMD ["uv", "run", "main.py"]
+CMD ["uv", "run", "python", "-m", "app.main"]
