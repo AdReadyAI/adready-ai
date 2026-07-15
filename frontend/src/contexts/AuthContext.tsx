@@ -7,7 +7,7 @@ type AuthContextValue = {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string) => Promise<{ error: unknown }>;
+  signUp: (email: string, password: string) => Promise<{ error: unknown; session: Session | null }>;
   signIn: (email: string, password: string) => Promise<{ error: unknown }>;
   signOut: () => Promise<{ error: unknown }>;
   signInWithGoogle: () => Promise<{ error: unknown }>;
@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setSession(data.session);
             setUser(data.session.user);
           }
-          return { error };
+          return { error, session: data.session };
         },
         signIn: async (email, password) => {
           const { data, error } = await signIn(email, password);
