@@ -45,3 +45,22 @@ Everything below is billed in **credits**. Sources at the bottom.
 - Open-source server, Apache 2.0, no-key foundation models, credit metering with key: https://github.com/roboflow/inference
 
 *Confirm your exact included-credit allotment in-app — Roboflow's pricing page rendered the base tier ambiguously (15 vs 50 credits/mo). All figures above assume 15 credits/mo.*
+
+# OpenAI Whisper (OpenRouter) — Pricing Summary
+
+**Model:** OpenAI Whisper `openai/whisper-large-v3` (transcription) via OpenRouter.
+
+## Cost Structure
+
+| Provider / Routing | Estimated Cost |
+| :--- | :--- |
+| **OpenRouter** | **$0.0015 per minute** |
+
+> Note: Using OpenRouter enables access to this transcription model directly. The cost is calculated based on the duration of the audio file processed, at a rate of $0.0015 per minute of audio.
+
+## Cost-minimizing takeaways
+1. **API Selection:** Routing transcription processing through OpenRouter provides straightforward access to `openai/whisper-large-v3` with predictable per-minute billing.
+2. **Monitoring costs:** Always double-check your OpenRouter usage dashboard to ensure the $0.0015 per minute cost remains stable as models can change dynamically, and evaluate the audio duration vs. actual cost in your logs.
+
+## Sources
+- OpenRouter Model Registry: https://openrouter.ai/models/openai/whisper-large-v3

@@ -150,3 +150,6 @@ __pycache__/
 *.pyc
 *.pyo
 .venv/
+
+*.wav
+*.mp3
