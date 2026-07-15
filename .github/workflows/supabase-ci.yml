@@ -1,0 +1,147 @@
+name: Supabase CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - "supabase/**"
+      - ".dvmrc"
+      - ".github/workflows/supabase-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "supabase/**"
+      - ".dvmrc"
+      - ".github/workflows/supabase-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-migrations:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
+        with:
+          version: 2.109.1 # Took the latest one as of 14/7/2026
+
+      # The database-only stack is enough to replay migrations and run schema linting.
+      - name: Start local database
+        run: supabase db start
+
+      # A clean reset proves the full migration history can build the database from scratch.
+      - name: Replay migrations
+        run: supabase db reset --local --no-seed
+
+      - name: Lint database schema
+        run: supabase db lint --local --level warning --fail-on error
+
+      - name: Stop local Supabase services
+        if: always()
+        run: supabase stop --no-backup
+
+  edge-unit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+        with:
+          deno-version-file: .dvmrc
+
+      - name: Check Edge Function formatting
+        run: deno fmt --config supabase/deno.json --check
+
+      - name: Lint Edge Function code
+        run: deno lint --config supabase/deno.json
+
+      - name: Run Edge Function unit tests
+        run: deno task --config supabase/deno.json test:unit
+
+  edge-integration-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
+        with:
+          version: 2.109.1 # Took the latest one as of 14/7/2026
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+        with:
+          deno-version-file: .dvmrc
+
+      # The full stack serves Edge Functions and exposes Auth, Storage, and Postgres locally.
+      - name: Start local Supabase stack
+        run: supabase start
+
+      - name: Run Edge Function integration tests
+        run: deno task --config supabase/deno.json test:integration
+        env:
+          SUPABASE_URL: http://127.0.0.1:54321
+
+      - name: Stop local Supabase services
+        if: always()
+        run: supabase stop --no-backup
+
+  deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    needs: [validate-migrations, edge-unit-tests, edge-integration-tests]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: adready-ai/production
+    concurrency:
+      group: supabase-production
+      cancel-in-progress: false
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
+        with:
+          version: 2.109.1 # Took the latest one as of 14/7/2026
+
+      - name: Link production project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      # Print the production migration plan before making any database changes.
+      - name: Preview production migrations
+        run: supabase db push --linked --dry-run
+
+      - name: Apply production migrations
+        run: supabase db push --linked
+
+      # Deploy all Edge Functions once the architecture adds supabase/functions.
+      - name: Deploy Edge Functions
+        run: |
+          if [[ -d supabase/functions ]]; then
+            supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
+          else
+            echo "No Edge Functions to deploy."
+          fi

@@ -1,5 +1,5 @@
-from .settings import logger, QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES
-from .handler import process_message
+from config.settings import logger, QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES, DEBUG, RETRY_BASE_DELAY
+from .processor import process_message
 from .heartbeat import HeartBeat
 
 running = True
@@ -31,10 +31,12 @@ def drain_queue(cur):
 
         try:
             with HeartBeat(msg_id=msg_id):
-                process_message(msg_id, payload)
+                process_message(cur, msg_id, payload)
             cur.execute("SELECT pgmq.delete(%s, %s);", (QUEUE_NAME, msg_id))
             processed += 1
         except Exception as e:
-            logger.error("[job %s] Failed (attempt %d): %s", msg_id, read_ct, e)
+            logger.error("[job %s] Failed (attempt %d): %s", msg_id, read_ct, e, exc_info=DEBUG)
+            delay = RETRY_BASE_DELAY * (2 ** (read_ct - 1))
+            cur.execute("SELECT pgmq.set_vt(%s, %s, %s);", (QUEUE_NAME, msg_id, delay))
 
     return processed
