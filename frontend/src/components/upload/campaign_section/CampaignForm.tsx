@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../../../lib/supabaseClient";
-import type { UploadedVideo } from "../../../pages/UploadPage";
+import type { UploadedVideo, UploadedImage } from "../../../pages/UploadPage";
 
 function getErrorMessage(error: unknown): string {
   if (error && typeof error === "object" && "message" in error) {
@@ -30,10 +30,11 @@ const MOCK_CAMPAIGNS = [
 
 type CampaignFormProps = {
   videos: UploadedVideo[];
+  images: UploadedImage[];
   requestId: string;
 };
 
-export default function CampaignForm({ videos, requestId }: CampaignFormProps) {
+export default function CampaignForm({ videos, images, requestId }: CampaignFormProps) {
   const navigate = useNavigate();
   const [mode, setMode] = useState<CampaignMode>("create");
   const [productUrl, setProductUrl] = useState("");
@@ -58,6 +59,10 @@ export default function CampaignForm({ videos, requestId }: CampaignFormProps) {
       .filter((v) => v.status === "done" && v.storagePath)
       .map((v) => v.storagePath as string);
 
+    const imagePaths = images
+      .filter((img) => img.status === "done" && img.storagePath)
+      .map((img) => img.storagePath as string);
+
     if (mode === "existing") {
       // No `requests` column corresponds to an existing-campaign selection yet —
       // this path stays mock until that concept has a real place to land.
@@ -73,6 +78,7 @@ export default function CampaignForm({ videos, requestId }: CampaignFormProps) {
       .insert({
         request_id: requestId,
         video_storage_paths: videoPaths,
+        product_images: imagePaths,
         user_brief: creativeBrief,
         product_url: productUrl,
         campaign_goal: campaignGoal,
@@ -87,9 +93,10 @@ export default function CampaignForm({ videos, requestId }: CampaignFormProps) {
       return;
     }
 
-    // Enqueuing a job per video (fan-out) lands here next — blocked on
-    // product_imgs_folder_path, which has no source until product-image
-    // upload exists.
+    // Enqueuing a job per video (fan-out) lands here next. The worker's
+    // JobPayload still wants a single product_imgs_folder_path, not the
+    // array we now have in product_images — that mismatch needs resolving
+    // before enqueue_job can be wired up.
     navigate("/loading", {
       state: { requestId: request.request_id, videoPaths, productUrl, campaignGoal, creativeBrief },
     });

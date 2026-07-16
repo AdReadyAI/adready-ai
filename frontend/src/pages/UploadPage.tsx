@@ -128,7 +128,7 @@ export default function UploadPage() {
             onImagesSelected={handleProductImagesSelected}
             onRemoveImage={removeProductImage}
           />
-          <CampaignSection videos={videos} requestId={requestId} />
+          <CampaignSection videos={videos} images={productImages} requestId={requestId} />
         </div>
         <Sidebar />
       </div>
