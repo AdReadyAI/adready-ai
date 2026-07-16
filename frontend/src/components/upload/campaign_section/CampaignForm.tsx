@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../../../lib/supabaseClient";
 import type { UploadedVideo } from "../../../pages/UploadPage";
+
+function getErrorMessage(error: unknown): string {
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return "Failed to submit request";
+}
 
 type CampaignMode = "create" | "existing";
 
@@ -22,15 +30,18 @@ const MOCK_CAMPAIGNS = [
 
 type CampaignFormProps = {
   videos: UploadedVideo[];
+  requestId: string;
 };
 
-export default function CampaignForm({ videos }: CampaignFormProps) {
+export default function CampaignForm({ videos, requestId }: CampaignFormProps) {
   const navigate = useNavigate();
   const [mode, setMode] = useState<CampaignMode>("create");
   const [productUrl, setProductUrl] = useState("");
   const [campaignGoal, setCampaignGoal] = useState("");
   const [creativeBrief, setCreativeBrief] = useState("");
   const [selectedCampaign, setSelectedCampaign] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const hasCompletedVideo = videos.some((v) => v.status === "done");
   const noneUploading = videos.every((v) => v.status !== "uploading");
@@ -40,18 +51,47 @@ export default function CampaignForm({ videos }: CampaignFormProps) {
   const isFormValid =
     (mode === "create" ? isCreateValid : isExistingValid) && hasCompletedVideo && noneUploading;
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     const videoPaths = videos
       .filter((v) => v.status === "done" && v.storagePath)
       .map((v) => v.storagePath as string);
 
+    if (mode === "existing") {
+      // No `requests` column corresponds to an existing-campaign selection yet —
+      // this path stays mock until that concept has a real place to land.
+      navigate("/loading", { state: { videoPaths, selectedCampaign } });
+      return;
+    }
+
+    setSubmitError(null);
+    setSubmitting(true);
+
+    const { data: request, error } = await supabase
+      .from("requests")
+      .insert({
+        request_id: requestId,
+        video_storage_paths: videoPaths,
+        user_brief: creativeBrief,
+        product_url: productUrl,
+        campaign_goal: campaignGoal,
+      })
+      .select()
+      .single();
+
+    setSubmitting(false);
+
+    if (error) {
+      setSubmitError(getErrorMessage(error));
+      return;
+    }
+
+    // Enqueuing a job per video (fan-out) lands here next — blocked on
+    // product_imgs_folder_path, which has no source until product-image
+    // upload exists.
     navigate("/loading", {
-      state:
-        mode === "create"
-          ? { videoPaths, productUrl, campaignGoal, creativeBrief }
-          : { videoPaths, selectedCampaign },
+      state: { requestId: request.request_id, videoPaths, productUrl, campaignGoal, creativeBrief },
     });
   }
 
@@ -150,14 +190,16 @@ export default function CampaignForm({ videos }: CampaignFormProps) {
         </div>
       )}
 
+      {submitError && <p className="text-sm text-red-600">{submitError}</p>}
+
       <div className="flex items-center justify-between">
         <p className="text-sm text-[#9B9A97]">🔒  Your videos are secure and never shared.</p>
         <button
           type="submit"
-          disabled={!isFormValid}
+          disabled={!isFormValid || submitting}
           className="rounded-lg bg-[#534AB7] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#463E9E] transition-colors disabled:text-[#808080] disabled:bg-[#CCCCCC] disabled:cursor-not-allowed"
         >
-          Run AdReady Review  →
+          {submitting ? "Submitting..." : "Run AdReady Review  →"}
         </button>
       </div>
     </form>

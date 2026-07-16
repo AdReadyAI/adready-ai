@@ -4,11 +4,14 @@ create table public.requests (
   video_storage_paths text[] not null default '{}',
   user_brief text,
   product_url text,
+  campaign_goal text,
   product_images text[] not null default '{}',
   created_at timestamptz not null default now()
 );
 
 create index requests_user_id_idx on public.requests (user_id);
+
+grant select, insert on public.requests to authenticated;
 
 alter table public.requests enable row level security;
 

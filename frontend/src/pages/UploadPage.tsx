@@ -16,6 +16,7 @@ export type UploadedVideo = {
 export default function UploadPage() {
   const { user } = useAuth();
   const [videos, setVideos] = useState<UploadedVideo[]>([]);
+  const [requestId] = useState(() => crypto.randomUUID());
 
   function handleFilesSelected(files: File[]) {
     const validFiles = files.filter((f) => f.type.startsWith("video/"));
@@ -37,7 +38,7 @@ export default function UploadPage() {
       console.error("User not authenticated");
       return;
     }
-    const path = `${user.id}/${video.id}/${video.file.name}`;
+    const path = `${user.id}/${requestId}/video/${video.id}/${video.file.name}`;
     const { error } = await supabase.storage
       .from("uploads")
       .upload(path, video.file, { contentType: video.file.type });
@@ -72,7 +73,7 @@ export default function UploadPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <UploadSection videos={videos} onFilesSelected={handleFilesSelected} onRemoveVideo={removeVideo} />
-          <CampaignSection videos={videos} />
+          <CampaignSection videos={videos} requestId={requestId} />
         </div>
         <Sidebar />
       </div>
