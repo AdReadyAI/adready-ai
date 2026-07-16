@@ -46,21 +46,31 @@ Everything below is billed in **credits**. Sources at the bottom.
 
 *Confirm your exact included-credit allotment in-app — Roboflow's pricing page rendered the base tier ambiguously (15 vs 50 credits/mo). All figures above assume 15 credits/mo.*
 
-# OpenAI Whisper (OpenRouter) — Pricing Summary
+# Transcription Model Selection — Final Decision
 
-**Model:** OpenAI Whisper `openai/whisper-large-v3` (transcription) via OpenRouter.
+After cost analysis, we have evaluated multiple transcription models available via OpenRouter. This analysis focuses on optimizing our pipeline for speed and cost, prioritizing efficiency for our clear-audio video datasets.
 
-## Cost Structure
+## Comprehensive Model Pricing Analysis
 
-| Provider / Routing | Estimated Cost |
-| :--- | :--- |
-| **OpenRouter** | **$0.0015 per minute** |
+| Model | Cost ($/min) | Primary Strengths |
+| :--- | :--- | :--- |
+| **openai/whisper-large-v3-turbo** | **$0.00066** | Most cost-effective; high-throughput optimization. |
+| **nvidia/parakeet-tdt-0.6b-v3** | **$0.0015** | Lightweight architecture; optimized for high speed. |
+| **openai/whisper-large-v3** | **$0.0015** | Robust industry standard; high accuracy. |
+| **qwen/qwen3-asr-flash-2026-02-10**| **$0.0021** | Excellent performance for multi-language and mixed-audio (music/noise). |
+| **mistralai/voxtral-mini-transcribe**| **$0.0030** | Versatile model suited for meetings and podcasts. |
+| **microsoft/mai-transcribe-1.5** | **$0.0060** | Fast transcription with wide locale support. |
+| **openai/whisper-1** | **$0.0060** | Legacy API support; stable performance. |
+| **google/chirp-3** | **$0.0160** | High-precision; built-in denoiser for complex audio. |
 
-> Note: Using OpenRouter enables access to this transcription model directly. The cost is calculated based on the duration of the audio file processed, at a rate of $0.0015 per minute of audio.
+## Strategic Takeaways
 
-## Cost-minimizing takeaways
-1. **API Selection:** Routing transcription processing through OpenRouter provides straightforward access to `openai/whisper-large-v3` with predictable per-minute billing.
-2. **Monitoring costs:** Always double-check your OpenRouter usage dashboard to ensure the $0.0015 per minute cost remains stable as models can change dynamically, and evaluate the audio duration vs. actual cost in your logs.
-
+1. **Cost Optimization:** By transitioning to high-throughput models like `whisper-large-v3-turbo`, we can achieve significant operational savings (up to 89% reduction compared to legacy models like `whisper-1`) without sacrificing transcription quality for our standard use cases.
+2. **Pipeline Efficiency:** Since transcription is a prerequisite for subsequent tasks (OCR and product lookup), selecting models with lower latency is critical to reducing the overall processing time per video. 
+3. **Selection Strategy:** 
+   - **Primary:** `openai/whisper-large-v3-turbo` for its market-leading price-to-performance ratio.
+   - **Secondary/Failover:** `nvidia/parakeet-tdt-0.6b-v3` or `openai/whisper-large-v3` for scenarios requiring alternative language handling or stability.
+   - **Acoustic Versatility:** `qwen/qwen3-asr-flash-2026-02-10` is selected for its superior performance in handling difficult acoustic conditions, specifically for transcribing speech over background music and environmental noise.
+   - **Specialized:** `google/chirp-3` remains a backup option only for extreme high-noise environments since it got a built-in denoiser for cleaner audio processing
 ## Sources
-- OpenRouter Model Registry: https://openrouter.ai/models/openai/whisper-large-v3
+- [OpenRouter Model Registry](https://openrouter.ai/models)

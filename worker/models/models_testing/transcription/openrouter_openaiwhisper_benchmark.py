@@ -5,12 +5,12 @@ import os
 import wave
 from pathlib import Path
 
-# Fix pour l'import de la config (remonte de 3 niveaux vers worker/)
+ 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent.parent))
 
 API_KEY =  "" 
 
-# ----------------------------- CONFIG -------------------------------------- #
+ 
 HERE = Path(__file__).parent
 MODEL_NAME = "openai/whisper-large-v3"  
 HOSTED_URL = "https://openrouter.ai/api/v1/audio/transcriptions"
@@ -44,7 +44,7 @@ def run_benchmark(audio_file):
         print(f"Error {resp.status_code}: {resp.text}")
 
 if __name__ == "__main__":
-    # Liste tes 3 fichiers
+     
     files = ["Copper Compression.wav", "LiquidIV.wav", "Small Talk ｜ Everyday English [ry9SYnV3svc].wav"]
     for f_name in files:
         run_benchmark(HERE / f_name)
