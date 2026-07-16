@@ -16,6 +16,17 @@ export type UploadedVideo = {
 
 export type UploadedImage = UploadedVideo;
 
+// Supabase Storage rejects non-ASCII characters in object keys (400
+// InvalidKey), and an unencoded "#" truncates the URL at the fragment
+// delimiter before the request is even sent. Strip diacritics down to their
+// base letter, then replace anything else outside a safe ASCII set with "_" —
+// this is only used to build the storage path; the original name is kept
+// for display.
+function sanitizeFilename(name: string): string {
+  const withoutDiacritics = name.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return withoutDiacritics.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_");
+}
+
 export default function UploadPage() {
   const { user } = useAuth();
   const [videos, setVideos] = useState<UploadedVideo[]>([]);
@@ -42,7 +53,7 @@ export default function UploadPage() {
       console.error("User not authenticated");
       return;
     }
-    const path = `${user.id}/${requestId}/video/${video.id}/${video.file.name}`;
+    const path = `${user.id}/${requestId}/video/${video.id}/${sanitizeFilename(video.file.name)}`;
     const { error } = await supabase.storage
       .from("uploads")
       .upload(path, video.file, { contentType: video.file.type });
@@ -88,7 +99,7 @@ export default function UploadPage() {
     // else in this same field is a plain product image.
     const stem = image.file.name.replace(/\.[^./]+$/, "").toLowerCase();
     const kind = stem === "logo" ? "logo" : "product_image";
-    const path = `${user.id}/${requestId}/${kind}/${image.id}/${image.file.name}`;
+    const path = `${user.id}/${requestId}/${kind}/${image.id}/${sanitizeFilename(image.file.name)}`;
     const { error } = await supabase.storage
       .from("uploads")
       .upload(path, image.file, { contentType: image.file.type });
