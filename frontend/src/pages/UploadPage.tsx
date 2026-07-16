@@ -39,7 +39,7 @@ export default function UploadPage() {
     }
     const path = `${user.id}/${video.id}/${video.file.name}`;
     const { error } = await supabase.storage
-      .from("videos")
+      .from("uploads")
       .upload(path, video.file, { contentType: video.file.type });
 
     setVideos((prev) =>
@@ -54,7 +54,7 @@ export default function UploadPage() {
   async function removeVideo(id: string) {
     const video = videos.find((v) => v.id === id);
     if (video?.storagePath) {
-      await supabase.storage.from("videos").remove([video.storagePath]);
+      await supabase.storage.from("uploads").remove([video.storagePath]);
     }
     setVideos((prev) => prev.filter((v) => v.id !== id));
   }
