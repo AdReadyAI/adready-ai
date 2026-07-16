@@ -1,10 +1,13 @@
 import { useRef } from "react";
 
-type UploadDropzoneProps = {
+type DropzoneProps = {
   onFilesSelected: (files: File[]) => void;
+  accept: string;
+  multiple?: boolean;
+  label: string;
 };
 
-export default function UploadDropzone({ onFilesSelected }: UploadDropzoneProps) {
+export default function Dropzone({ onFilesSelected, accept, multiple = true, label }: DropzoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -29,14 +32,12 @@ export default function UploadDropzone({ onFilesSelected }: UploadDropzoneProps)
       <input
         ref={inputRef}
         type="file"
-        multiple
-        accept="video/mp4,video/quicktime"
+        multiple={multiple}
+        accept={accept}
         className="hidden"
         onChange={handleChange}
       />
-      <p className="text-[#534AB7] inline-block">
-        ↑  Drag & drop your videos here  or  click to browse
-      </p>
+      <p className="text-[#534AB7] inline-block">↑  {label}</p>
     </div>
   );
 }
