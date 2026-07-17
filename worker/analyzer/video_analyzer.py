@@ -1,10 +1,9 @@
 import inspect
 import os
-
-from openai import  APIStatusError, APITimeoutError, RateLimitError
+import assemblyai as aai
 
 from analyzer.types import Artifacts
-from config.connection import get_openrouter_client
+from config.connection import get_aai_transcriber
 from app.errors import PermanentError, TransientError
 from analyzer.output_models import TranscriptSegment
 
@@ -19,57 +18,50 @@ def analysis_task(name: str):
 class VideoAnalyzer:
     def __init__(self, artifacts: Artifacts):
         self.artifacts = artifacts
-        self.client = get_openrouter_client()
+        # Utilisation du singleton via lru_cache
+        self.transcriber = get_aai_transcriber()
 
     @analysis_task("transcription")
     def transcribe(self) -> list[TranscriptSegment]: 
-
         if not os.path.exists(self.artifacts.audio_path):
-            raise PermanentError(
-                f"Audio file not found: {self.artifacts.audio_path}"
-            )
+            raise PermanentError(f"Audio file not found: {self.artifacts.audio_path}")
 
         try:
-            with open(self.artifacts.audio_path, "rb") as audio_file:
-                response = self.client.audio.transcriptions.create(
-                    model="openai/whisper-large-v3",
-                    file=audio_file,
-                    response_format="verbose_json" 
-                )
+            config = aai.TranscriptionConfig(speaker_labels=True, punctuate=True)
+            
+            # Utilisation de l'instance du singleton récupérée dans __init__
+            transcript = self.transcriber.transcribe(self.artifacts.audio_path, config)
 
-           
-            segments = []
-             
-            for idx, seg in enumerate(response.segments):
-                segments.append(TranscriptSegment(
-                    request_id= getattr(self.artifacts, 'request_id', 'manual_test_001'),  #later it will maybe be changed to self.artifacts.request_id 
+            if transcript.status == aai.TranscriptStatus.error:
+                raise PermanentError(f"AssemblyAI processing failed: {transcript.error}")
+
+            return [
+                TranscriptSegment(
+                    request_id=getattr(self.artifacts, 'request_id', 'manual_test_001'),
                     segment_id=f"tr_{idx:03d}",
-                    start_ms=int(seg.start * 1000),  
-                    end_ms=int(seg.end * 1000),      
-                    text=seg.text,               
-                    speaker="unknown" #it will be changed when the speaker diarization is implemented in the future for now it is set to "unknown" as a placeholder
-                ))
+                    start_ms=int(utterance.start),
+                    end_ms=int(utterance.end),
+                    text=utterance.text,
+                    speaker=f"Speaker {utterance.speaker}"
+                ) for idx, utterance in enumerate(transcript.utterances)
+            ]
 
-            return segments
+        except aai.AssemblyAIError as e:
+            # AssemblyAIError contient les attributs status_code et body
+            status_code = getattr(e, 'status_code', 0)
+            if status_code == 429:
+                raise TransientError("AssemblyAI rate limit exceeded")
+            if status_code >= 500:
+                raise TransientError(f"AssemblyAI server side error: {status_code}")
+            
+            raise PermanentError(f"AssemblyAI API request error: {status_code} - {getattr(e, 'body', str(e))}")
 
-        except RateLimitError as e:
-            raise TransientError(f"Rate limit exceeded: {e}")
-
-        except APITimeoutError as e:
-            raise TransientError(f"Request timed out: {e}")
-
-        except APIStatusError as e:
-            if e.status_code and e.status_code >= 500:
-                raise TransientError(
-                    f"OpenRouter server error ({e.status_code}): {e}"
-                )
-
-            raise PermanentError(
-                f"OpenRouter request error ({e.status_code}): {e}"
-            )
+        except (TimeoutError, ConnectionError):
+            raise TransientError("Network failure connecting to AssemblyAI")
 
         except Exception as e:
-            raise PermanentError(f"Unexpected error: {e}")
+            raise PermanentError(f"Unexpected error in transcribe: {str(e)}")
+        
 
     @analysis_task("frame_text")
     def frame_text(self):

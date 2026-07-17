@@ -1,7 +1,8 @@
 import psycopg2
 from openai import OpenAI
-from config.settings import OPENROUTER_API_KEY ,DATABASE_URL , OPENROUTER_BASE_URL , logger
+from config.settings import OPENROUTER_API_KEY ,DATABASE_URL , OPENROUTER_BASE_URL , logger , ASSEMBLYAI_API_KEY
 from functools import lru_cache  
+import assemblyai as aai
 
 def connect():
     conn = psycopg2.connect(DATABASE_URL)
@@ -10,12 +11,20 @@ def connect():
 
 
 
+# @lru_cache(maxsize=1)
+# def get_openrouter_client(): 
+
+#     logger.info("Creating OpenRouter client...")
+
+#     return OpenAI(
+#         base_url=OPENROUTER_BASE_URL,
+#         api_key=OPENROUTER_API_KEY,
+#     )
+
+
+
 @lru_cache(maxsize=1)
-def get_openrouter_client(): 
-
-    logger.info("Creating OpenRouter client...")
-
-    return OpenAI(
-        base_url=OPENROUTER_BASE_URL,
-        api_key=OPENROUTER_API_KEY,
-    )
+def get_aai_transcriber():
+    logger.info("Initializing AssemblyAI Transcriber...")
+    aai.settings.api_key = ASSEMBLYAI_API_KEY
+    return aai.Transcriber()
