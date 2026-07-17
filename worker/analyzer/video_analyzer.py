@@ -20,6 +20,7 @@ from analyzer.output_models import (
 
 
 
+
 def analysis_task(name: str):
     """Tag a method as an analysis task exposed via analysis_tasks()."""
     def decorator(fn):
@@ -36,16 +37,20 @@ class VideoAnalyzer:
         self.transcriber = get_aai_transcriber()
 
     @analysis_task("transcription")
+
     def transcribe(self) -> TranscriptionResult: 
+
 
         if not os.path.exists(self.artifacts.audio_path):
             raise PermanentError(f"Audio file not found: {self.artifacts.audio_path}")
 
         try:
+
             config = aai.TranscriptionConfig(speaker_labels=True, punctuate=True)
             
 
             transcript = self.transcriber.transcribe(self.artifacts.audio_path, config)
+
 
             if transcript.status == aai.TranscriptStatus.error:
                 raise PermanentError(f"AssemblyAI processing failed: {transcript.error}")
