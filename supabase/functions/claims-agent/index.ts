@@ -19,7 +19,7 @@
  * INPUT (From EvidenceBundle):
  *   - transcript_segments[]: Spoken narrative/dialogue text.
  *   - ocr_segments[]: Detected on-screen text with confidence, font_size_px, and duration.
- *   - detected_claims[]: Primitive claims list from Media Processing team.
+ *   - detected_claims[]: Needs to be extracted from transcript_segments and ocr_segments.
  *   - creative_brief: Brief guidelines, target audience, approved/forbidden claims list.
  *
  * OUTPUT JSON STRUCTURE:

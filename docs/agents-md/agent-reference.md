@@ -4,85 +4,6 @@ This playbook acts as the master technical specification for the 7 evaluation ag
 
 ---
 
-## Shared Data Contracts (schemas.ts)
-
-Every agent consumes a subset of the `EvidenceBundle` provided by the Media Processing team and returns an array of `MetricResult` structures.
-
-### Input envelope: `EvidenceBundle`
-```typescript
-export interface EvidenceBundle {
-  variant_id: string;
-  review_id: string;
-
-  // Media Processing Inputs
-  transcript_segments: TranscriptSegment[];
-  ocr_segments: OCRSegment[];
-  scene_segments: SceneSegment[];
-  // detected_claims: DetectedClaim[];
-  // detected_ctas: DetectedCTA[];
-  product_moments: ProductMoment[];
-  reference_assets: ReferenceAsset[];
-  video_metadata: VideoMetadata;
-
-  // Product Platform Context
-  creative_brief: string;
-  campaign_goal: "awareness" | "consideration" | "conversion" | "repurchase";
-  destination_platform: string;
-}
-
-export interface SceneSegment {
-  scene_id: string;
-  start_ms: number;
-  end_ms: number;
-  visual_description: string;
-  visual_elements?: {
-    detected_people?: string[];      // e.g. ["adult female (25-30)"]
-    clothing_style?: string;        // e.g. "casual athletic wear"
-    dominant_colors?: string[];      // e.g. ["#FF5733", "#C70039"]
-    tone_mood?: string;              // e.g. "energetic, bright"
-  };
-}
-```
-
-### Output format: `MetricResult`
-```typescript
-export interface SubCheckResult {
-  check_id: string;
-  name: string;
-  result: "passed" | "failed" | "cannot_assess";
-  severity: "none" | "low" | "medium" | "high" | "critical" | "cannot_assess";
-  explanation?: string;
-}
-
-export interface MetricResult {
-  metric_id: MetricId;
-  agent:
-    | "claims_accuracy"
-    | "storyline_clarity"
-    | "brand_alignment"
-    | "brief_alignment"
-    | "product_representation"
-    | "visual_quality"
-    | "cta_effectiveness";
-  metric_name: string;
-  question: string;
-  result: "true" | "false" | "cannot_assess";
-  severity: "none" | "low" | "medium" | "high" | "critical" | "cannot_assess";
-  confidence?: "low" | "medium" | "high";
-  evidence?: {
-    type: "transcript" | "ocr" | "visual" | "brief" | "product_page" | "metadata";
-    text: string;
-    timestamp: string; // MM:SS format or empty string
-  }[];
-  explanation?: string;
-  suggested_correction?: string;
-  correction_type?: "rewrite" | "edit_recommendation" | "reshoot_recommendation" | "policy_review" | "cannot_suggest";
-  sub_checks?: SubCheckResult[]; // Granular sub-checks evaluated by the agent
-}
-```
-
----
-
 ## 1. Claims Accuracy Agent (`claims-agent`)
 
 *   **Owner**: Saifeddine Rejeb
@@ -102,7 +23,7 @@ export interface MetricResult {
 ### Expected Inputs
 *   `transcript_segments[]`: Spoken dialogue.
 *   `ocr_segments[]`: On-screen text.
-*   `detected_claims[]`: Primitive list of claims (need to generate)
+*   `detected_claims[]`: Needs to be extracted first.
 *   `creative_brief`: Approved and forbidden claims guidelines.
 
 ### Severity Rules
@@ -234,7 +155,7 @@ export interface MetricResult {
 ### Mapped Metrics & Internal Sub-Checks
 1.  **`channel_readiness`**: "Does the video fit the intended platform, placement, length, and viewing context?"
     *   `format_noncompliant`: Aspect ratio, resolution, or duration doesn't match platform specs.
-    *   `safe_zone_violation`: Overlay text overlaps with platform UI overlays.
+
 2.  **`creative_effectiveness`**: "Does the ad have a clear hook, coherent message flow, and enough stopping power?"
     *   `hook_missing`: No hook present in opening 2-3 seconds.
     *   `narrative_gap`: Confusing jumps or cuts breaking narrative logic.
@@ -380,7 +301,6 @@ export interface MetricResult {
     *   `cta_platform_mismatch`: Phrasing violates platform swipe/action conventions.
 
 ### Expected Inputs
-*   `detected_ctas[]`: CTA strings, timestamps, and detection sources.
 *   `transcript_segments[]` & `ocr_segments[]`: Text around closing beats.
 *   `creative_brief`: Required call-to-action text rules.
 *   `campaign_goal`: Campaign target (e.g. conversion requires stronger CTA).
@@ -492,7 +412,6 @@ export interface MetricResult {
 ### Expected Inputs
 *   `product_moments[]`: Target timestamps where the product appears.
 *   `scene_segments[]`: Scene visual descriptions and visual_elements for product visibility checks.
-*   `reference_assets[]`: Official product photos.
 
 ### Severity Rules
 
@@ -664,7 +583,7 @@ export interface MetricResult {
 
 ## 6. Brand Alignment Agent (`brand-alignment-agent`)
 
-*   **Owner**: Saifeddine Rejeb
+*   **Owner**: Yuchen Lin
 *   **Directory**: `supabase/functions/brand-alignment-agent/`
 
 ### Mapped Metrics & Internal Sub-Checks
@@ -675,9 +594,10 @@ export interface MetricResult {
     *   `brand_voice_drift`: Subtitle copy or voiceover style drifts from guidelines.
 
 ### Expected Inputs
-*   `reference_assets[]`: Brand logos and style rules.
 *   `scene_segments[]`: Scene visual descriptions and visual_elements for logo, color, and tone checks.
 *   `transcript_segments[]`: Spoken voice dialogue.
+*   `creative_brief`: Required call-to-action text rules.
+
 
 ### Severity Rules
 
@@ -756,6 +676,7 @@ export interface MetricResult {
 1.  **`audience_fit`**: "Does the video speak to the intended audience's needs, motivations, or context?"
     *   `demographic_mismatch`: Slang, style, music, or vocabulary choices clash with target demographics.
     *   `demographic_restricted`: Target demographic contains legally restricted age groups.
+  
 2.  **`brief_adherence`**: "Does the video satisfy the core campaign objective and required message from the creative brief?"
     *   `objective_missed`: Video objectives deviate from primary brief target goals.
     *   `required_message_missing`: Mandatory message points or product highlights from creative brief are omitted.

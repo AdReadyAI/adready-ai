@@ -7,7 +7,6 @@
  *
  *   1. channel_readiness ("Does the video fit the intended platform, placement, length, and viewing context?")
  *      [ ] format_noncompliant: Aspect ratio, resolution, or duration doesn't match platform spec limits.
- *      [ ] safe_zone_violation: Overlay text overlaps with platform UI elements (e.g. TikTok sidebar).
  *
  *   2. creative_effectiveness ("Does the ad have a clear hook, coherent message flow, and enough stopping power?")
  *      [ ] hook_missing: Attention-grabbing visual or spoken hook absent in the opening 2-3 seconds.
