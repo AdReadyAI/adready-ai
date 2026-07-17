@@ -6,7 +6,7 @@ from openai import  APIStatusError, APITimeoutError, RateLimitError
 from analyzer.types import Artifacts
 from config.connection import get_openrouter_client
 from app.errors import PermanentError, TransientError
-
+from analyzer.output_models import TranscriptSegment
 
 def analysis_task(name: str):
     """Tag a method as an analysis task exposed via analysis_tasks()."""
@@ -22,7 +22,7 @@ class VideoAnalyzer:
         self.client = get_openrouter_client()
 
     @analysis_task("transcription")
-    def transcribe(self):
+    def transcribe(self) -> list[TranscriptSegment]: 
 
         if not os.path.exists(self.artifacts.audio_path):
             raise PermanentError(
@@ -34,9 +34,23 @@ class VideoAnalyzer:
                 response = self.client.audio.transcriptions.create(
                     model="openai/whisper-large-v3",
                     file=audio_file,
+                    response_format="verbose_json" 
                 )
 
-            return response.text
+           
+            segments = []
+             
+            for idx, seg in enumerate(response.segments):
+                segments.append(TranscriptSegment(
+                    request_id= getattr(self.artifacts, 'request_id', 'manual_test_001'),  #later it will maybe be changed to self.artifacts.request_id 
+                    segment_id=f"tr_{idx:03d}",
+                    start_ms=int(seg.start * 1000),  
+                    end_ms=int(seg.end * 1000),      
+                    text=seg.text,               
+                    speaker="unknown" #it will be changed when the speaker diarization is implemented in the future for now it is set to "unknown" as a placeholder
+                ))
+
+            return segments
 
         except RateLimitError as e:
             raise TransientError(f"Rate limit exceeded: {e}")
