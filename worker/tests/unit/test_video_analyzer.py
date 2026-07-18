@@ -29,22 +29,27 @@ class TestVideoAnalyzer(unittest.TestCase):
     @patch("analyzer.video_analyzer.get_aai_transcriber")
     @patch("os.path.exists", return_value=True)
     def test_transcribe_success(self, mock_exists, mock_get_transcriber):
-       
+
         mock_get_transcriber.return_value = self.mock_transcriber
         
         mock_transcript = MagicMock()
         mock_transcript.status = aai.TranscriptStatus.completed
-        mock_transcript.utterances = [
-            MagicMock(start=1000, end=5000, text="Hello", speaker="A")
-        ]
+        # Simule l'objet utterance avec les bons attributs
+        mock_utterance = MagicMock(start=1000, end=5000, text="Hello", speaker="A")
+        mock_transcript.utterances = [mock_utterance]
+        
         self.mock_transcriber.transcribe.return_value = mock_transcript
 
         analyzer = VideoAnalyzer(self.mock_artifacts)
         result = analyzer.transcribe()
 
-        self.assertEqual(result[0].text, "Hello")
+        # On vérifie maintenant l'attribut 'rows' de l'objet TranscriptionResult
+        self.assertEqual(len(result.rows), 1)
+        self.assertEqual(result.rows[0].text, "Hello")
+        self.assertEqual(result.rows[0].speaker, "Speaker A") # Vérifie ta logique de concaténation
         self.mock_transcriber.transcribe.assert_called_once()
 
+        
     @patch("analyzer.video_analyzer.get_aai_transcriber")
     @patch("os.path.exists", return_value=True)
     def test_transcribe_api_error_429(self, mock_exists, mock_get_transcriber):

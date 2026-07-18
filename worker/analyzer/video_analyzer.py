@@ -37,7 +37,6 @@ class VideoAnalyzer:
         self.transcriber = get_aai_transcriber()
 
     @analysis_task("transcription")
-
     def transcribe(self) -> TranscriptionResult: 
 
 
@@ -45,7 +44,6 @@ class VideoAnalyzer:
             raise PermanentError(f"Audio file not found: {self.artifacts.audio_path}")
 
         try:
-
             config = aai.TranscriptionConfig(speaker_labels=True, punctuate=True)
             
 
@@ -55,7 +53,7 @@ class VideoAnalyzer:
             if transcript.status == aai.TranscriptStatus.error:
                 raise PermanentError(f"AssemblyAI processing failed: {transcript.error}")
 
-            
+
             segments = [
                 TranscriptSegment(
                     segment_id=f"tr_{idx:03d}",
@@ -75,6 +73,7 @@ class VideoAnalyzer:
             if status_code == 429 or status_code >= 500:
                 raise TransientError(f"AssemblyAI transient error ({status_code}): {e}")
             raise PermanentError(f"AssemblyAI API request error ({status_code}): {e}")
+
 
         except httpx.TimeoutException:
             raise TransientError("AssemblyAI request timed out")
