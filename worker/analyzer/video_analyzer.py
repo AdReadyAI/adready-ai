@@ -2,10 +2,19 @@ import inspect
 import os
 import assemblyai as aai
 
+
 from analyzer.types import Artifacts
 from config.connection import get_aai_transcriber
 from app.errors import PermanentError, TransientError
-from analyzer.output_models import TranscriptSegment
+from analyzer.output_models import (
+
+    TranscriptSegment,
+    TranscriptionResult,
+    FrameTextResult,
+    ObjectDetectionResult,
+    ContextResult,
+)
+
 
 def analysis_task(name: str):
     """Tag a method as an analysis task exposed via analysis_tasks()."""
@@ -18,18 +27,19 @@ def analysis_task(name: str):
 class VideoAnalyzer:
     def __init__(self, artifacts: Artifacts):
         self.artifacts = artifacts
-        # Utilisation du singleton via lru_cache
+        
         self.transcriber = get_aai_transcriber()
 
     @analysis_task("transcription")
-    def transcribe(self) -> list[TranscriptSegment]: 
+
+    def transcribe(self) -> TranscriptionResult: 
         if not os.path.exists(self.artifacts.audio_path):
             raise PermanentError(f"Audio file not found: {self.artifacts.audio_path}")
 
         try:
             config = aai.TranscriptionConfig(speaker_labels=True, punctuate=True)
             
-            # Utilisation de l'instance du singleton récupérée dans __init__
+            
             transcript = self.transcriber.transcribe(self.artifacts.audio_path, config)
 
             if transcript.status == aai.TranscriptStatus.error:
@@ -37,7 +47,7 @@ class VideoAnalyzer:
 
             return [
                 TranscriptSegment(
-                    request_id=getattr(self.artifacts, 'request_id', 'manual_test_001'),
+                    #request_id=getattr(self.artifacts, 'request_id', 'manual_test_001'),
                     segment_id=f"tr_{idx:03d}",
                     start_ms=int(utterance.start),
                     end_ms=int(utterance.end),
@@ -47,7 +57,7 @@ class VideoAnalyzer:
             ]
 
         except aai.AssemblyAIError as e:
-            # AssemblyAIError contient les attributs status_code et body
+            
             status_code = getattr(e, 'status_code', 0)
             if status_code == 429:
                 raise TransientError("AssemblyAI rate limit exceeded")
@@ -63,16 +73,17 @@ class VideoAnalyzer:
             raise PermanentError(f"Unexpected error in transcribe: {str(e)}")
         
 
+
     @analysis_task("frame_text")
-    def frame_text(self):
+    def frame_text(self) -> FrameTextResult:
         pass
 
     @analysis_task("object_detection")
-    def detect_objects(self):
+    def detect_objects(self) -> ObjectDetectionResult:
         pass
 
     @analysis_task("context")
-    def context(self):
+    def context(self) -> ContextResult:
         pass
 
     def analysis_tasks(self):
