@@ -6,8 +6,8 @@ pytestmark = pytest.mark.unit
 
 from app.supabase import Supabase
 from analyzer.output_models import (
-    FrameTextItem,
-    FrameTextResult,
+    OcrItem,
+    OcrResult,
     TranscriptionResult,
     TranscriptSegment,
 )
@@ -112,12 +112,12 @@ def test_transaction_restores_previous_autocommit_when_already_false():
 # completed_analyzers()
 # ---------------------------------------------------------------------------
 def test_completed_analyzers_returns_successful_task_names():
-    cur = FakeCursor(fetchall_result=[("transcription",), ("frame_text",)])
+    cur = FakeCursor(fetchall_result=[("transcription",), ("ocr",)])
     db = Supabase(cur=cur, request_id=REQUEST_ID)
 
     done = db.completed_analyzers()
 
-    assert done == {"transcription", "frame_text"}
+    assert done == {"transcription", "ocr"}
     sql, params = cur.executed[0]
     assert "FROM video_processing" in sql
     assert "status = 'success'" in sql
@@ -193,10 +193,10 @@ def test_replace_rows_placeholder_row_with_no_fields():
     cur = FakeCursor()
     db = Supabase(cur=cur, request_id=REQUEST_ID)
 
-    db._replace_rows("frame_text_items", "proc-1", [FrameTextItem()])
+    db._replace_rows("ocr_items", "proc-1", [OcrItem()])
 
     insert_sql, values = cur.executemany_calls[0]
-    assert "INSERT INTO frame_text_items (processing_id) VALUES (%s);" == insert_sql
+    assert "INSERT INTO ocr_items (processing_id) VALUES (%s);" == insert_sql
     assert values == [("proc-1",)]
 
 
@@ -236,7 +236,7 @@ def test_persist_results_mixed_success_and_error():
     cur = FakeCursor(fetchone_queue=[("proc-ok",), ("proc-err",)])
     db = Supabase(cur=cur, request_id=REQUEST_ID)
     results = {"transcription": TranscriptionResult(rows=[_segment(0)])}
-    errors = {"frame_text": "failed"}
+    errors = {"ocr": "failed"}
 
     db.persist_results(results, errors)
 

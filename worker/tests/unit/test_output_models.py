@@ -8,8 +8,8 @@ pytestmark = pytest.mark.unit
 from analyzer.output_models import (
     ContextResult,
     ContextRow,
-    FrameTextItem,
-    FrameTextResult,
+    OcrItem,
+    OcrResult,
     ObjectDetectionItem,
     ObjectDetectionResult,
     TaskFailure,
@@ -95,7 +95,7 @@ def test_transcript_segment_requires_mandatory_fields():
     "result_cls, expected_table",
     [
         (TranscriptionResult, "transcript_segments"),
-        (FrameTextResult, "frame_text_items"),
+        (OcrResult, "ocr_items"),
         (ObjectDetectionResult, "object_detection_items"),
         (ContextResult, "context_results"),
     ],
@@ -121,14 +121,14 @@ def test_result_envelope_accepts_empty_rows():
 # ---------------------------------------------------------------------------
 # Placeholder row models
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("row_cls", [FrameTextItem, ObjectDetectionItem, ContextRow])
+@pytest.mark.parametrize("row_cls", [OcrItem, ObjectDetectionItem, ContextRow])
 def test_placeholder_rows_have_no_fields(row_cls):
     assert row_cls.model_fields == {}
     # Constructs with no arguments.
     assert row_cls() is not None
 
 
-@pytest.mark.parametrize("row_cls", [FrameTextItem, ObjectDetectionItem, ContextRow])
+@pytest.mark.parametrize("row_cls", [OcrItem, ObjectDetectionItem, ContextRow])
 def test_placeholder_rows_reject_unknown_field(row_cls):
     with pytest.raises(ValidationError):
         row_cls(anything="x")

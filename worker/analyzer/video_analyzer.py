@@ -5,7 +5,7 @@ from config.connection import get_openrouter_client
 from app.errors import PermanentError, TransientError
 from analyzer.output_models import (
     TranscriptionResult,
-    FrameTextResult,
+    OcrResult,
     ObjectDetectionResult,
     ContextResult,
 )
@@ -28,8 +28,8 @@ class VideoAnalyzer:
     def transcribe(self) -> TranscriptionResult:
         pass
 
-    @analysis_task("frame_text")
-    def frame_text(self) -> FrameTextResult:
+    @analysis_task("ocr")
+    def ocr(self) -> OcrResult:
         pass
 
     @analysis_task("object_detection")

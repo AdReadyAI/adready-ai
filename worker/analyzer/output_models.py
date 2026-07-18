@@ -51,14 +51,14 @@ class TranscriptionResult(TaskResult[TranscriptSegment]):
 
 
 # ==============================================
-#  frame_text  ->  frame_text_items
+#  ocr  ->  ocr_items
 # ==============================================
 
-class FrameTextItem(TaskRow):
+class OcrItem(TaskRow):
     pass
 
-class FrameTextResult(TaskResult[FrameTextItem]):
-    table: ClassVar[str] = "frame_text_items" #Table name should be updated to the actual name
+class OcrResult(TaskResult[OcrItem]):
+    table: ClassVar[str] = "ocr_items" #Table name should be updated to the actual name
 
 
 # ==============================================

@@ -85,12 +85,12 @@ def test_run_analysis_routes_exceptions_to_errors():
     def boom():
         raise RuntimeError("kaboom")
 
-    tasks = {"transcription": lambda: "OK", "frame_text": boom}
+    tasks = {"transcription": lambda: "OK", "ocr": boom}
     results, errors = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
 
     assert results == {"transcription": "OK"}
-    assert set(errors) == {"frame_text"}
-    assert "kaboom" in errors["frame_text"]
+    assert set(errors) == {"ocr"}
+    assert "kaboom" in errors["ocr"]
 
 
 def test_run_analysis_skips_none_results():
@@ -209,7 +209,7 @@ def test_process_message_raises_when_a_task_fails(monkeypatch):
     def boom():
         raise RuntimeError("analyzer failed")
 
-    tasks = {"frame_text": boom}
+    tasks = {"ocr": boom}
     _wire_process_message(monkeypatch, tasks)
 
     with pytest.raises(RuntimeError):
@@ -221,7 +221,7 @@ def test_process_message_with_all_stub_tasks_does_not_crash(monkeypatch):
     recorder = {}
     tasks = {
         "transcription": lambda: None,
-        "frame_text": lambda: None,
+        "ocr": lambda: None,
         "object_detection": lambda: None,
         "context": lambda: None,
     }

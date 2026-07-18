@@ -148,7 +148,7 @@ flowchart TD
     PR --> ART["Artifacts (immutable)"]
     ART --> FO["_run_analysis: ThreadPoolExecutor(4)"]
     FO --> T1["transcription"]
-    FO --> T2["frame_text"]
+    FO --> T2["ocr"]
     FO --> T3["object_detection"]
     FO --> T4["context"]
     T1 --> G["gather results / errors"]
