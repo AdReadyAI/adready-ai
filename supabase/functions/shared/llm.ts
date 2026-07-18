@@ -12,8 +12,10 @@
  *   OPENROUTER_BASE_URL — defaults to the OpenRouter chat-completions endpoint
  */
 
-const OPENROUTER_BASE_URL = Deno.env.get("OPENROUTER_BASE_URL") ??
-  "https://openrouter.ai/api/v1/chat/completions";
+function openRouterBaseUrl(): string {
+  return Deno.env.get("OPENROUTER_BASE_URL") ??
+    "https://openrouter.ai/api/v1/chat/completions";
+}
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";
@@ -34,7 +36,7 @@ export async function chat(messages: ChatMessage[]): Promise<string> {
   const model = Deno.env.get("OPENROUTER_MODEL");
   if (!model) throw new Error("OPENROUTER_MODEL is not set");
 
-  const res = await fetch(OPENROUTER_BASE_URL, {
+  const res = await fetch(openRouterBaseUrl(), {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,

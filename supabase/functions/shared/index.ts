@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2.39.8";
+import { createClient } from "@supabase/supabase-js";
 
 export function createSupabaseClient(req: Request) {
   return createClient(

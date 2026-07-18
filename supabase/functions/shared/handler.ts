@@ -1,5 +1,5 @@
-import { User } from "npm:@supabase/supabase-js@2.39.8";
-import { z } from "npm:zod@^3.22.4";
+import { User } from "@supabase/supabase-js";
+import { z } from "zod";
 import { handleCors } from "./cors.ts";
 import { getAuthenticatedUser } from "./auth.ts";
 import { err } from "./response.ts";
@@ -22,12 +22,12 @@ type EdgeHandlerWithBody<T> = (
  */
 export function createEdgeHandler(name: string, handler: EdgeHandler): void;
 export function createEdgeHandler<T>(
-  name: string,
+  _name: string,
   schema: z.ZodType<T>,
   handler: EdgeHandlerWithBody<T>,
 ): void;
 export function createEdgeHandler<T>(
-  name: string,
+  _name: string,
   schemaOrHandler: z.ZodType<T> | EdgeHandler,
   maybeHandler?: EdgeHandlerWithBody<T>,
 ): void {

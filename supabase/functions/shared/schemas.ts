@@ -5,7 +5,7 @@
  * and the output MetricResult array.
  */
 
-import { z } from "npm:zod@^3.22.4";
+import { z } from "zod";
 
 // 1. INPUT: EvidenceBundle (Provided as-is by Media Processing)
 
