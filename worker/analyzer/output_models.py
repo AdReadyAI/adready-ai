@@ -1,6 +1,6 @@
-from typing import ClassVar, Literal
+from typing import ClassVar, Generic, Literal, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 # ---------------------------------------------------------------------------
@@ -27,19 +27,27 @@ class TaskFailure(BaseModel):
 
 class TaskRow(BaseModel):
     """One row of a task-specific results table."""
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+TRow = TypeVar("TRow", bound=TaskRow)
+class TaskResult(BaseModel, Generic[TRow]):
+    """Uniform envelope every analysis task returns."""
     table: ClassVar[str]
+    rows: list[TRow]
 
 # ==============================================
 #  transcription  ->  transcript_segments
 # ==============================================
 
-class TranscriptSegment(TaskRow):
-    table: ClassVar[str] = "transcript_segments"
+class TranscriptSegment(TaskRow):  
     segment_id: str
     start_ms: int
     end_ms: int
     text: str
     speaker: str | None = None
+
+class TranscriptionResult(TaskResult[TranscriptSegment]):
+    table: ClassVar[str] = "transcript_segments"
 
 
 # ==============================================

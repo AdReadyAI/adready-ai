@@ -9,30 +9,32 @@ from analyzer.video_analyzer import VideoAnalyzer
 from app.schemas import JobPayload
 from app.errors import TransientError
 from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS
+from analyzer.output_models import TaskResult
+from app.supabase import Supabase
 
 
 
 def process_message(cur, msg_id, payload):
     payload = _parse_payload(msg_id, payload)
+    request_id = payload.request_id
 
-    logger.info("[job %s] Processing: %s", msg_id, payload.request_id)
+    logger.info("[job %s] Processing: %s", msg_id, request_id)
     with tempfile.TemporaryDirectory(prefix=f"job_{msg_id}_") as work_dir:
         
 
-        preprocessor = VideoPreprocessor(payload.request_id, work_dir)
+        preprocessor = VideoPreprocessor(request_id, work_dir)
         artifact = preprocessor.prepare()
 
         analyzer = VideoAnalyzer(artifact)
-        results, errors = _run_analysis(cur, payload.request_id, analyzer)
+        db = Supabase(cur=cur, request_id=request_id)
+        results, errors = _run_analysis(db, analyzer)
 
-        _persist_results(payload.request_id, results, errors)
+        db.persist_results(results, errors)
+
         if errors:
             raise RuntimeError(f"[job {msg_id}] analyzers failed: {list(errors)}")
     
     logger.info("[job %s] Done", msg_id)
-
-
-
 
 
 def _parse_payload(msg_id, payload: dict) -> JobPayload:
@@ -42,8 +44,8 @@ def _parse_payload(msg_id, payload: dict) -> JobPayload:
         raise ValueError(f"invalid job {msg_id} payload: {e}")
 
 
-def _run_analysis(cur, request_id: str, analyzer: VideoAnalyzer) -> tuple[dict, dict]:
-    done = _completed_analyzers(cur, request_id)
+def _run_analysis(db: Supabase, analyzer: VideoAnalyzer) -> tuple[dict[str, TaskResult], dict[str, str]]:
+    done = db.completed_analyzers()
     tasks = {n: fn for n, fn in analyzer.analysis_tasks().items() if n not in done}
 
     results, errors = {}, {}
@@ -71,12 +73,3 @@ def _with_retry(fn, attempts=ANALYSIS_TASK_MAX_ATTEMPTS, base=1.0):
                 name, i + 1, attempts, sleep, e,
             )
             time.sleep(sleep)
-
-def _completed_analyzers(cur, request_id) -> set[str]:
-    #TODO: check the completed analysis tasks from the analysis_results table 
-    # (not sure yet about it)
-    return set() 
-
-
-def _persist_results(request_id: str, results, errors):
-    pass
