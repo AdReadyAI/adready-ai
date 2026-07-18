@@ -17,13 +17,13 @@
  *      [ ] cta_platform_mismatch: Phrasing violates platform swipe/action conventions (e.g. "swipe up" on modern TikTok).
  *
  * INPUT (From EvidenceBundle):
- *   - detected_ctas[]: Primitives list from Media Processing (contains CTA text, source transcript/ocr/visual, and timestamps).
  *   - transcript_segments[]: Spoken narrative/dialogue text.
- *   - ocr_segments[]: On-screen text with contrast_ratio and region_size.
+ *   - ocr_segments[]: On-screen text with frame references, timestamps,
+ *     on_screen_duration_ms, and optional region_size and font_size_px.
  *   - video_metadata: duration_ms (for the positional checks: cta_buried, cta_mistimed).
- *   - destination_platform: "tiktok" | "youtube_shorts" | "instagram_reels" | "facebook".
+ *   - destination_platform: Publishing target string (for example, "tiktok").
  *   - creative_brief: Brief guidelines specifying the required CTA text and campaign objectives.
- *   - campaign_goal: "awareness" | "consideration" | "conversion" | "repurchase".
+ *   - campaign_goal: Main marketing-objective string (for example, "conversion").
  *
  * OUTPUT JSON STRUCTURE:
  *   [

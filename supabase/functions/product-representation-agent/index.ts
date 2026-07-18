@@ -12,9 +12,10 @@
  *      [ ] product_name_unspoken: Brand or product name is never voiced or displayed in overlay text.
  *
  * INPUT (From EvidenceBundle):
- *   - product_moments[]: Time ranges where the product appears in the video.
- *   - scene_segments[]: Visual descriptions per scene (including visual_elements for product visibility checks).
- *   - reference_assets[]: Approved product/packaging images (type: "product_image").
+ *   - product_moments[]: Per-frame product detections with frame_id, location/bounding box,
+ *     confidence_score, and optional prominence, focus_quality, framing, and usage_context.
+ *   - scene_segments[]: Per-scene frame_id, timestamp, visual_description, and optional
+ *     people, color_palette, scenery, camera_movement, and technical_flags context.
  *   - transcript_segments[]: Spoken brand or product name references.
  *
  * OUTPUT JSON STRUCTURE:
@@ -81,4 +82,3 @@
 //   const results: MetricResult[] = [];
 //   return ok(results);
 // });
-

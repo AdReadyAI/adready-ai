@@ -18,8 +18,8 @@
  *
  * INPUT (From EvidenceBundle):
  *   - transcript_segments[]: Spoken narrative/dialogue text.
- *   - ocr_segments[]: Detected on-screen text with confidence, font_size_px, and duration.
- *   - detected_claims[]: Needs to be extracted from transcript_segments and ocr_segments.
+ *   - ocr_segments[]: On-screen text with ocr_id, frame references, timestamps,
+ *     on_screen_duration_ms, and optional region_size and font_size_px.
  *   - creative_brief: Brief guidelines, target audience, approved/forbidden claims list.
  *
  * OUTPUT JSON STRUCTURE:
@@ -131,4 +131,3 @@
 //   const results: MetricResult[] = [];
 //   return ok(results);
 // });
-

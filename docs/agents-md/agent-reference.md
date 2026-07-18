@@ -22,8 +22,8 @@ This playbook acts as the master technical specification for the 7 evaluation ag
 
 ### Expected Inputs
 *   `transcript_segments[]`: Spoken dialogue.
-*   `ocr_segments[]`: On-screen text.
-*   `detected_claims[]`: Needs to be extracted first.
+*   `ocr_segments[]`: On-screen text with `ocr_id`, frame references, timestamps,
+    `on_screen_duration_ms`, and optional `region_size` and `font_size_px`.
 *   `creative_brief`: Approved and forbidden claims guidelines.
 
 ### Severity Rules
@@ -164,16 +164,17 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `pacing_misallocation`: Too much runtime spent on detours vs driving story.
 
 ### Expected Inputs
-*   `video_metadata`: Aspect ratio, resolution, duration.
-*   `scene_segments[]`: Scene timestamps, visual descriptions, and visual_elements.
+*   `video_metadata`: Duration, aspect ratio, resolution, and dropped-frame markers.
+*   `scene_segments[]`: Per-scene `frame_id`, timestamp, visual description, and optional
+    people, color palette, scenery, camera movement, and technical flags.
 *   `transcript_segments[]`: Spoken dialogue.
 *   `destination_platform`: Platform target.
 
 ### Severity Rules
 
 #### Channel / Placement Readiness (`channel_readiness`)
-*   **None (0)**: Video aspect ratio, pacing, framing, text safe zones, and length perfectly match platform constraints.
-*   **Low (1)**: Minor formatting issue (e.g. text slightly too close to overlays, duration 1-2s over limit).
+*   **None (0)**: Video aspect ratio, pacing, framing, and length perfectly match platform constraints.
+*   **Low (1)**: Minor formatting issue (e.g. duration 1-2s over limit).
 *   **Medium (2)**: Video pacing/structure unoptimized (e.g. slow cinematic intro requiring 2s hook).
 *   **High (3)**: Aspect ratio/dimensions completely wrong for placement (e.g. landscape video for Reels).
 *   **Critical (4)**: Video is unwatchable, corrupted, or fails platform ingestion.
@@ -213,12 +214,6 @@ This playbook acts as the master technical specification for the 7 evaluation ag
         "result": "failed",
         "severity": "high",
         "explanation": "Landscape resolution 1920x1080 was submitted for TikTok placement."
-      },
-      {
-        "check_id": "safe_zone_violation",
-        "name": "Safe Zone Check",
-        "result": "passed",
-        "severity": "none"
       }
     ]
   },
@@ -278,7 +273,7 @@ This playbook acts as the master technical specification for the 7 evaluation ag
 ```
 
 ### Pipeline Stages
-1.  **Stage 1: Metadata Check**: Inspect aspect ratio, duration, and safe zones.
+1.  **Stage 1: Metadata Check**: Inspect aspect ratio, resolution, duration, and dropped-frame markers.
 2.  **Stage 2: Hook Assessment (Standard LLM)**: Audit hook impact in opening scenes.
 3.  **Stage 3: Story Coherence**: Evaluate narrative continuity and pacing detours.
 4.  **Stage 4: Synthesis**: Map findings to final outputs.
@@ -301,7 +296,11 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `cta_platform_mismatch`: Phrasing violates platform swipe/action conventions.
 
 ### Expected Inputs
-*   `transcript_segments[]` & `ocr_segments[]`: Text around closing beats.
+*   `transcript_segments[]`: Spoken text around closing beats.
+*   `ocr_segments[]`: On-screen text with frame references, timestamps,
+    `on_screen_duration_ms`, and optional `region_size` and `font_size_px`.
+*   `video_metadata`: Duration for CTA position and dwell-time checks.
+*   `destination_platform`: Platform target.
 *   `creative_brief`: Required call-to-action text rules.
 *   `campaign_goal`: Campaign target (e.g. conversion requires stronger CTA).
 
@@ -410,8 +409,11 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `product_name_unspoken`: Brand or product name never voiced or shown in overlay text.
 
 ### Expected Inputs
-*   `product_moments[]`: Target timestamps where the product appears.
-*   `scene_segments[]`: Scene visual descriptions and visual_elements for product visibility checks.
+*   `product_moments[]`: Per-frame product detections with `frame_id`, location/bounding box,
+    `confidence_score`, and optional prominence, focus quality, framing, and usage context.
+*   `scene_segments[]`: Per-scene `frame_id`, timestamp, visual description, and optional
+    people, color palette, scenery, camera movement, and technical flags.
+*   `transcript_segments[]`: Spoken brand or product-name references.
 
 ### Severity Rules
 
@@ -496,9 +498,11 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `illegible_text`: Captions rendering illegibly.
 
 ### Expected Inputs
-*   `video_metadata`: Aspect ratio, resolution, corruption flags, dropped frame lists.
-*   `ocr_segments[]`: OCR rendering confidence scores.
-*   `scene_segments[]`: Boundary cuts and visual_elements for distortion and framing checks.
+*   `video_metadata`: Duration, aspect ratio, resolution, and dropped-frame markers.
+*   `ocr_segments[]`: Text with frame references, timestamps, `on_screen_duration_ms`, and
+    optional region size and font size for legibility checks.
+*   `scene_segments[]`: Per-scene `frame_id`, timestamp, visual description, optional color
+    palette/lighting, scenery, camera movement, and technical flags.
 
 ### Severity Rules
 
@@ -574,9 +578,9 @@ This playbook acts as the master technical specification for the 7 evaluation ag
 ```
 
 ### Pipeline Stages
-1.  **Stage 1: Metadata Gate**: Check file integrity flags.
-2.  **Stage 2: Filter**: Identify candidate frames at scene cuts or with low OCR confidence.
-3.  **Stage 3: Vision Checks**: Audit frames for visual quality, artifacts, and lighting.
+1.  **Stage 1: Metadata Gate**: Inspect resolution and dropped-frame markers.
+2.  **Stage 2: Filter**: Identify candidates from scene boundaries, text timing, and optional text-size/region data.
+3.  **Stage 3: Vision Checks**: Audit scene descriptions, lighting, camera movement, and technical flags for visual quality and artifacts.
 4.  **Stage 4: Synthesis**: Report overall production quality.
 
 ---
@@ -594,9 +598,10 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `brand_voice_drift`: Subtitle copy or voiceover style drifts from guidelines.
 
 ### Expected Inputs
-*   `scene_segments[]`: Scene visual descriptions and visual_elements for logo, color, and tone checks.
+*   `creative_brief`: Brand voice, positioning, palette, logo, and visual expectations.
+*   `scene_segments[]`: Per-scene `frame_id`, timestamp, visual description, and optional
+    color palette, scenery/mood, people, camera movement, and technical flags.
 *   `transcript_segments[]`: Spoken voice dialogue.
-*   `creative_brief`: Required call-to-action text rules.
 
 
 ### Severity Rules
@@ -683,8 +688,12 @@ This playbook acts as the master technical specification for the 7 evaluation ag
 
 ### Expected Inputs
 *   `creative_brief`: Target demographic, objective specifications, required key messages.
-*   `transcript_segments[]` & `ocr_segments[]`: Spoken and displayed words.
-*   `scene_segments[]`: Visual scene action details and visual_elements.
+*   `campaign_goal`: Main marketing objective.
+*   `transcript_segments[]`: Spoken words.
+*   `ocr_segments[]`: On-screen text with frame references, timestamps,
+    `on_screen_duration_ms`, and optional `region_size` and `font_size_px`.
+*   `scene_segments[]`: Per-scene `frame_id`, timestamp, visual description, and optional
+    people, color palette, scenery, camera movement, and technical flags.
 
 ### Severity Rules
 

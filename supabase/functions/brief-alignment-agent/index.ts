@@ -15,9 +15,12 @@
  *
  * INPUT (From EvidenceBundle):
  *   - creative_brief: Target audience profile, core campaign objectives, required messaging points.
+ *   - campaign_goal: Main marketing-objective string (for example, "awareness").
  *   - transcript_segments[]: Spoken narrative/dialogue text.
- *   - ocr_segments[]: On-screen text.
- *   - scene_segments[]: Visual descriptions of scenes.
+ *   - ocr_segments[]: On-screen text with frame references, timestamps,
+ *     on_screen_duration_ms, and optional region_size and font_size_px.
+ *   - scene_segments[]: Per-scene frame_id, timestamp, visual_description, and optional
+ *     people, color_palette, scenery, camera_movement, and technical_flags context.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -110,4 +113,3 @@
 //   const results: MetricResult[] = [];
 //   return ok(results);
 // });
-

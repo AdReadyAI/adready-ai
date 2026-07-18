@@ -16,10 +16,11 @@
  *      [ ] pacing_misallocation: Too much runtime spent on detours vs driving story.
  *
  * INPUT (From EvidenceBundle):
- *   - video_metadata: aspect_ratio, resolution, duration_ms.
- *   - scene_segments[]: Timestamps and visual_description (1-3 sentences describing the visual action of each scene).
+ *   - video_metadata: duration_ms, aspect_ratio, resolution, and dropped_frame_markers.
+ *   - scene_segments[]: Per-scene frame_id, timestamp, visual_description, and optional people,
+ *     color_palette, scenery, camera_movement, and technical_flags context.
  *   - transcript_segments[]: Spoken narrative/dialogue text.
- *   - destination_platform: "tiktok" | "youtube_shorts" | "instagram_reels" | "facebook".
+ *   - destination_platform: Publishing target string (for example, "tiktok").
  *
  * OUTPUT JSON STRUCTURE:
  *   [

@@ -14,9 +14,11 @@
  *      [ ] illegible_text: Rendered caption fonts are blurry or unreadable.
  *
  * INPUT (From EvidenceBundle):
- *   - video_metadata: corruption_flag, dropped_frame_markers, resolution.
- *   - ocr_segments[]: OCR text segments with confidence scores (used to identify text rendering/illegibility issues).
- *   - scene_segments[]: List of scene transitions with visual descriptions and optional visual_elements.
+ *   - video_metadata: duration_ms, aspect_ratio, resolution, and dropped_frame_markers.
+ *   - ocr_segments[]: OCR text with frame references, timestamps, on_screen_duration_ms,
+ *     and optional region_size and font_size_px for legibility checks.
+ *   - scene_segments[]: Per-scene frame_id, timestamp, visual_description, and optional
+ *     color_palette/lighting, scenery, camera_movement, and technical_flags context.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -90,9 +92,9 @@
  *      - Critical (4): The video file is severely corrupted, technically incomplete, or terminates abruptly.
  *
  * PIPELINE STAGES (No code implemented yet):
- *   Stage 1: Metadata check - Fail immediately if corruption_flag is true.
- *   Stage 2: OCR confidence check - Identify low-confidence OCR text as potential legibility candidates.
- *   Stage 3: Visual check — analyse scene_segments[].visual_elements for AI distortions, framing, and cut quality.
+ *   Stage 1: Metadata check - Inspect resolution and dropped-frame markers.
+ *   Stage 2: OCR check - Use timing and optional text-size/region data as legibility candidates.
+ *   Stage 3: Visual check — analyse scene descriptions, lighting, camera movement, and technical flags for artifacts, framing, and cut quality.
  *   Stage 4: Synthesis & Scoring - Map findings to production_readiness result.
  */
 
@@ -109,4 +111,3 @@
 //   const results: MetricResult[] = [];
 //   return ok(results);
 // });
-

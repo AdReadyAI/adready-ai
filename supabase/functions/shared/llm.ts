@@ -7,10 +7,13 @@
  *
  * Required env vars:
  *   OPENROUTER_API_KEY  — API key from openrouter.ai
- *   OPENROUTER_MODEL    
+ *   OPENROUTER_MODEL
+ * Optional env var:
+ *   OPENROUTER_BASE_URL — defaults to the OpenRouter chat-completions endpoint
  */
 
-const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_BASE_URL = Deno.env.get("OPENROUTER_BASE_URL") ??
+  "https://openrouter.ai/api/v1/chat/completions";
 
 export type ChatMessage = {
   role: "system" | "user" | "assistant";

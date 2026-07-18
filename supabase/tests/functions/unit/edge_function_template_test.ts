@@ -9,6 +9,8 @@ Deno.test({
   ignore: true,
   fn() {
     // Import the pure function and assert its output without starting Supabase or using the network.
-    throw new Error("Replace this template with a real Edge Function unit test")
+    throw new Error(
+      "Replace this template with a real Edge Function unit test",
+    );
   },
-})
+});
