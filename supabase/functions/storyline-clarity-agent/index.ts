@@ -48,12 +48,6 @@
  *           "result": "failed",
  *           "severity": "high",
  *           "explanation": "Landscape resolution 1920x1080 was submitted for TikTok placement."
- *         },
- *         {
- *           "check_id": "safe_zone_violation",
- *           "name": "Safe Zone Check",
- *           "result": "passed",
- *           "severity": "none"
  *         }
  *       ]
  *     },
@@ -125,4 +119,3 @@
 //   const results: MetricResult[] = [];
 //   return ok(results);
 // });
-
