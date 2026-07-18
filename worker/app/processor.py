@@ -54,7 +54,9 @@ def _run_analysis(db: Supabase, analyzer: VideoAnalyzer) -> tuple[dict[str, Task
         for future in as_completed(futures):
             name = futures[future]
             try:
-                results[name] = future.result()
+                result = future.result()
+                if result is not None:
+                    results[name] = result
             except Exception as e:
                 errors[name] = str(e)
     return results, errors

@@ -54,19 +54,32 @@ class TranscriptionResult(TaskResult[TranscriptSegment]):
 #  frame_text  ->  frame_text_items
 # ==============================================
 
+class FrameTextItem(TaskRow):
+    pass
 
+class FrameTextResult(TaskResult[FrameTextItem]):
+    table: ClassVar[str] = "frame_text_items" #Table name should be updated to the actual name
 
 
 # ==============================================
 #  object_detection  ->  object_detection_items
 # ==============================================
 
+class ObjectDetectionItem(TaskRow):
+    pass
 
-
+class ObjectDetectionResult(TaskResult[ObjectDetectionItem]):
+    table: ClassVar[str] = "object_detection_items" #Table name should be updated to the actual name
 
 
 # ==============================================
 #  context  ->  context_results
 # ==============================================
+
+class ContextRow(TaskRow):
+    pass
+
+class ContextResult(TaskResult[ContextRow]):
+    table: ClassVar[str] = "context_results" #Table name should be updated to the actual name
 
 

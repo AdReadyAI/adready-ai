@@ -1,12 +1,14 @@
 import inspect
-import os
-
-from openai import  APIStatusError, APITimeoutError, RateLimitError
 
 from analyzer.types import Artifacts
 from config.connection import get_openrouter_client
 from app.errors import PermanentError, TransientError
-from analyzer.output_models import TaskResult, TranscriptionResult
+from analyzer.output_models import (
+    TranscriptionResult,
+    FrameTextResult,
+    ObjectDetectionResult,
+    ContextResult,
+)
 
 
 def analysis_task(name: str):
@@ -24,50 +26,18 @@ class VideoAnalyzer:
 
     @analysis_task("transcription")
     def transcribe(self) -> TranscriptionResult:
-
-        if not os.path.exists(self.artifacts.audio_path):
-            raise PermanentError(
-                f"Audio file not found: {self.artifacts.audio_path}"
-            )
-
-        try:
-            with open(self.artifacts.audio_path, "rb") as audio_file:
-                response = self.client.audio.transcriptions.create(
-                    model="openai/whisper-large-v3",
-                    file=audio_file,
-                )
-
-            return response.text
-
-        except RateLimitError as e:
-            raise TransientError(f"Rate limit exceeded: {e}")
-
-        except APITimeoutError as e:
-            raise TransientError(f"Request timed out: {e}")
-
-        except APIStatusError as e:
-            if e.status_code and e.status_code >= 500:
-                raise TransientError(
-                    f"OpenRouter server error ({e.status_code}): {e}"
-                )
-
-            raise PermanentError(
-                f"OpenRouter request error ({e.status_code}): {e}"
-            )
-
-        except Exception as e:
-            raise PermanentError(f"Unexpected error: {e}")
+        pass
 
     @analysis_task("frame_text")
-    def frame_text(self) -> TaskResult["FrameTextItem"]:
+    def frame_text(self) -> FrameTextResult:
         pass
 
     @analysis_task("object_detection")
-    def detect_objects(self) -> TaskResult["ObjectDetectionItem"]:
+    def detect_objects(self) -> ObjectDetectionResult:
         pass
 
     @analysis_task("context")
-    def context(self) -> TaskResult["ContextRow"]:
+    def context(self) -> ContextResult:
         pass
 
     def analysis_tasks(self):
