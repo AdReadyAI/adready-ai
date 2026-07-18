@@ -14,6 +14,7 @@ export const RESULTS: VideoResult[] = [
       { label: 'Brief', value: 90 },
       { label: 'Product', value: 94 },
       { label: 'Visual', value: 89 },
+      { label: 'CTA', value: 88 },
     ],
     issues: [],
   },
@@ -30,6 +31,7 @@ export const RESULTS: VideoResult[] = [
       { label: 'Brief', value: 75 },
       { label: 'Product', value: 72 },
       { label: 'Visual', value: 74 },
+      { label: 'CTA', value: 55 },
     ],
     issues: [
       {
@@ -59,6 +61,7 @@ export const RESULTS: VideoResult[] = [
       { label: 'Brief', value: 52 },
       { label: 'Product', value: 58 },
       { label: 'Visual', value: 64 },
+      { label: 'CTA', value: 70 },
     ],
     issues: [
       {
@@ -100,6 +103,7 @@ export const RESULTS: VideoResult[] = [
       { label: 'Brief', value: 28 },
       { label: 'Product', value: 30 },
       { label: 'Visual', value: 42 },
+      { label: 'CTA', value: 15 },
     ],
     issues: [
       {

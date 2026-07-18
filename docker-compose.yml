@@ -1,16 +1,13 @@
 services:
   worker:
     build: ./worker
-    environment:
-      - DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:54322/postgres
-      - QUEUE_NAME=jobs
-      - CHANNEL_NAME=new_job
-      - DEBUG=True
     restart: unless-stopped
+    env_file:
+      - ./worker/.env
     # deploy:
     #   replicas: 2
     healthcheck:
-      test: ["CMD", "python", "-c", "import psycopg2; c=psycopg2.connect('postgresql://postgres:postgres@host.docker.internal:54322/postgres'); c.close()"]
+      test: ["CMD-SHELL", "uv run python -c 'import os,psycopg2; psycopg2.connect(os.environ[\"DATABASE_URL\"]).close()'"]
       interval: 30s
       timeout: 5s
       retries: 3
