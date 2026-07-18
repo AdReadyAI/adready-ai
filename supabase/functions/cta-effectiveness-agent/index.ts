@@ -8,9 +8,11 @@
  *   1. cta_clarity ("Is there a clear and appropriate next step for the viewer?")
  *      [ ] cta_absent: No spoken, visual, or written CTA present in the video.
  *      [ ] cta_buried: CTA is shown only in the first 5 seconds and never repeated at the closing end.
- *      [ ] cta_mistimed: CTA is shown before the product value payoff has resolved.
+ *      [ ] cta_mistimed: CTA doesn't land in the last 20-30% of the runtime, or dwells too briefly to register.
  *      [ ] cta_language_weak: CTA language is too passive, vague, or non-specific.
  *      [ ] cta_goal_mismatch: CTA style mismatch against campaign objective (e.g. conversion requires strong action).
+ *      [ ] cta_no_urgency: No urgency or incentive language where the goal calls for it (conversion only).
+ *      [ ] cta_destination_unclear: The destination (website, store, app) isn't stated clearly.
  *      [ ] cta_low_visibility: CTA contrast ratio is too low or font size is illegible.
  *      [ ] cta_platform_mismatch: Phrasing violates platform swipe/action conventions (e.g. "swipe up" on modern TikTok).
  *
@@ -18,6 +20,8 @@
  *   - detected_ctas[]: Primitives list from Media Processing (contains CTA text, source transcript/ocr/visual, and timestamps).
  *   - transcript_segments[]: Spoken narrative/dialogue text.
  *   - ocr_segments[]: On-screen text with contrast_ratio and region_size.
+ *   - video_metadata: duration_ms (for the positional checks: cta_buried, cta_mistimed).
+ *   - destination_platform: "tiktok" | "youtube_shorts" | "instagram_reels" | "facebook".
  *   - creative_brief: Brief guidelines specifying the required CTA text and campaign objectives.
  *   - campaign_goal: "awareness" | "consideration" | "conversion" | "repurchase".
  *
@@ -79,6 +83,18 @@
  *           "severity": "none"
  *         },
  *         {
+ *           "check_id": "cta_no_urgency",
+ *           "name": "CTA Urgency Check",
+ *           "result": "passed",
+ *           "severity": "none"
+ *         },
+ *         {
+ *           "check_id": "cta_destination_unclear",
+ *           "name": "CTA Destination Check",
+ *           "result": "passed",
+ *           "severity": "none"
+ *         },
+ *         {
  *           "check_id": "cta_low_visibility",
  *           "name": "CTA Visibility Check",
  *           "result": "passed",
@@ -108,4 +124,3 @@
 //   const results: MetricResult[] = [];
 //   return ok(results);
 // });
-
