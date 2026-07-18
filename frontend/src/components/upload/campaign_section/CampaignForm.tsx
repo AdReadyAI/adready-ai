@@ -66,7 +66,7 @@ export default function CampaignForm({ videos, images, requestId }: CampaignForm
     if (mode === "existing") {
       // No `requests` column corresponds to an existing-campaign selection yet —
       // this path stays mock until that concept has a real place to land.
-      navigate("/loading", { state: { videoPaths, selectedCampaign } });
+      navigate("/result", { state: { videoPaths, selectedCampaign } });
       return;
     }
 
@@ -97,7 +97,7 @@ export default function CampaignForm({ videos, images, requestId }: CampaignForm
     // JobPayload still wants a single product_imgs_folder_path, not the
     // array we now have in product_images — that mismatch needs resolving
     // before enqueue_job can be wired up.
-    navigate("/loading", {
+    navigate("/result", {
       state: { requestId: request.request_id, videoPaths, productUrl, campaignGoal, creativeBrief },
     });
   }
