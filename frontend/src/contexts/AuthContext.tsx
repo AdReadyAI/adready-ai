@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
-import { signUp, signIn, signOut, signInWithGoogle } from "../lib/auth";
+import { signUp, signIn, signOut, resetPassword, updatePassword, signInWithGoogle } from "../lib/auth";
 
 type AuthContextValue = {
   user: User | null;
@@ -10,6 +10,8 @@ type AuthContextValue = {
   signUp: (email: string, password: string) => Promise<{ error: unknown; session: Session | null }>;
   signIn: (email: string, password: string) => Promise<{ error: unknown }>;
   signOut: () => Promise<{ error: unknown }>;
+  resetPassword: (email: string) => Promise<{ error: unknown }>;
+  updatePassword: (password: string) => Promise<{ error: unknown }>;
   signInWithGoogle: () => Promise<{ error: unknown }>;
 };
 
@@ -62,6 +64,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!error) {
             setSession(null);
             setUser(null);
+          }
+          return { error };
+        },
+        resetPassword: async (email) => {
+          const { error } = await resetPassword(email);
+          return { error };
+        },
+        updatePassword: async (password) => {
+          const { data, error } = await updatePassword(password);
+          if (data.user) {
+            setUser(data.user);
           }
           return { error };
         },
