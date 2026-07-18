@@ -6,6 +6,7 @@ from openai import  APIStatusError, APITimeoutError, RateLimitError
 from analyzer.types import Artifacts
 from config.connection import get_openrouter_client
 from app.errors import PermanentError, TransientError
+from analyzer.output_models import TaskResult, TranscriptionResult
 
 
 def analysis_task(name: str):
@@ -22,7 +23,7 @@ class VideoAnalyzer:
         self.client = get_openrouter_client()
 
     @analysis_task("transcription")
-    def transcribe(self):
+    def transcribe(self) -> TranscriptionResult:
 
         if not os.path.exists(self.artifacts.audio_path):
             raise PermanentError(
@@ -58,15 +59,15 @@ class VideoAnalyzer:
             raise PermanentError(f"Unexpected error: {e}")
 
     @analysis_task("frame_text")
-    def frame_text(self):
+    def frame_text(self) -> TaskResult["FrameTextItem"]:
         pass
 
     @analysis_task("object_detection")
-    def detect_objects(self):
+    def detect_objects(self) -> TaskResult["ObjectDetectionItem"]:
         pass
 
     @analysis_task("context")
-    def context(self):
+    def context(self) -> TaskResult["ContextRow"]:
         pass
 
     def analysis_tasks(self):
