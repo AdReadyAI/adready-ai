@@ -11,6 +11,8 @@ pytestmark = pytest.mark.unit
 
 os.environ["DATABASE_URL"] = "mock_db"
 os.environ["OPENROUTER_API_KEY"] = "mock_key"
+os.environ.setdefault("SUPABASE_URL", "http://localhost:54321")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
