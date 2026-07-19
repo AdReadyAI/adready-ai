@@ -42,9 +42,16 @@ worker/
 │   ├── settings.py          # env vars + logger
 │   └── connection.py        # psycopg2 connection factory (autocommit)
 ├── analyzer/                # video analysis domain
-│   ├── types.py             # Artifacts, Frame (immutable dataclasses)
+│   ├── types.py             # Artifacts, Frame, VideoMetadata (+ probe_results)
 │   ├── video_preprocessor.py# VideoPreprocessor: video → Artifacts
-│   └── video_analyzer.py    # VideoAnalyzer: the 4 analysis tasks
+│   ├── video_analyzer.py    # VideoAnalyzer: the 4 analysis tasks
+│   └── frame_sampling/      # single-pass decode + probe pipeline
+│       ├── sampler.py       # FrameSampler: decode loop, drives probes, isolation
+│       ├── context.py       # FrameContext: shared per-frame features
+│       ├── base.py          # Probe · ProbeResult · ProbeSetup · Stage · registry
+│       ├── store.py         # FrameStore: write-at-selection → tagged manifest
+│       ├── deferred.py      # DeferredModelProbe: gate → batch → emit
+│       └── probes/          # scene · adaptive · quality · text · product
 ├── models/                  # model benchmarks (excluded from Docker image)
 ├── Dockerfile
 └── pyproject.toml
@@ -183,7 +190,111 @@ is just adding a decorated method.
 
 ---
 
-## 7. Two-layer retry model
+## 7. Frame sampling: the single-pass probe pipeline (`analyzer/frame_sampling/`)
+
+`VideoPreprocessor.prepare()` delegates frame selection to a **single decode pass**
+that does all the cheap CPU work up front and produces a **tagged frame manifest**
+plus **per-probe facts**. The expensive models then fan out over that output
+(section 6). Two principles drive it:
+
+1. **Decode once.** Every cheap signal — scene/change detection, Layer-A quality
+   metrics, and the text/product gates — is computed in one pass over the frames.
+   Re-decoding per analyzer is the trap this avoids.
+2. **Cheap in preprocessing, expensive in analysis.** The pass only *selects and
+   tags* frames (and runs small CPU gate models); the heavy models (OWLv2, OCR,
+   VLM) run later in `VideoAnalyzer`, each consuming its tagged subset.
+
+### Pipeline flow
+
+```mermaid
+flowchart TD
+    DL["download + ffprobe metadata"] --> AU["extract audio (Whisper)"]
+    DL --> SP["FrameSampler.run(): single decode pass"]
+    SP --> MAN["FrameStore.manifest() → frames[tags]"]
+    SP --> PRB["probe_results{scene, adaptive, quality, text, product}"]
+    MAN --> ART["Artifacts (immutable)"]
+    PRB --> ART
+    ART --> FO["VideoAnalyzer — ThreadPoolExecutor fan-out (section 6)"]
+    FO --> T1["transcription (audio)"]
+    FO --> T2["frame_text / OCR (text-tagged frames)"]
+    FO --> T3["object_detection / OWLv2 (product-candidate frames)"]
+    FO --> T4["context / storyline (keyframe frames) + quality evidence"]
+```
+
+### Decode pass shape
+
+A sequential loop with pluggable **probes** — each a small stateful unit that
+watches the frame stream and emits its own results.
+
+```mermaid
+flowchart TD
+    D["cv2.VideoCapture — every frame · timestamp = index / fps"] --> L["for each frame"]
+    L --> FC["FrameContext (shared features once):<br/>frame · gray · small(384) · edges · content_val · shot_boundary"]
+    FC --> P1["1 SceneProbe → sets content_val + shot_boundary; collects shots"]
+    P1 --> P2["2 AdaptiveSampler → change budget → ctx.keep('keyframe')"]
+    FC --> P3["3 QualityProbe → Layer-A metrics → ctx.keep('quality') if flagged"]
+    FC --> P4["4 TextProbe (deferred): edge-density gate → collect candidate"]
+    FC --> P5["5 ProductProbe (deferred): pHash gate → collect candidate"]
+    L -->|loop ends| FIN["finalize(): deferred probes batch EAST / MobileCLIP →<br/>emit confirmed keeps; every probe returns a ProbeResult"]
+    FIN --> OUT["FrameStore.manifest() + probe_results"]
+```
+
+### Building blocks
+
+- **`FrameContext` — shared features once** (`context.py`): `index`, `timestamp`,
+  full-res `frame`, `gray`, downscaled `small` (long side 384), `edges` (Canny),
+  plus `content_val` (`[0, 1]`) and `shot_boundary`. Computed once per frame so no
+  probe recomputes; `ctx.keep(tags)` persists the current frame.
+- **`Probe` interface** (`base.py`): `name`, `configure(setup: ProbeSetup)`,
+  `process(ctx) -> None`, `finalize() -> ProbeResult`. Adding a signal = adding a
+  `@register_probe(Stage.X)` subclass; the loop never changes.
+- **Ordering is load-bearing** (`Stage` IntEnum): `SCENE < SAMPLE < QUALITY <
+  TEXT < PRODUCT`. `SceneProbe` writes `content_val` + `shot_boundary`;
+  `AdaptiveSampler` reads them on the **same** frame.
+- **Write-at-selection** (`store.py`): a probe calls `ctx.keep(tags)` (or a
+  deferred probe `self._keep(candidate, tags)`); `FrameStore` writes each frame to
+  disk **once per index** and unions tags. No pixels are retained; dedup is by
+  index (no separate post-pass).
+- **Cost cascade** (`deferred.py`, `DeferredModelProbe`): model probes run only a
+  **cheap gate** per frame (edge-density for text, pHash novelty for product),
+  collect `Candidate`s, and run the model **once, batched, in `finalize()`**, then
+  emit confirmed keeps + timing segments. No model runs in the loop.
+- **Extras via `ProbeResult`**: each probe returns a `ProbeResult` subclass with
+  its facts (shots, quality flags/summary, text/product time segments). The
+  sampler collects `{probe.name: finalize()}` into `probe_results`.
+- **Failure isolation** (`sampler.py`): a probe that raises is disabled for the
+  rest of the run and recorded in `probe_errors`; the manifest and the other
+  probes still complete.
+
+### Manifest & Artifacts shape
+
+`Frame` carries only routing info; the facts live in `probe_results`:
+
+```python
+Frame(timestamp, path, tags)   # tags e.g. ("keyframe", "text", "product-candidate", "quality")
+
+Artifacts(
+    frames: tuple[Frame, ...],                 # tagged manifest — one JPEG per kept index
+    probe_results: Mapping[str, ProbeResult],  # scene→shots · quality→flags/summary ·
+                                               # text→segments · product→presence · adaptive→stats
+    video_metadata, video_path, audio_path, work_dir, ...
+)
+```
+
+Analyzers filter by tag — `[f for f in artifacts.frames if "text" in f.tags]` — and
+read non-frame facts from `artifacts.probe_results[...]`.
+
+### The boundary decision
+
+The small **gate models** (EAST, MobileCLIP) live in the decode pass because
+they're *selection*, cheap, and CPU-only — they batch at `finalize()`, still
+inside preprocessing. The heavy **confirmers** (OWLv2, OCR, VLM) live in
+`VideoAnalyzer`. Preprocessing decides *which frames matter*; the analyzers decide
+*what they mean*.
+
+---
+
+## 8. Two-layer retry model
 
 Two independent retry layers guard against different failures — **both are kept**.
 
@@ -214,7 +325,7 @@ flowchart TD
 
 ---
 
-## 8. Temp files & cleanup
+## 9. Temp files & cleanup
 
 - Each job runs inside a unique `tempfile.TemporaryDirectory(prefix="job_<id>_")`.
 - All derived files (video, audio, frames) live under that `work_dir`.
@@ -226,7 +337,7 @@ flowchart TD
 
 ---
 
-## 9. Concurrency across jobs & scaling
+## 10. Concurrency across jobs & scaling
 
 Two axes, used together in production:
 
@@ -251,7 +362,7 @@ through the Supabase transaction pooler under load.
 
 ---
 
-## 10. Configuration (`config/settings.py`)
+## 11. Configuration (`config/settings.py`)
 
 | Setting | Default | Purpose |
 |---------|---------|---------|
@@ -268,7 +379,7 @@ through the Supabase transaction pooler under load.
 
 ---
 
-## 11. Job payload contract (`app/schemas.py`)
+## 12. Job payload contract (`app/schemas.py`)
 
 ```jsonc
 {
@@ -285,7 +396,7 @@ archived after `MAX_RETRIES` (poison-message handling).
 
 ---
 
-## 12. Run locally
+## 13. Run locally
 
 ```bash
 # from worker/
