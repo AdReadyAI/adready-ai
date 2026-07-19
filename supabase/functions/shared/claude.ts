@@ -1,14 +1,15 @@
 /**
- * claude.ts — Shared Anthropic client setup for all edge functions.
+ * claude.ts — Shared OpenRouter (OpenAI-compatible) client setup for all edge functions.
  */
 
-import Anthropic from "npm:@anthropic-ai/sdk";
+import OpenAI from "npm:openai";
 
-export const anthropic = new Anthropic({
-  apiKey: Deno.env.get("ANTHROPIC_API_KEY")!,
+export const openrouter = new OpenAI({
+  apiKey: Deno.env.get("OPENROUTER_API_KEY")!,
+  baseURL: "https://openrouter.ai/api/v1",
 });
 
-// Model constants
-export const HAIKU = "claude-3-haiku-20240307";
-export const SONNET = "claude-3-5-sonnet-latest";
-export const OPUS = "claude-3-opus-20240229";
+// Model constants (OpenRouter model IDs)
+export const HAIKU = "anthropic/claude-haiku-4.5";
+export const SONNET = "anthropic/claude-sonnet-4.5";
+export const OPUS = "anthropic/claude-opus-4.5";
