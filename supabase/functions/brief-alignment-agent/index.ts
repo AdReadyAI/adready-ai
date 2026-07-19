@@ -98,7 +98,7 @@
  */
 
 import { verifyAuth } from "../shared/auth.ts";
-import { openrouter } from "../shared/claude.ts";
+import { getOpenRouterClient } from "../shared/claude.ts";
 import type { EvidenceBundle } from "../shared/schemas.ts";
 import {
   InvalidEvidenceBundleError,
@@ -115,7 +115,7 @@ function jsonResponse(body: unknown, status: number): Response {
 
 export async function handleRequest(
   req: Request,
-  deps: { client: ChatClient } = { client: openrouter as unknown as ChatClient },
+  deps: { client: ChatClient } = { client: getOpenRouterClient() as unknown as ChatClient },
 ): Promise<Response> {
   const authError = await verifyAuth(req);
   if (authError) return authError;
