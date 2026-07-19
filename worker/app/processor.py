@@ -20,9 +20,7 @@ def process_message(cur, msg_id, payload):
 
     logger.info("[job %s] Processing: %s", msg_id, request_id)
     with tempfile.TemporaryDirectory(prefix=f"job_{msg_id}_") as work_dir:
-        
-
-        preprocessor = VideoPreprocessor(request_id, work_dir)
+        preprocessor = VideoPreprocessor(payload, work_dir)
         artifact = preprocessor.prepare()
 
         analyzer = VideoAnalyzer(artifact)
