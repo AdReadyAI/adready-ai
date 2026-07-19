@@ -13,7 +13,6 @@ import type {
 } from "../shared/schemas.ts";
 import { SONNET } from "../shared/claude.ts";
 import {
-  ALL_SUB_CHECK_IDS,
   buildToolSchema,
   CONFIDENCE_LEVELS,
   CORRECTION_TYPES,
