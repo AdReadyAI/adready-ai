@@ -6,6 +6,8 @@ from urllib.parse import quote
 import requests
 
 from analyzer.types import Artifacts, Frame, VideoMetadata
+from analyzer.frame_sampling import FrameSampler
+from analyzer.frame_sampling.base import ProbeResult
 from app.errors import PermanentError, TransientError
 from app.schemas import JobPayload
 from config.connection import get_storage_session
@@ -23,19 +25,26 @@ class VideoPreprocessor:
     def __init__(self, job_payload: JobPayload, work_dir):
         self.job_payload = job_payload
         self.work_dir = work_dir
+        self._probe_results: dict[str, ProbeResult] = {}
 
     # ---- public entry point ----
     def prepare(self) -> Artifacts:
         """Orchestrate the whole prep and return the artifacts bundle."""
         video_path = self._download_video()
-        metadata = self._probe_metadata()
-        audio_path = self._extract_audio()
+        metadata = self._probe_metadata(video_path)
+        audio_path = self._extract_audio(video_path)
+        frames = self._sample_frames(video_path, metadata)
 
-
-
-
-    def _resolve_source(self):
-        """request_id → (bucket, path). Look up in DB if payload lacks location."""
+        return Artifacts(
+            job_id=self.job_payload.request_id,
+            storage_ref=f"{self.job_payload.bucket}/{self.job_payload.video_path}",
+            video_path=video_path,
+            audio_path=audio_path,
+            frames=tuple(frames),
+            video_metadata=metadata,
+            work_dir=self.work_dir,
+            probe_results=self._probe_results,
+        )
 
     def _download_video(self) -> str:
         """Fetch video from Supabase Storage into work_dir; return local path."""
@@ -171,8 +180,22 @@ class VideoPreprocessor:
 
         return audio_path
 
-    def _sample_frames(self, video_path) -> list[Frame]:
-        """Decode, sample (1fps / keyframes), write JPEGs; return frames+timestamps."""
+    def _sample_frames(self, video_path, metadata: VideoMetadata) -> list[Frame]:
+        """Decode once and select tagged frames via the probe pipeline.
+
+        Also captures the per-probe results (keyed by probe name) so downstream
+        code can read non-frame facts via Artifacts.probe_results.
+        """
+        sampler = FrameSampler(
+            video_path,
+            metadata,
+            self.work_dir,
+            product_imgs_folder_path=self.job_payload.product_imgs_folder_path,
+            logo_imgs_folder_path=self.job_payload.logo_imgs_folder_path,
+        )
+        frames = sampler.run()
+        self._probe_results = sampler.probe_results
+        return frames
 
     # Might be needed to pass the video link to gemini so their service is able to access a public video and analyse it 
     # def _signed_url(self) -> str | None:
