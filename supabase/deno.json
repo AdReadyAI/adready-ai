@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "test:unit": "deno test --allow-env tests/functions/unit",
+    "test:unit": "deno test tests/functions/unit",
     "test:integration": "deno test --allow-env --allow-net tests/functions/integration"
   },
   "fmt": {
