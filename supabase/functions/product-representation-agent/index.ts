@@ -68,10 +68,59 @@
  *   ]
  */
 
-// import { verifyAuth } from "../shared/auth.ts";
-// import { anthropic, SONNET } from "../shared/claude.ts";
-// import type { EvidenceBundle, MetricResult } from "../shared/schemas.ts";
+import { verifyAuth } from "../shared/auth.ts";
+import { getOpenRouterClient } from "../shared/claude.ts";
+import type { EvidenceBundle } from "../shared/schemas.ts";
+import {
+  InvalidEvidenceBundleError,
+  validateEvidenceBundle,
+} from "./evidence.ts";
+import { type ChatClient, runProductRepresentationAgent } from "./agent.ts";
 
-// Deno.serve(async (req: Request): Promise<Response> => {
-//   return new Response("not implemented", { status: 501 });
-// });
+function jsonResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export async function handleRequest(
+  req: Request,
+  deps: { client: ChatClient } = { client: getOpenRouterClient() as unknown as ChatClient },
+): Promise<Response> {
+  const authError = await verifyAuth(req);
+  if (authError) return authError;
+
+  if (req.method !== "POST") {
+    return jsonResponse({ error: "method not allowed" }, 405);
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return jsonResponse({ error: "invalid JSON body" }, 400);
+  }
+
+  let bundle: EvidenceBundle;
+  try {
+    bundle = validateEvidenceBundle(body);
+  } catch (err) {
+    if (err instanceof InvalidEvidenceBundleError) {
+      return jsonResponse({ error: err.message }, 400);
+    }
+    throw err;
+  }
+
+  try {
+    const results = await runProductRepresentationAgent(bundle, deps.client);
+    return jsonResponse(results, 200);
+  } catch (err) {
+    console.error("product-representation-agent failed", err);
+    return jsonResponse({ error: "internal error" }, 500);
+  }
+}
+
+if (import.meta.main) {
+  Deno.serve((req) => handleRequest(req));
+}
