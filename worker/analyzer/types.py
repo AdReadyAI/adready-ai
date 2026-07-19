@@ -5,6 +5,14 @@ class Frame:
     timestamp: float
     path: str
 
+@dataclass
+class VideoMetadata:
+    duration_s: float
+    fps: float
+    width: int
+    height: int
+    size_bytes: int
+
 @dataclass(frozen=True)
 class Artifacts:
     job_id: str
@@ -17,9 +25,6 @@ class Artifacts:
     audio_path: str
     frames: tuple[Frame, ...]
 
-    duration_s: float
-    fps: float
-    width: int
-    height: int
-    size_bytes: int
+    video_metadata: VideoMetadata
     work_dir: str   
+
