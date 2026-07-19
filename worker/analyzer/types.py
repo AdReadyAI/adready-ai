@@ -1,9 +1,13 @@
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+
+from analyzer.frame_sampling.base import ProbeResult
 
 @dataclass(frozen=True)
 class Frame:
     timestamp: float
     path: str
+    tags: tuple[str, ...] = ()
 
 @dataclass
 class VideoMetadata:
@@ -26,5 +30,6 @@ class Artifacts:
     frames: tuple[Frame, ...]
 
     video_metadata: VideoMetadata
-    work_dir: str   
+    work_dir: str
+    probe_results: Mapping[str, ProbeResult] = field(default_factory=dict)   
 
