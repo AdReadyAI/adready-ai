@@ -12,7 +12,10 @@ if TYPE_CHECKING:
 
 
 class Stage(IntEnum):
-    """Probe run order"""
+    """Probe run order (lower runs earlier).
+
+    Ordering is load-bearing: SCENE writes content_val, SAMPLE reads it.
+    """
 
     SCENE = 1
     SAMPLE = 2
@@ -22,7 +25,10 @@ class Stage(IntEnum):
 
 @dataclass
 class FrameSelection:
-    """A lightweight record of a frame a probe wants kept — no pixels."""
+    """A lightweight record of a frame a probe wants kept — no pixels.
+
+    Pixels live only in the current FrameContext and, once kept, on disk.
+    """
 
     index: int
     timestamp: float
@@ -31,12 +37,21 @@ class FrameSelection:
 
 @dataclass
 class ProbeResult:
-    """Base result every probe returns from finalize()."""
+    """Base result every probe returns from finalize().
+
+    A carrier for probe-specific extras (cuts, segments, metrics); subclass to
+    attach facts. Frame selection is handled at selection time via the store,
+    not through this result.
+    """
 
 
 @dataclass(frozen=True)
 class ProbeSetup:
-    """Construction-time inputs handed to every probe via configure()."""
+    """Construction-time inputs handed to every probe via configure().
+
+    Holds job inputs and metadata as primitives (no `app` import) so the
+    `analyzer` package never depends on `app`.
+    """
 
     video_metadata: VideoMetadata
     work_dir: str
@@ -45,7 +60,11 @@ class ProbeSetup:
 
 
 class Probe(ABC):
-    """Uniform, pluggable unit that watches the frame stream."""
+    """Uniform, pluggable unit that watches the frame stream.
+
+    Adding a new signal = adding a Probe subclass and dropping it into the
+    sampler's probe list. The loop never changes.
+    """
 
     name: ClassVar[str] = ""
 
