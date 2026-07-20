@@ -17,7 +17,7 @@
  *
  * DB CONTEXT:
  *   - Loads video metadata, transcript/OCR, visual frames, and platform context
- *     by review_id + variant_id.
+ *     by request_id.
  *   - Uses frame-level visual context.
  *
  * OUTPUT JSON STRUCTURE:
@@ -112,7 +112,7 @@
 
 // createEdgeHandler("storyline-clarity-agent", AgentRunRequestSchema, async (req, ctx) => {
 //   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by review_id + variant_id.
+//   // TODO: Load DB-backed agent context by request_id.
 
 //   // TODO: Evaluate platform readiness and story flow from DB-loaded context.
 

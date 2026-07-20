@@ -18,7 +18,7 @@
  *
  * DB CONTEXT:
  *   - Loads transcript, OCR, video metadata, parsed brief, campaign goal, and
- *     platform context by review_id + variant_id.
+ *     platform context by request_id.
  *   - Derives CTA candidates from transcript/OCR text; detected CTAs are not
  *     supplied by the media pipeline.
  *
@@ -115,7 +115,7 @@
 
 // createEdgeHandler("cta-effectiveness-agent", AgentRunRequestSchema, async (req, ctx) => {
 //   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by review_id + variant_id.
+//   // TODO: Load DB-backed agent context by request_id.
 
 //   // TODO: Extract CTAs from transcript/OCR and evaluate timing, clarity, and platform fit.
 

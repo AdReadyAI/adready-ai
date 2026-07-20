@@ -11,22 +11,21 @@ DB-loaded agent context should expose to the agent layer.
 
 The agent invocation should stay small:
 
-* **`review_id`**: String UUID - review process identifier.
-* **`variant_id`**: String UUID - creative variant identifier.
+* **`request_id`**: String UUID - request identifier from
+  `public.requests.request_id`.
 * **`agent`**: String - optional agent identifier when the orchestrator uses a
   shared invocation helper.
 
 The request is not the source of transcript, OCR, visual, product, or brief data.
-Those records are loaded from the DB by `review_id` and `variant_id`.
+Those records are loaded from the DB by `request_id`.
 
 ---
 
 ## DB-Loaded Agent Context
 
-### Review And Variant Context
+### Request Context
 
-* **`review_id`**: String UUID.
-* **`variant_id`**: String UUID.
+* **`request_id`**: String UUID.
 * **`campaign_goal`**: String - main marketing objective, such as
   `"awareness"`, `"consideration"`, or `"conversion"`.
 * **`destination_platform`**: String - publishing target, such as `"tiktok"`,

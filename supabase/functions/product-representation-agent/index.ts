@@ -13,7 +13,7 @@
  *
  * DB CONTEXT:
  *   - Loads product frames, logo frames, transcript/OCR, visual frames, and
- *     product context by review_id + variant_id.
+ *     product context by request_id.
  *   - Uses product_frames, logo_frames, and frame-level visual context.
  *
  * OUTPUT JSON STRUCTURE:
@@ -74,7 +74,7 @@
 
 // createEdgeHandler("product-representation-agent", AgentRunRequestSchema, async (req, ctx) => {
 //   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by review_id + variant_id.
+//   // TODO: Load DB-backed agent context by request_id.
 
 //   // TODO: Evaluate product and logo clarity from DB-loaded frame context.
 

@@ -17,7 +17,7 @@
  *      [ ] policy_violation_depicted: Depicts illegal substances, safety hazards, copyright infringement.
  *
  * DB CONTEXT:
- *   - Loads transcript and OCR rows by review_id + variant_id.
+ *   - Loads transcript and OCR rows by request_id.
  *   - Derives claim candidates from transcript/OCR text; detected claims are not
  *     supplied by the media pipeline.
  *   - Compares derived claims against parsed brief and product context.
@@ -125,7 +125,7 @@
 
 // createEdgeHandler("claims-agent", AgentRunRequestSchema, async (req, ctx) => {
 //   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by review_id + variant_id.
+//   // TODO: Load DB-backed agent context by request_id.
 
 //   // TODO: Extract claims from transcript/OCR and evaluate against product context.
 

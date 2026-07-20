@@ -25,8 +25,7 @@ export type AgentName = z.infer<typeof AgentNameSchema>;
  * context to load. Evidence records are not passed directly in the request.
  */
 export const AgentRunRequestSchema = z.object({
-  review_id: z.string().uuid(),
-  variant_id: z.string().uuid(),
+  request_id: z.string().uuid(),
   agent: AgentNameSchema.optional(),
 });
 export type AgentRunRequest = z.infer<typeof AgentRunRequestSchema>;
@@ -146,11 +145,10 @@ export const ProductContextSchema = z.object({
 export type ProductContext = z.infer<typeof ProductContextSchema>;
 
 /**
- * Context shape loaded by agents from DB rows using review_id + variant_id.
+ * Context shape loaded by agents from DB rows using request_id.
  */
 export const AgentContextSchema = z.object({
-  variant_id: z.string().uuid(),
-  review_id: z.string().uuid(),
+  request_id: z.string().uuid(),
   campaign_goal: z.string().min(1),
   destination_platform: z.string().min(1),
   parsed_creative_brief: ParsedCreativeBriefSchema,

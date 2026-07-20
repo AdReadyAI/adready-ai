@@ -14,7 +14,7 @@
  *      [ ] illegible_text: Rendered caption fonts are blurry or unreadable.
  *
  * DB CONTEXT:
- *   - Loads video metadata, OCR, and visual frames by review_id + variant_id.
+ *   - Loads video metadata, OCR, and visual frames by request_id.
  *   - Uses frame-level visual descriptions and technical flags.
  *
  * OUTPUT JSON STRUCTURE:
@@ -102,7 +102,7 @@
 
 // createEdgeHandler("visual-quality-agent", AgentRunRequestSchema, async (req, ctx) => {
 //   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by review_id + variant_id.
+//   // TODO: Load DB-backed agent context by request_id.
 
 //   // TODO: Evaluate production readiness from DB-loaded metadata/OCR/frame context.
 

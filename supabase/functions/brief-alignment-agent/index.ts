@@ -15,7 +15,7 @@
  *
  * DB CONTEXT:
  *   - Loads parsed creative brief, campaign goal, transcript/OCR, visual frames,
- *     product frames, and platform context by review_id + variant_id.
+ *     product frames, and platform context by request_id.
  *   - Uses parsed brief fields rather than treating the raw brief as the only
  *     source of truth.
  *
@@ -104,7 +104,7 @@
 
 // createEdgeHandler("brief-alignment-agent", AgentRunRequestSchema, async (req, ctx) => {
 //   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by review_id + variant_id.
+//   // TODO: Load DB-backed agent context by request_id.
 
 //   // TODO: Evaluate audience fit and brief adherence from DB-loaded context.
 

@@ -13,7 +13,7 @@
  *
  * DB CONTEXT:
  *   - Loads parsed creative brief, transcript/OCR, visual frames, logo frames, and
- *     product context by review_id + variant_id.
+ *     product context by request_id.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -73,7 +73,7 @@
 
 // createEdgeHandler("brand-alignment-agent", AgentRunRequestSchema, async (req, ctx) => {
 //   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by review_id + variant_id.
+//   // TODO: Load DB-backed agent context by request_id.
 
 //   // TODO: Evaluate brand fit from DB-loaded context.
 
