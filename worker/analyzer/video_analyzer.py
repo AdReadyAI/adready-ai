@@ -1,6 +1,7 @@
 import inspect
 import os
 import assemblyai as aai
+import httpx
 
 import httpx
 
