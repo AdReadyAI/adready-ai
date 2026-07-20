@@ -11,10 +11,8 @@ from config.connection import get_aai_transcriber
 from app.errors import PermanentError, TransientError
 
 from analyzer.output_models import (
-
     TranscriptSegment,
     TranscriptionResult,
-    FrameTextResult,
     ObjectDetectionResult,
     ContextResult,
 )
@@ -87,9 +85,7 @@ class VideoAnalyzer:
 
 
 
-    @analysis_task("frame_text")
-    def frame_text(self) -> FrameTextResult:
-        pass
+
 
     @analysis_task("object_detection")
     def detect_objects(self) -> ObjectDetectionResult:

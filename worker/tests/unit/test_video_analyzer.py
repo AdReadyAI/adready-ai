@@ -12,7 +12,7 @@ import assemblyai as aai
 
 from analyzer.video_analyzer import VideoAnalyzer
 from analyzer.types import Artifacts
-from analyzer.output_models import TranscriptSegment
+# from analyzer.output_models import TranscriptSegment
 from app.errors import PermanentError, TransientError
 
 
