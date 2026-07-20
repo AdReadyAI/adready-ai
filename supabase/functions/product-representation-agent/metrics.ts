@@ -87,7 +87,13 @@ export function buildToolSchema() {
         "— that sub-check is computed separately from timing data.",
       parameters: {
         type: "object",
-        required: ["result", "severity", "confidence", "evidence", "sub_checks"],
+        required: [
+          "result",
+          "severity",
+          "confidence",
+          "evidence",
+          "sub_checks",
+        ],
         properties: {
           result: { type: "string", enum: RESULT_VALUES },
           severity: { type: "string", enum: SEVERITY_LEVELS },

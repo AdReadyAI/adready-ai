@@ -115,7 +115,9 @@ function jsonResponse(body: unknown, status: number): Response {
 
 export async function handleRequest(
   req: Request,
-  deps: { client: ChatClient } = { client: getOpenRouterClient() as unknown as ChatClient },
+  deps: { client: ChatClient } = {
+    client: getOpenRouterClient() as unknown as ChatClient,
+  },
 ): Promise<Response> {
   const authError = await verifyAuth(req);
   if (authError) return authError;
