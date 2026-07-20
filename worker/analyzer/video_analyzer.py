@@ -3,9 +3,6 @@ import os
 import assemblyai as aai
 import httpx
 
-import httpx
-
-
 from analyzer.types import Artifacts
 from config.connection import get_aai_transcriber
 from app.errors import PermanentError, TransientError
@@ -15,6 +12,7 @@ from analyzer.output_models import (
     TranscriptionResult,
     ObjectDetectionResult,
     ContextResult,
+    OcrResult
 )
 
 
@@ -81,19 +79,25 @@ class VideoAnalyzer:
 
         except Exception as e:
             raise PermanentError(f"Unexpected error in transcribe: {e}")
+
+   
         
 
-
-
+    @analysis_task("ocr")
+    def ocr(self) -> OcrResult:
+            pass
 
 
     @analysis_task("object_detection")
     def detect_objects(self) -> ObjectDetectionResult:
         pass
 
+
     @analysis_task("context")
     def context(self) -> ContextResult:
         pass
+
+  
 
     def analysis_tasks(self):
         return {
