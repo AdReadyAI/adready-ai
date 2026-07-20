@@ -17,13 +17,13 @@ import {
   CONFIDENCE_LEVELS,
   CORRECTION_TYPES,
   EVIDENCE_TYPES,
-  type MetricConfig,
   METRIC_CONFIGS,
+  type MetricConfig,
   RESULT_VALUES,
   SEVERITY_LEVELS,
-  type SubCheckId,
   SUB_CHECK_NAMES,
   SUB_CHECK_RESULT_VALUES,
+  type SubCheckId,
   TOOL_NAME,
 } from "./metrics.ts";
 import { buildUserContent } from "./evidence.ts";
@@ -120,20 +120,37 @@ function sanitizeSubChecks(
   return out;
 }
 
+/**
+ * Reconcile an internally contradictory result/severity pair from the model.
+ * A metric only "passes" (`true`) when nothing is wrong: severity `none` and no
+ * failed sub-check. Any real problem (a failed sub-check or severity above
+ * `none`) forces `false`. This repairs cases like `result: "false"` reported
+ * with `severity: "none"` and all sub-checks passing. `cannot_assess` on either
+ * field is always left untouched.
+ */
+function reconcileResult(
+  result: MetricResult["result"],
+  severity: SeverityLevel,
+  subChecks: SubCheckResult[],
+): MetricResult["result"] {
+  if (result === "cannot_assess" || severity === "cannot_assess") return result;
+  const problem = severity !== "none" ||
+    subChecks.some((s) => s.result === "failed");
+  return problem ? "false" : "true";
+}
+
 function buildMetricResult(
   config: MetricConfig,
   raw: RawFinding | undefined,
 ): MetricResult {
-  const result =
-    typeof raw?.result === "string" &&
+  const result = typeof raw?.result === "string" &&
       (RESULT_VALUES as readonly string[]).includes(raw.result)
-      ? (raw.result as MetricResult["result"])
-      : "cannot_assess";
-  const severity =
-    typeof raw?.severity === "string" &&
+    ? (raw.result as MetricResult["result"])
+    : "cannot_assess";
+  const severity = typeof raw?.severity === "string" &&
       (SEVERITY_LEVELS as readonly string[]).includes(raw.severity)
-      ? (raw.severity as SeverityLevel)
-      : "cannot_assess";
+    ? (raw.severity as SeverityLevel)
+    : "cannot_assess";
   let confidence: ConfidenceLevel | undefined =
     typeof raw?.confidence === "string" &&
       (CONFIDENCE_LEVELS as readonly string[]).includes(raw.confidence)
@@ -146,19 +163,19 @@ function buildMetricResult(
   }
 
   const subChecks = sanitizeSubChecks(raw?.sub_checks, config.sub_check_ids);
+  const reconciledResult = reconcileResult(result, severity, subChecks);
 
-  const correctionType =
-    typeof raw?.correction_type === "string" &&
+  const correctionType = typeof raw?.correction_type === "string" &&
       (CORRECTION_TYPES as readonly string[]).includes(raw.correction_type)
-      ? (raw.correction_type as MetricResult["correction_type"])
-      : "none";
+    ? (raw.correction_type as MetricResult["correction_type"])
+    : "none";
 
   return {
     metric_id: config.metric_id,
     agent: "brief_alignment",
     metric_name: config.metric_name,
     question: config.question,
-    result,
+    result: reconciledResult,
     severity,
     confidence,
     evidence,
@@ -176,9 +193,10 @@ function buildMetricResult(
 export async function runBriefAlignmentAgent(
   bundle: EvidenceBundle,
   client: ChatClient,
+  model: string = SONNET,
 ): Promise<MetricResult[]> {
   const response = await client.chat.completions.create({
-    model: SONNET,
+    model,
     temperature: 0,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },

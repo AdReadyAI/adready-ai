@@ -7,3 +7,6 @@
 .env.local
 .env.*.local
 snippets/
+
+# Local-only benchmark harness + fixtures (not part of the deployed agents)
+scripts/
