@@ -1,122 +1,162 @@
-# AdReady Orchestrator Input Specification
+# AdReady Agent Context Specification
 
-## Root-Level Fields
+The evaluator agents will not receive a full evidence payload directly in the Edge
+Function request. Orchestration will invoke an agent with lookup identifiers, and
+the agent will load its working context from Supabase tables.
 
-* **`variant_id`**: String (UUID) — System ID for the creative variant.
-* **`review_id`**: String (UUID) — System ID for the review process.
-* **`creative_brief`**: String — Ground truth guidelines and campaign instructions (e.g., objectives, required CTAs).
-* **`campaign_goal`**: String — The main marketing objective (e.g., `"awareness"`).
-* **`destination_platform`**: String — The publishing target (e.g., `"tiktok"`).
+Until the DB tables are finalized, this document defines the shared shape that the
+DB-loaded agent context should expose to the agent layer.
 
----
+## Edge Function Invocation
 
-## Video Metadata (`video_metadata`)
+The agent invocation should stay small:
 
-* **`duration_ms`**: Integer — Total video length in milliseconds.
-* **`aspect_ratio`**: String — Screen shape (e.g., `"9:16"`).
-* **`resolution`**: String — Pixel dimensions (e.g., `"1080x1920"`).
-* **`dropped_frame_markers`**: Array — List of timestamps where frames were dropped during processing.
+* **`review_id`**: String UUID - review process identifier.
+* **`variant_id`**: String UUID - creative variant identifier.
+* **`agent`**: String - optional agent identifier when the orchestrator uses a
+  shared invocation helper.
 
----
-
-## Transcript Segments (`transcript_segments`)
-
-*An array of spoken elements parsed from the audio track. Each segment contains:*
-
-* **`segment_id`**: String — Unique segment identifier (e.g., `"tr_001"`).
-* **`start_ms`**: Integer — Start time of the spoken segment.
-* **`end_ms`**: Integer — End time of the spoken segment.
-* **`text`**: String — The actual spoken words.
-* **`speaker`**: String — Who is talking (e.g., `"narrator"`, `"character"`) -> check if possible?
-
-
-> **NOTE:** music detection - to check if noise drowns narration? no need to detect actual music.
+The request is not the source of transcript, OCR, visual, product, or brief data.
+Those records are loaded from the DB by `review_id` and `variant_id`.
 
 ---
 
-## OCR Segments (`ocr_segments`)
+## DB-Loaded Agent Context
 
-*An array of text blocks detected visually on-screen. Each segment contains:*
+### Review And Variant Context
 
-* frame_id: a list of frames (tracks all frmaes containing ocr)
-* **`ocr_id`**: String — Unique OCR block identifier (e.g., `"ocr_001"`).
-* **`start_ms`**: Integer — Start time of when the text appears on screen.
-* **`end_ms`**: Integer — End time of when the text disappears.
-* **`text`**: String — The parsed on-screen text (e.g., `"8g plant protein"`).
-* **`on_screen_duration_ms`**: Integer — Total duration the text is visible.
-* **`region_size`**: Float — Percentage of screen area covered by the text box. (optional)
-* **`font_size_px`**: Integer — Approximated size of the text. (optional)
+* **`review_id`**: String UUID.
+* **`variant_id`**: String UUID.
+* **`campaign_goal`**: String - main marketing objective, such as
+  `"awareness"`, `"consideration"`, or `"conversion"`.
+* **`destination_platform`**: String - publishing target, such as `"tiktok"`,
+  `"instagram_reels"`, or `"meta_feed"`.
+
+### Parsed Creative Brief
+
+The raw creative brief should be parsed before agent execution and stored in
+queryable fields. Agents can still keep the raw brief text for evidence, but they
+should primarily use structured fields.
+
+* **`raw_text`**: String - original brief text.
+* **`brand_voice`**: String, optional - tone and voice expectations.
+* **`target_audience`**: String, optional - intended audience.
+* **`required_messages`**: String array - mandatory product or campaign messages.
+* **`required_ctas`**: String array - required CTA language or destination.
+* **`approved_claims`**: String array - claims allowed by the brief or product
+  source.
+* **`forbidden_claims`**: String array - claims or policy language that must not
+  appear.
+* **`brand_guidelines`**: String array - logo, color, typography, and visual rules.
+* **`policy_requirements`**: String array - disclaimers, regulatory constraints,
+  platform rules, or category restrictions.
+
+### Video Metadata
+
+* **`duration_ms`**: Integer - total video length.
+* **`aspect_ratio`**: String - screen shape, such as `"9:16"`.
+* **`resolution`**: String - pixel dimensions, such as `"1080x1920"`.
+* **`dropped_frame_markers`**: Integer array - timestamps where dropped frames or
+  stutter were detected.
+* **`corruption_detected`**: Boolean, optional - file-level media integrity flag.
+
+### Transcript Segments
+
+Agents derive spoken claims and spoken CTAs from these records.
+
+* **`segment_id`**: String.
+* **`start_ms`**: Integer.
+* **`end_ms`**: Integer.
+* **`text`**: String.
+* **`speaker`**: String, optional.
+
+### OCR Segments
+
+Agents derive written claims, written CTAs, disclaimers, and text legibility from
+these records.
+
+* **`ocr_id`**: String.
+* **`frame_ids`**: String array - frames where the text appears.
+* **`start_ms`**: Integer.
+* **`end_ms`**: Integer.
+* **`text`**: String.
+* **`on_screen_duration_ms`**: Integer.
+* **`region_size`**: Number, optional - percentage of screen area covered by the
+  text box.
+* **`font_size_px`**: Integer, optional.
+
+### Visual Frames
+
+Visual context should be frame-based so agents can reference the exact frame
+evidence they used.
+
+* **`frame_id`**: String.
+* **`timestamp_ms`**: Integer.
+* **`image_url`**: String, optional - stored frame asset URL if available.
+* **`visual_description`**: String - concise description of visible action,
+  environment, product, logo, text, and notable quality issues.
+* **`people`**: Object, optional - count, apparent age descriptors,
+  presentation descriptors, activity, and clothing style.
+* **`color_palette`**: Object, optional - dominant colors and lighting quality.
+* **`background`**: Object, optional - location type and mood.
+* **`camera_movement`**: `"static" | "pan" | "zoom" | "handheld"`, optional.
+* **`technical_flags`**: String array - visual artifacts, bad transitions,
+  framing problems, or other notable quality issues.
+
+### Product Frames
+
+Product visibility is frame-based, not moment-based.
+
+* **`frame_id`**: String.
+* **`timestamp_ms`**: Integer.
+* **`location`**: Object, optional - bounding box or processor-specific location.
+* **`confidence_score`**: Number.
+* **`prominence`**:
+  `"foreground_in_use" | "foreground_static" | "background" | "not_visible"`,
+  optional.
+* **`focus_quality`**: `"sharp" | "soft_focus" | "blurry"`, optional.
+* **`framing`**: `"fully_visible" | "partially_cropped" | "heavily_obscured"`,
+  optional.
+* **`usage_context`**: String, optional.
+
+### Logo Frames
+
+Logo visibility is frame-based and may overlap with product frames.
+
+* **`frame_id`**: String.
+* **`timestamp_ms`**: Integer.
+* **`location`**: Object, optional - bounding box or processor-specific location.
+* **`confidence_score`**: Number.
+* **`prominence`**:
+  `"large_central" | "small_corner" | "background_signage" | "absent"`,
+  optional.
+* **`reference_match`**:
+  `"matches_reference" | "differs_from_reference" | "cannot_determine"`,
+  optional.
+
+### Product Context
+
+* **`raw_text`**: String, optional - product page, source material, or campaign
+  notes.
+* **`claims`**: String array - verified source claims.
+* **`contraindications`**: String array - warnings, limitations, or prohibited
+  interpretations.
+* **`reference_asset_urls`**: String array - approved logo, packaging, or style
+  guide assets.
 
 ---
 
-## Frames Breakdown (`scene_segments`)
+## Agent-Specific Use
 
-*A chronological list of frame cuts. Each scene contains:*
-
-* **`frame_id`**: String — Unique scene identifier (e.g., `"scene_01"`).
-* **`timestamp`**: Integer — Scene start time.
-* **`visual_description`**: String — A 1–3 sentence plain text summary of the physical action happening in this scene. (needs to include - logo + product details like logo absent/incorrect and product notshown/obscured, color palette ; optional/not required: lighting, weird transitions, ai artifacts)
-
-### People
-
-* people (number, gender, age) - checks demographic mismatch
-
-  * `count`: int
-  * `apparent_ages`: string[] // e.g. `["adult, late 20s"]`
-  * `apparent_presentation`: string[] // loosely described details about them if something stands out
-  * `activity`: string // what they're doing
-  * `clothing_style`: string
-
-### Color Palette
-
-* color palette (need to check)
-
-  * `dominant_colors`: string[]
-  * `lighting_quality`: string // `"well-lit, natural daylight"` / `"overexposed"` / `"dim, underexposed"`
-
-### Scenary/Background
-
-* scenary/background
-
-  * `location_type`: string // e.g. `"modern kitchen"`, `"outdoor park"`, `"plain studio backdrop"`
-  * `mood`: string // e.g. `"bright, energetic"` / `"calm, minimal"`
-
-### EXTRA
-
-* `camera_movement`: `"static"` | `"pan"` | `"zoom"` | `"handheld"` (check if this can this be added?)
-
-* `technical_flags`: string[]
-
-  * // Free-text notes on anything visually anomalous: `"possible distortion on hand at 0:07"`, `"background inconsistent during pan"`. Only Visual Quality's artifact check can work at all if this is explicitly solicited — a normal `"what's happening"` narration will not surface this on its own.
-
----
-
-## Product Moments (`product_moments`)
-
-*Specific intervals where physical branding or packaging is shown. Each moment contains:*
-
-* **`frame_id`**: Per frames — Unique moment identifier (e.g., `"pm_01"`).
-* **`location`**: location (bounding box coordinates)
-* **`confidence score`
-
-### Other details (optional)
-
-* `prominence`: `"foreground_in_use"` | `"foreground_static"` | `"background"` | `"not_visible"`
-* `focus_quality`: `"sharp"` | `"soft_focus"` | `"blurry"`
-* `framing`: `"fully_visible"` | `"partially_cropped"` | `"heavily_obscured"`
-* `usage_context`: string // e.g. `"being applied to skin"`, `"held up to camera"`, `"sitting on counter"`
-
----
-
-## Logo Moments (`product_moments`)
-
-*Specific intervals where physical branding or packaging is shown. Each moment contains:*
-
-* **`frame_id`**: Per frames — Unique moment identifier (e.g., `"pm_01"`).
-* **`location`**: location (bounding box coordinates)
-* `confidence score`
-
-### Other details (optional)
-
-* `prominence`: `"large_central"` | `"small_corner"` | `"background_signage"` | `"absent"`
-* `reference_match`: `"matches_reference"` | `"differs_from_reference"` | `"cannot_determine"`
+* **Claims Accuracy** derives claim candidates from transcript and OCR, then
+  compares them against parsed brief and product context.
+* **CTA Effectiveness** derives CTA candidates from transcript and OCR, then
+  checks timing, clarity, visibility, destination, and platform fit.
+* **Storyline Clarity** uses video metadata, transcript, OCR, and visual frames.
+* **Product Representation** uses product frames, logo frames, transcript, OCR,
+  and product context.
+* **Visual Quality** uses video metadata, OCR, and visual frame technical flags.
+* **Brand Alignment** uses parsed brief, transcript, OCR, visual frames, logo
+  frames, and product context.
+* **Brief Alignment** uses parsed brief, transcript, OCR, visual frames, product
+  frames, and campaign context.

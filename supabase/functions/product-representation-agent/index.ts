@@ -11,12 +11,10 @@
  *      [ ] product_appearance_wrong: Product color, label design, or shape does not match reference assets.
  *      [ ] product_name_unspoken: Brand or product name is never voiced or displayed in overlay text.
  *
- * INPUT (From EvidenceBundle):
- *   - product_moments[]: Per-frame product detections with frame_id, location/bounding box,
- *     confidence_score, and optional prominence, focus_quality, framing, and usage_context.
- *   - scene_segments[]: Per-scene frame_id, timestamp, visual_description, and optional
- *     people, color_palette, scenery, camera_movement, and technical_flags context.
- *   - transcript_segments[]: Spoken brand or product name references.
+ * DB CONTEXT:
+ *   - Loads product frames, logo frames, transcript/OCR, visual frames, and
+ *     product context by review_id + variant_id.
+ *   - Uses product_frames, logo_frames, and frame-level visual context.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -70,14 +68,15 @@
  */
 
 // import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { EvidenceBundleSchema } from "../shared/schemas.ts";
+// import { AgentRunRequestSchema } from "../shared/schemas.ts";
 // import type { MetricResult } from "../shared/schemas.ts";
 // // import { chat } from "../shared/llm.ts";
 
-// createEdgeHandler("product-representation-agent", EvidenceBundleSchema, async (req, ctx) => {
-//   const _evidence = ctx.body;
+// createEdgeHandler("product-representation-agent", AgentRunRequestSchema, async (req, ctx) => {
+//   const _run = ctx.body;
+//   // TODO: Load DB-backed agent context by review_id + variant_id.
 
-//   // TODO: Implement LLM prompting & evaluation logic using the validated `evidence` context
+//   // TODO: Evaluate product and logo clarity from DB-loaded frame context.
 
 //   const results: MetricResult[] = [];
 //   return ok(results);

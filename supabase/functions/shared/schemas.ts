@@ -1,13 +1,48 @@
 /**
  * schemas.ts — Shared Zod schemas and inferred TypeScript types for the AdReady Eval Scorecard.
  *
- * Single source of truth for the 10 core metrics, input EvidenceBundle,
- * and the output MetricResult array.
+ * Single source of truth for agent invocation/context types and the output
+ * MetricResult array.
  */
 
 import { z } from "zod";
 
-// 1. INPUT: EvidenceBundle (Provided as-is by Media Processing)
+// 1. INPUT: Agent invocation + DB-loaded context
+
+export const AgentNameSchema = z.enum([
+  "claims-agent",
+  "storyline-clarity-agent",
+  "cta-effectiveness-agent",
+  "product-representation-agent",
+  "visual-quality-agent",
+  "brand-alignment-agent",
+  "brief-alignment-agent",
+]);
+export type AgentName = z.infer<typeof AgentNameSchema>;
+
+/**
+ * Minimal request envelope used by orchestration to tell an agent which DB
+ * context to load. Evidence records are not passed directly in the request.
+ */
+export const AgentRunRequestSchema = z.object({
+  review_id: z.string().uuid(),
+  variant_id: z.string().uuid(),
+  agent: AgentNameSchema.optional(),
+});
+export type AgentRunRequest = z.infer<typeof AgentRunRequestSchema>;
+
+export const ParsedCreativeBriefSchema = z.object({
+  raw_text: z.string(),
+  brand_voice: z.string().optional(),
+  target_audience: z.string().optional(),
+  required_messages: z.array(z.string()).default([]),
+  required_ctas: z.array(z.string()).default([]),
+  approved_claims: z.array(z.string()).default([]),
+  forbidden_claims: z.array(z.string()).default([]),
+  brand_guidelines: z.array(z.string()).default([]),
+  policy_requirements: z.array(z.string()).default([]),
+});
+export type ParsedCreativeBrief = z.infer<typeof ParsedCreativeBriefSchema>;
 
 export const TranscriptSegmentSchema = z.object({
   segment_id: z.string(),
@@ -19,9 +54,8 @@ export const TranscriptSegmentSchema = z.object({
 export type TranscriptSegment = z.infer<typeof TranscriptSegmentSchema>;
 
 export const OCRSegmentSchema = z.object({
-  // The input specification calls this `frame_id` and describes it as a list of frames.
-  frame_id: z.array(z.string()),
   ocr_id: z.string(),
+  frame_ids: z.array(z.string()),
   start_ms: z.number().int().nonnegative(),
   end_ms: z.number().int().nonnegative(),
   text: z.string(),
@@ -31,9 +65,10 @@ export const OCRSegmentSchema = z.object({
 });
 export type OCRSegment = z.infer<typeof OCRSegmentSchema>;
 
-export const SceneSegmentSchema = z.object({
+export const VisualFrameSchema = z.object({
   frame_id: z.string(),
-  timestamp: z.number().int().nonnegative(),
+  timestamp_ms: z.number().int().nonnegative(),
+  image_url: z.string().url().optional(),
   visual_description: z.string(), // 1-3 sentences describing visual action
   people: z.object({
     count: z.number().int().nonnegative(),
@@ -46,19 +81,20 @@ export const SceneSegmentSchema = z.object({
     dominant_colors: z.array(z.string()),
     lighting_quality: z.string(),
   }).optional(),
-  scenery: z.object({
+  background: z.object({
     location_type: z.string(),
     mood: z.string(),
   }).optional(),
   camera_movement: z.enum(["static", "pan", "zoom", "handheld"]).optional(),
   technical_flags: z.array(z.string()).optional(),
 });
-export type SceneSegment = z.infer<typeof SceneSegmentSchema>;
+export type VisualFrame = z.infer<typeof VisualFrameSchema>;
 
-export const ProductMomentSchema = z.object({
+export const ProductFrameSchema = z.object({
   frame_id: z.string(),
-  // Coordinates are not formally specified yet, so preserve the media processor's value.
-  location: z.unknown(),
+  timestamp_ms: z.number().int().nonnegative(),
+  // Coordinates are not formally specified yet, so preserve the processor's value.
+  location: z.unknown().optional(),
   confidence_score: z.number(),
   prominence: z.enum([
     "foreground_in_use",
@@ -71,36 +107,62 @@ export const ProductMomentSchema = z.object({
     .optional(),
   usage_context: z.string().optional(),
 });
-export type ProductMoment = z.infer<typeof ProductMomentSchema>;
+export type ProductFrame = z.infer<typeof ProductFrameSchema>;
+
+export const LogoFrameSchema = z.object({
+  frame_id: z.string(),
+  timestamp_ms: z.number().int().nonnegative(),
+  location: z.unknown().optional(),
+  confidence_score: z.number(),
+  prominence: z.enum([
+    "large_central",
+    "small_corner",
+    "background_signage",
+    "absent",
+  ]).optional(),
+  reference_match: z.enum([
+    "matches_reference",
+    "differs_from_reference",
+    "cannot_determine",
+  ]).optional(),
+});
+export type LogoFrame = z.infer<typeof LogoFrameSchema>;
 
 export const VideoMetadataSchema = z.object({
   duration_ms: z.number().int().nonnegative(),
   aspect_ratio: z.string(),
   resolution: z.string(),
   dropped_frame_markers: z.array(z.number().int().nonnegative()),
+  corruption_detected: z.boolean().optional(),
 });
 export type VideoMetadata = z.infer<typeof VideoMetadataSchema>;
 
+export const ProductContextSchema = z.object({
+  raw_text: z.string().optional(),
+  claims: z.array(z.string()).default([]),
+  contraindications: z.array(z.string()).default([]),
+  reference_asset_urls: z.array(z.string().url()).default([]),
+});
+export type ProductContext = z.infer<typeof ProductContextSchema>;
+
 /**
- * Top-level Input envelope received by each agent
+ * Context shape loaded by agents from DB rows using review_id + variant_id.
  */
-export const EvidenceBundleSchema = z.object({
+export const AgentContextSchema = z.object({
   variant_id: z.string().uuid(),
   review_id: z.string().uuid(),
-
-  // Media Processing Inputs
+  campaign_goal: z.string().min(1),
+  destination_platform: z.string().min(1),
+  parsed_creative_brief: ParsedCreativeBriefSchema,
+  video_metadata: VideoMetadataSchema,
   transcript_segments: z.array(TranscriptSegmentSchema),
   ocr_segments: z.array(OCRSegmentSchema),
-  scene_segments: z.array(SceneSegmentSchema),
-  product_moments: z.array(ProductMomentSchema),
-  video_metadata: VideoMetadataSchema,
-
-  // Product Platform Context
-  creative_brief: z.string(),
-  campaign_goal: z.string().min(1),
-  destination_platform: z.string(),
+  visual_frames: z.array(VisualFrameSchema),
+  product_frames: z.array(ProductFrameSchema),
+  logo_frames: z.array(LogoFrameSchema),
+  product_context: ProductContextSchema.optional(),
 });
-export type EvidenceBundle = z.infer<typeof EvidenceBundleSchema>;
+export type AgentContext = z.infer<typeof AgentContextSchema>;
 
 // 2. OUTPUT: MetricResult & 10 Scorecard Metrics
 export const MetricIdSchema = z.enum([

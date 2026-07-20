@@ -16,14 +16,11 @@
  *      [ ] cta_low_visibility: CTA contrast ratio is too low or font size is illegible.
  *      [ ] cta_platform_mismatch: Phrasing violates platform swipe/action conventions (e.g. "swipe up" on modern TikTok).
  *
- * INPUT (From EvidenceBundle):
- *   - transcript_segments[]: Spoken narrative/dialogue text.
- *   - ocr_segments[]: On-screen text with frame references, timestamps,
- *     on_screen_duration_ms, and optional region_size and font_size_px.
- *   - video_metadata: duration_ms (for the positional checks: cta_buried, cta_mistimed).
- *   - destination_platform: Publishing target string (for example, "tiktok").
- *   - creative_brief: Brief guidelines specifying the required CTA text and campaign objectives.
- *   - campaign_goal: Main marketing-objective string (for example, "conversion").
+ * DB CONTEXT:
+ *   - Loads transcript, OCR, video metadata, parsed brief, campaign goal, and
+ *     platform context by review_id + variant_id.
+ *   - Derives CTA candidates from transcript/OCR text; detected CTAs are not
+ *     supplied by the media pipeline.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -112,14 +109,15 @@
  */
 
 // import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { EvidenceBundleSchema } from "../shared/schemas.ts";
+// import { AgentRunRequestSchema } from "../shared/schemas.ts";
 // import type { MetricResult } from "../shared/schemas.ts";
 // // import { chat } from "../shared/llm.ts";
 
-// createEdgeHandler("cta-effectiveness-agent", EvidenceBundleSchema, async (req, ctx) => {
-//   const _evidence = ctx.body;
+// createEdgeHandler("cta-effectiveness-agent", AgentRunRequestSchema, async (req, ctx) => {
+//   const _run = ctx.body;
+//   // TODO: Load DB-backed agent context by review_id + variant_id.
 
-//   // TODO: Implement LLM prompting & evaluation logic using the validated `evidence` context
+//   // TODO: Extract CTAs from transcript/OCR and evaluate timing, clarity, and platform fit.
 
 //   const results: MetricResult[] = [];
 //   return ok(results);

@@ -13,14 +13,11 @@
  *      [ ] objective_missed: Primary video goal deviates from objective (e.g. calls for conversion when objective is awareness).
  *      [ ] required_message_missing: Core mandatory messaging statements or features from creative brief are omitted.
  *
- * INPUT (From EvidenceBundle):
- *   - creative_brief: Target audience profile, core campaign objectives, required messaging points.
- *   - campaign_goal: Main marketing-objective string (for example, "awareness").
- *   - transcript_segments[]: Spoken narrative/dialogue text.
- *   - ocr_segments[]: On-screen text with frame references, timestamps,
- *     on_screen_duration_ms, and optional region_size and font_size_px.
- *   - scene_segments[]: Per-scene frame_id, timestamp, visual_description, and optional
- *     people, color_palette, scenery, camera_movement, and technical_flags context.
+ * DB CONTEXT:
+ *   - Loads parsed creative brief, campaign goal, transcript/OCR, visual frames,
+ *     product frames, and platform context by review_id + variant_id.
+ *   - Uses parsed brief fields rather than treating the raw brief as the only
+ *     source of truth.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -101,14 +98,15 @@
  */
 
 // import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { EvidenceBundleSchema } from "../shared/schemas.ts";
+// import { AgentRunRequestSchema } from "../shared/schemas.ts";
 // import type { MetricResult } from "../shared/schemas.ts";
 // // import { chat } from "../shared/llm.ts";
 
-// createEdgeHandler("brief-alignment-agent", EvidenceBundleSchema, async (req, ctx) => {
-//   const _evidence = ctx.body;
+// createEdgeHandler("brief-alignment-agent", AgentRunRequestSchema, async (req, ctx) => {
+//   const _run = ctx.body;
+//   // TODO: Load DB-backed agent context by review_id + variant_id.
 
-//   // TODO: Implement LLM prompting & evaluation logic using the validated `evidence` context
+//   // TODO: Evaluate audience fit and brief adherence from DB-loaded context.
 
 //   const results: MetricResult[] = [];
 //   return ok(results);

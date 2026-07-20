@@ -13,12 +13,9 @@
  *      [ ] jarring_transitions: Inconsistent color grade, flash frames, or cut mismatch at scene boundaries.
  *      [ ] illegible_text: Rendered caption fonts are blurry or unreadable.
  *
- * INPUT (From EvidenceBundle):
- *   - video_metadata: duration_ms, aspect_ratio, resolution, and dropped_frame_markers.
- *   - ocr_segments[]: OCR text with frame references, timestamps, on_screen_duration_ms,
- *     and optional region_size and font_size_px for legibility checks.
- *   - scene_segments[]: Per-scene frame_id, timestamp, visual_description, and optional
- *     color_palette/lighting, scenery, camera_movement, and technical_flags context.
+ * DB CONTEXT:
+ *   - Loads video metadata, OCR, and visual frames by review_id + variant_id.
+ *   - Uses frame-level visual descriptions and technical flags.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -99,14 +96,15 @@
  */
 
 // import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { EvidenceBundleSchema } from "../shared/schemas.ts";
+// import { AgentRunRequestSchema } from "../shared/schemas.ts";
 // import type { MetricResult } from "../shared/schemas.ts";
 // // import { chat } from "../shared/llm.ts";
 
-// createEdgeHandler("visual-quality-agent", EvidenceBundleSchema, async (req, ctx) => {
-//   const _evidence = ctx.body;
+// createEdgeHandler("visual-quality-agent", AgentRunRequestSchema, async (req, ctx) => {
+//   const _run = ctx.body;
+//   // TODO: Load DB-backed agent context by review_id + variant_id.
 
-//   // TODO: Implement LLM prompting & evaluation logic using the validated `evidence` context
+//   // TODO: Evaluate production readiness from DB-loaded metadata/OCR/frame context.
 
 //   const results: MetricResult[] = [];
 //   return ok(results);

@@ -15,12 +15,10 @@
  *      [ ] story_incomplete: Video cuts off before the storyline arc finishes.
  *      [ ] pacing_misallocation: Too much runtime spent on detours vs driving story.
  *
- * INPUT (From EvidenceBundle):
- *   - video_metadata: duration_ms, aspect_ratio, resolution, and dropped_frame_markers.
- *   - scene_segments[]: Per-scene frame_id, timestamp, visual_description, and optional people,
- *     color_palette, scenery, camera_movement, and technical_flags context.
- *   - transcript_segments[]: Spoken narrative/dialogue text.
- *   - destination_platform: Publishing target string (for example, "tiktok").
+ * DB CONTEXT:
+ *   - Loads video metadata, transcript/OCR, visual frames, and platform context
+ *     by review_id + variant_id.
+ *   - Uses frame-level visual context.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -108,14 +106,15 @@
  */
 
 // import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { EvidenceBundleSchema } from "../shared/schemas.ts";
+// import { AgentRunRequestSchema } from "../shared/schemas.ts";
 // import type { MetricResult } from "../shared/schemas.ts";
 // // import { chat } from "../shared/llm.ts";
 
-// createEdgeHandler("storyline-clarity-agent", EvidenceBundleSchema, async (req, ctx) => {
-//   const _evidence = ctx.body;
+// createEdgeHandler("storyline-clarity-agent", AgentRunRequestSchema, async (req, ctx) => {
+//   const _run = ctx.body;
+//   // TODO: Load DB-backed agent context by review_id + variant_id.
 
-//   // TODO: Implement LLM prompting & evaluation logic using the validated `evidence` context
+//   // TODO: Evaluate platform readiness and story flow from DB-loaded context.
 
 //   const results: MetricResult[] = [];
 //   return ok(results);

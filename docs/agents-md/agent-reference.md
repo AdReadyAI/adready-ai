@@ -1,6 +1,6 @@
 # AdReady Eval Scorecard — Agent Reference Playbook
 
-This playbook acts as the master technical specification for the 7 evaluation agents in the `supabase/functions/` directory. It defines their mapped metrics, input data requirements, exact JSON output structures, severity scoring rules, and conceptual pipeline stages.
+This playbook acts as the master technical specification for the 7 evaluation agents in the `supabase/functions/` directory. It defines their mapped metrics, DB-loaded context requirements, exact JSON output structures, severity scoring rules, and conceptual pipeline stages.
 
 ---
 
@@ -20,11 +20,13 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `disclaimer_duration_insufficient`: Disclaimer duration too short on screen.
     *   `policy_violation_depicted`: Depicts illegal substances, safety hazards, copyright infringement.
 
-### Expected Inputs
-*   `transcript_segments[]`: Spoken dialogue.
-*   `ocr_segments[]`: On-screen text with `ocr_id`, frame references, timestamps,
-    `on_screen_duration_ms`, and optional `region_size` and `font_size_px`.
-*   `creative_brief`: Approved and forbidden claims guidelines.
+### DB Context
+*   `transcript_segments[]`: Spoken dialogue used to derive claim candidates.
+*   `ocr_segments[]`: On-screen text used to derive written claim and disclaimer candidates.
+*   `parsed_creative_brief`: Approved and forbidden claims guidelines.
+*   `product_context`: Product/source material used to validate derived claims.
+
+Claims are extracted from transcript and OCR by this agent.
 
 ### Severity Rules
 
@@ -163,12 +165,14 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `story_incomplete`: Storyline cuts off before the arc finishes.
     *   `pacing_misallocation`: Too much runtime spent on detours vs driving story.
 
-### Expected Inputs
+### DB Context
 *   `video_metadata`: Duration, aspect ratio, resolution, and dropped-frame markers.
-*   `scene_segments[]`: Per-scene `frame_id`, timestamp, visual description, and optional
-    people, color palette, scenery, camera movement, and technical flags.
+*   `visual_frames[]`: Frame-level visual descriptions and technical flags.
 *   `transcript_segments[]`: Spoken dialogue.
+*   `ocr_segments[]`: On-screen text.
 *   `destination_platform`: Platform target.
+
+Use frame-level visual context.
 
 ### Severity Rules
 
@@ -295,14 +299,15 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `cta_low_visibility`: CTA contrast too low or font size too small.
     *   `cta_platform_mismatch`: Phrasing violates platform swipe/action conventions.
 
-### Expected Inputs
-*   `transcript_segments[]`: Spoken text around closing beats.
-*   `ocr_segments[]`: On-screen text with frame references, timestamps,
-    `on_screen_duration_ms`, and optional `region_size` and `font_size_px`.
+### DB Context
+*   `transcript_segments[]`: Spoken text used to derive CTA candidates.
+*   `ocr_segments[]`: On-screen text used to derive written CTA candidates.
 *   `video_metadata`: Duration for CTA position and dwell-time checks.
 *   `destination_platform`: Platform target.
-*   `creative_brief`: Required call-to-action text rules.
+*   `parsed_creative_brief`: Required call-to-action text rules.
 *   `campaign_goal`: Campaign target (e.g. conversion requires stronger CTA).
+
+CTAs are extracted from transcript and OCR by this agent.
 
 ### Severity Rules
 
@@ -389,7 +394,7 @@ This playbook acts as the master technical specification for the 7 evaluation ag
 ```
 
 ### Pipeline Stages
-1.  **Stage 1: Alignment check**: Compare detected CTAs against specifications.
+1.  **Stage 1: CTA Extraction**: Derive CTA candidates from transcript and OCR text.
 2.  **Stage 2: Placement & Timing**: Verify closing display times.
 3.  **Stage 3: Visibility Check (Standard LLM)**: Audit sizing and contrast.
 4.  **Stage 4: Synthesis**: Output results.
@@ -408,12 +413,14 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `product_appearance_wrong`: Packaging color, shape, or label design differs from references.
     *   `product_name_unspoken`: Brand or product name never voiced or shown in overlay text.
 
-### Expected Inputs
-*   `product_moments[]`: Per-frame product detections with `frame_id`, location/bounding box,
+### DB Context
+*   `product_frames[]`: Frame-level product detections with `frame_id`, timestamp, location/bounding box,
     `confidence_score`, and optional prominence, focus quality, framing, and usage context.
-*   `scene_segments[]`: Per-scene `frame_id`, timestamp, visual description, and optional
-    people, color palette, scenery, camera movement, and technical flags.
+*   `logo_frames[]`: Frame-level logo detections and reference-match data.
+*   `visual_frames[]`: Frame-level visual descriptions and technical flags.
 *   `transcript_segments[]`: Spoken brand or product-name references.
+*   `ocr_segments[]`: Written brand or product-name references.
+*   `product_context`: Product/source material and reference asset URLs.
 
 ### Severity Rules
 
@@ -477,7 +484,7 @@ This playbook acts as the master technical specification for the 7 evaluation ag
 ```
 
 ### Pipeline Stages
-1.  **Stage 1: Frame Isolation**: Select frames from `product_moments`.
+1.  **Stage 1: Frame Isolation**: Select candidate frames from `product_frames` and `logo_frames`.
 2.  **Stage 2: Vision Analysis (Standard LLM)**: Audit packaging visual fidelity against references.
 3.  **Stage 3: Synthesis**: Construct final `product_clarity` scorecard row.
 
@@ -497,12 +504,13 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `jarring_transitions`: Abrupt cuts, flash frames, inconsistent color grading between scenes.
     *   `illegible_text`: Captions rendering illegibly.
 
-### Expected Inputs
-*   `video_metadata`: Duration, aspect ratio, resolution, and dropped-frame markers.
+### DB Context
+*   `video_metadata`: Duration, aspect ratio, resolution, dropped-frame markers, and optional corruption flag.
 *   `ocr_segments[]`: Text with frame references, timestamps, `on_screen_duration_ms`, and
     optional region size and font size for legibility checks.
-*   `scene_segments[]`: Per-scene `frame_id`, timestamp, visual description, optional color
-    palette/lighting, scenery, camera movement, and technical flags.
+*   `visual_frames[]`: Frame-level descriptions, color/lighting context, camera movement, and technical flags.
+
+Use frame-level visual context.
 
 ### Severity Rules
 
@@ -579,8 +587,8 @@ This playbook acts as the master technical specification for the 7 evaluation ag
 
 ### Pipeline Stages
 1.  **Stage 1: Metadata Gate**: Inspect resolution and dropped-frame markers.
-2.  **Stage 2: Filter**: Identify candidates from scene boundaries, text timing, and optional text-size/region data.
-3.  **Stage 3: Vision Checks**: Audit scene descriptions, lighting, camera movement, and technical flags for visual quality and artifacts.
+2.  **Stage 2: Filter**: Identify candidates from visual frames, text timing, and optional text-size/region data.
+3.  **Stage 3: Vision Checks**: Audit frame descriptions, lighting, camera movement, and technical flags for visual quality and artifacts.
 4.  **Stage 4: Synthesis**: Report overall production quality.
 
 ---
@@ -597,11 +605,13 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `color_palette_off`: Dominant colors drift from style guide palette.
     *   `brand_voice_drift`: Subtitle copy or voiceover style drifts from guidelines.
 
-### Expected Inputs
-*   `creative_brief`: Brand voice, positioning, palette, logo, and visual expectations.
-*   `scene_segments[]`: Per-scene `frame_id`, timestamp, visual description, and optional
-    color palette, scenery/mood, people, camera movement, and technical flags.
+### DB Context
+*   `parsed_creative_brief`: Brand voice, positioning, palette, logo, and visual expectations.
+*   `visual_frames[]`: Frame-level visual descriptions, color palette, lighting, background, and technical flags.
+*   `logo_frames[]`: Frame-level logo detections and reference-match data.
 *   `transcript_segments[]`: Spoken voice dialogue.
+*   `ocr_segments[]`: On-screen copy and typography evidence.
+*   `product_context`: Reference asset URLs and product/source context.
 
 
 ### Severity Rules
@@ -686,14 +696,14 @@ This playbook acts as the master technical specification for the 7 evaluation ag
     *   `objective_missed`: Video objectives deviate from primary brief target goals.
     *   `required_message_missing`: Mandatory message points or product highlights from creative brief are omitted.
 
-### Expected Inputs
-*   `creative_brief`: Target demographic, objective specifications, required key messages.
+### DB Context
+*   `parsed_creative_brief`: Target demographic, objective specifications, required key messages, policies, and CTA requirements.
 *   `campaign_goal`: Main marketing objective.
 *   `transcript_segments[]`: Spoken words.
 *   `ocr_segments[]`: On-screen text with frame references, timestamps,
     `on_screen_duration_ms`, and optional `region_size` and `font_size_px`.
-*   `scene_segments[]`: Per-scene `frame_id`, timestamp, visual description, and optional
-    people, color palette, scenery, camera movement, and technical flags.
+*   `visual_frames[]`: Frame-level people, wardrobe, background, color, and technical context.
+*   `product_frames[]`: Product visibility context where relevant to brief adherence.
 
 ### Severity Rules
 

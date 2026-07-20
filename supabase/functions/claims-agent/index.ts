@@ -16,11 +16,11 @@
  *      [ ] disclaimer_duration_insufficient: Disclaimer duration too short on screen.
  *      [ ] policy_violation_depicted: Depicts illegal substances, safety hazards, copyright infringement.
  *
- * INPUT (From EvidenceBundle):
- *   - transcript_segments[]: Spoken narrative/dialogue text.
- *   - ocr_segments[]: On-screen text with ocr_id, frame references, timestamps,
- *     on_screen_duration_ms, and optional region_size and font_size_px.
- *   - creative_brief: Brief guidelines, target audience, approved/forbidden claims list.
+ * DB CONTEXT:
+ *   - Loads transcript and OCR rows by review_id + variant_id.
+ *   - Derives claim candidates from transcript/OCR text; detected claims are not
+ *     supplied by the media pipeline.
+ *   - Compares derived claims against parsed brief and product context.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -119,14 +119,15 @@
  */
 
 // import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { EvidenceBundleSchema } from "../shared/schemas.ts";
+// import { AgentRunRequestSchema } from "../shared/schemas.ts";
 // import type { MetricResult } from "../shared/schemas.ts";
 // // import { chat } from "../shared/llm.ts";
 
-// createEdgeHandler("claims-agent", EvidenceBundleSchema, async (req, ctx) => {
-//   const _evidence = ctx.body;
+// createEdgeHandler("claims-agent", AgentRunRequestSchema, async (req, ctx) => {
+//   const _run = ctx.body;
+//   // TODO: Load DB-backed agent context by review_id + variant_id.
 
-//   // TODO: Implement LLM prompting & evaluation logic using the validated `evidence` context
+//   // TODO: Extract claims from transcript/OCR and evaluate against product context.
 
 //   const results: MetricResult[] = [];
 //   return ok(results);

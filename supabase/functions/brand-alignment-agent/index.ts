@@ -11,10 +11,9 @@
  *      [ ] color_palette_off: Dominant colors in key scenes drift off the brand palette rules.
  *      [ ] brand_voice_drift: Subtitle copy or voiceover style drifts from brand guide positioning (e.g. overly aggressive).
  *
- * INPUT (From EvidenceBundle):
- *   - reference_assets[]: Approved brand logos and brand style guides (types: "logo", "brand_style_guide").
- *   - scene_segments[]: Visual descriptions per scene including visual_elements (dominant_colors, clothing_style) for brand palette and tone checks.
- *   - transcript_segments[]: Spoken audio dialogue.
+ * DB CONTEXT:
+ *   - Loads parsed creative brief, transcript/OCR, visual frames, logo frames, and
+ *     product context by review_id + variant_id.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
@@ -68,16 +67,16 @@
  */
 
 // import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { EvidenceBundleSchema } from "../shared/schemas.ts";
+// import { AgentRunRequestSchema } from "../shared/schemas.ts";
 // import type { MetricResult } from "../shared/schemas.ts";
 // // import { chat } from "../shared/llm.ts";
 
-// createEdgeHandler("brand-alignment-agent", EvidenceBundleSchema, async (req, ctx) => {
-//   const _evidence = ctx.body;
+// createEdgeHandler("brand-alignment-agent", AgentRunRequestSchema, async (req, ctx) => {
+//   const _run = ctx.body;
+//   // TODO: Load DB-backed agent context by review_id + variant_id.
 
-//   // TODO: Implement LLM prompting & evaluation logic using the validated `evidence` context
+//   // TODO: Evaluate brand fit from DB-loaded context.
 
 //   const results: MetricResult[] = [];
 //   return ok(results);
 // });
-
