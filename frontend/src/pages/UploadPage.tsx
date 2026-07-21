@@ -14,7 +14,9 @@ export type UploadedVideo = {
   status: "uploading" | "done" | "error";
 };
 
-export type UploadedImage = UploadedVideo;
+export type UploadedImage = UploadedVideo & {
+  kind: "logo" | "product_image";
+};
 
 // Supabase Storage rejects non-ASCII characters in object keys (400
 // InvalidKey), and an unencoded "#" truncates the URL at the fragment
@@ -78,13 +80,17 @@ export default function UploadPage() {
   function handleProductImagesSelected(files: File[]) {
     const validFiles = files.filter((f) => f.type.startsWith("image/"));
 
-    const newImages: UploadedImage[] = validFiles.map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-      filename: file.name,
-      storagePath: null,
-      status: "uploading",
-    }));
+    const newImages: UploadedImage[] = validFiles.map((file) => {
+      const stem = file.name.replace(/\.[^./]+$/, "").toLowerCase();
+      return {
+        id: crypto.randomUUID(),
+        file,
+        filename: file.name,
+        storagePath: null,
+        status: "uploading",
+        kind: stem === "logo" ? "logo" : "product_image",
+      };
+    });
 
     setProductImages((prev) => [...prev, ...newImages]);
     newImages.forEach(uploadProductImage);
@@ -95,11 +101,7 @@ export default function UploadPage() {
       console.error("User not authenticated");
       return;
     }
-    // A file literally named "logo.<ext>" is treated as the logo; everything
-    // else in this same field is a plain product image.
-    const stem = image.file.name.replace(/\.[^./]+$/, "").toLowerCase();
-    const kind = stem === "logo" ? "logo" : "product_image";
-    const path = `${user.id}/${requestId}/${kind}/${image.id}/${sanitizeFilename(image.file.name)}`;
+    const path = `${user.id}/${requestId}/${image.kind}/${image.id}/${sanitizeFilename(image.file.name)}`;
     const { error } = await supabase.storage
       .from("uploads")
       .upload(path, image.file, { contentType: image.file.type });
