@@ -6,6 +6,7 @@ import UploadPage from './pages/UploadPage'
 import LoadingPage from './pages/LoadingPage'
 import ResultPage from './pages/ResultPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
+import AuthCallbackPage from './pages/auth/AuthCallbackPage'
 import SignInPage from './pages/auth/SignInPage'
 import UpdatePasswordPage from './pages/auth/UpdatePasswordPage'
 import PrivacyPage from './pages/legal/PrivacyPage'
@@ -17,6 +18,7 @@ function App() {
       <Routes>
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/upload" replace />} />
+          <Route path="auth/callback" element={<AuthCallbackPage />} />
           <Route path="auth/signin" element={<SignInPage />} />
           <Route path="auth/signup" element={<SignInPage initialMode="signup" />} />
           <Route path="auth/forgot-password" element={<ForgotPasswordPage />} />
