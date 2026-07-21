@@ -81,7 +81,7 @@ export default function UploadPage() {
     const validFiles = files.filter((f) => f.type.startsWith("image/"));
 
     const newImages: UploadedImage[] = validFiles.map((file) => {
-      const stem = file.name.replace(/\.[^./]+$/, "").toLowerCase();
+      const stem = sanitizeFilename(file.name.replace(/\.[^./]+$/, "")).toLowerCase();
       return {
         id: crypto.randomUUID(),
         file,
