@@ -2,13 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import MailIcon from "../../components/icons/MailIcon";
 import { useAuth } from "../../contexts/AuthContext";
-
-function getErrorMessage(error: unknown): string {
-  if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message: unknown }).message);
-  }
-  return "Unable to send password reset email";
-}
+import { getErrorMessage } from "../../lib/errorMessage";
 
 export default function ForgotPasswordPage() {
   const { resetPassword } = useAuth();
@@ -32,7 +26,7 @@ export default function ForgotPasswordPage() {
     setSubmitting(false);
 
     if (error) {
-      setError(getErrorMessage(error));
+      setError(getErrorMessage(error, "Unable to send password reset email"));
       return;
     }
 

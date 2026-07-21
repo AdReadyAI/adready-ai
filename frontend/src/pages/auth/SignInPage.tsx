@@ -9,6 +9,7 @@ import MagnifyingGlassIcon from "../../components/icons/MagnifyingGlassIcon";
 import RocketIcon from "../../components/icons/RocketIcon";
 import TrophyIcon from "../../components/icons/TrophyIcon";
 import { useAuth } from "../../contexts/AuthContext";
+import { getErrorMessage } from "../../lib/errorMessage";
 
 type AuthMode = "signin" | "signup";
 
@@ -21,13 +22,6 @@ const AUTH_MODE_PATHS: Record<AuthMode, string> = {
   signup: "/auth/signup",
 };
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message: unknown }).message);
-  }
-  return fallback;
-}
-
 export default function SignInPage({ initialMode = "signin" }: SignInPageProps) {
   const { signIn, signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
@@ -36,7 +30,9 @@ export default function SignInPage({ initialMode = "signin" }: SignInPageProps) 
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState(rememberedEmail);
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(Boolean(rememberedEmail));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -49,6 +45,7 @@ export default function SignInPage({ initialMode = "signin" }: SignInPageProps) 
     setError(null);
     setConfirmationSent(false);
     setPassword("");
+    setConfirmPassword("");
   }, [initialMode]);
 
   function switchMode(nextMode: AuthMode) {
@@ -58,6 +55,7 @@ export default function SignInPage({ initialMode = "signin" }: SignInPageProps) 
     setError(null);
     setConfirmationSent(false);
     setPassword("");
+    setConfirmPassword("");
     navigate(AUTH_MODE_PATHS[nextMode]);
   }
 
@@ -79,6 +77,11 @@ export default function SignInPage({ initialMode = "signin" }: SignInPageProps) 
 
     if (isSignUp && password.length < 6) {
       setError("Password must be at least 6 characters.");
+      return false;
+    }
+
+    if (isSignUp && password !== confirmPassword) {
+      setError("Passwords do not match.");
       return false;
     }
 
@@ -295,6 +298,36 @@ export default function SignInPage({ initialMode = "signin" }: SignInPageProps) 
                 </button>
               </div>
             </div>
+
+            {isSignUp && (
+              <div>
+                <label htmlFor="auth-confirm-password" className="mb-1.5 block text-sm font-medium text-[#1A1A1A]">
+                  Confirm password
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+                    <LockIcon className="h-5 w-5" />
+                  </div>
+                  <input
+                    id="auth-confirm-password"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Confirm your password"
+                    autoComplete="new-password"
+                    className="w-full rounded-lg border border-transparent bg-[#F3F4F6] py-2.5 pl-10 pr-10 text-gray-900 placeholder-gray-400 transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#5D4FCF]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((current) => !current)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 transition-colors hover:text-gray-600 focus:outline-none"
+                    aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                  >
+                    {showConfirmPassword ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {!isSignUp && (
               <div className="mt-4 flex items-center justify-between">
