@@ -13,11 +13,13 @@ The agent invocation should stay small:
 
 * **`request_id`**: String UUID - request identifier from
   `public.requests.request_id`.
+* **`video_id`**: String UUID - creative/video identifier from
+  `public.request_videos.video_id`.
 * **`agent`**: String - optional agent identifier when the orchestrator uses a
   shared invocation helper.
 
 The request is not the source of transcript, OCR, visual, product, or brief data.
-Those records are loaded from the DB by `request_id`.
+Those records are loaded from the DB by `request_id` and `video_id`.
 
 ---
 
@@ -26,6 +28,7 @@ Those records are loaded from the DB by `request_id`.
 ### Request Context
 
 * **`request_id`**: String UUID.
+* **`video_id`**: String UUID.
 * **`campaign_goal`**: String - main marketing objective, such as
   `"awareness"`, `"consideration"`, or `"conversion"`.
 * **`destination_platform`**: String - publishing target, such as `"tiktok"`,
