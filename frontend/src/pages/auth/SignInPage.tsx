@@ -16,6 +16,11 @@ type SignInPageProps = {
   initialMode?: AuthMode;
 };
 
+const AUTH_MODE_PATHS: Record<AuthMode, string> = {
+  signin: "/auth/signin",
+  signup: "/auth/signup",
+};
+
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === "object" && "message" in error) {
     return String((error as { message: unknown }).message);
@@ -47,10 +52,13 @@ export default function SignInPage({ initialMode = "signin" }: SignInPageProps) 
   }, [initialMode]);
 
   function switchMode(nextMode: AuthMode) {
+    if (nextMode === mode) return;
+
     setMode(nextMode);
     setError(null);
     setConfirmationSent(false);
     setPassword("");
+    navigate(AUTH_MODE_PATHS[nextMode]);
   }
 
   function validateForm() {
@@ -103,7 +111,7 @@ export default function SignInPage({ initialMode = "signin" }: SignInPageProps) 
       return;
     }
 
-    const { error } = await signIn(email, password);
+    const { error } = await signIn(email, password, rememberMe);
     setSubmitting(false);
 
     if (error) {
