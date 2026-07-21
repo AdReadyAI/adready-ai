@@ -1,8 +1,8 @@
 import psycopg2
-<<<<<<< HEAD
+
 # from openai import OpenAI
 from config.settings import OPENROUTER_API_KEY ,DATABASE_URL , OPENROUTER_BASE_URL , logger , ASSEMBLYAI_API_KEY
-=======
+
 import requests
 from openai import OpenAI
 from config.settings import (
@@ -12,7 +12,7 @@ from config.settings import (
     SUPABASE_SERVICE_ROLE_KEY,
     logger,
 )
->>>>>>> c197704 (feat(preprocessing): extract audio and download video)
+
 from functools import lru_cache  
 import assemblyai as aai
 
