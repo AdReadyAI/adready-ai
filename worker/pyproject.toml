@@ -11,6 +11,7 @@ dependencies = [
     "numpy>=2.5.1",
 
     "openai>=2.45.0",
+    "opencv-python>=5.0.0.93",
     "opencv-python-headless>=5.0.0.93",
     "psycopg2-binary>=2.9.12",
     "pydantic>=2.13.4",
