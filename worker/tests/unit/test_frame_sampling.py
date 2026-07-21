@@ -1,6 +1,11 @@
 """Unit tests for the frame-sampling decode pass and probe registry."""
 
 import os
+
+os.environ["DATABASE_URL"] = "mock_db"
+os.environ.setdefault("SUPABASE_URL", "http://localhost:54321")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+
 from dataclasses import fields
 from unittest.mock import MagicMock
 
