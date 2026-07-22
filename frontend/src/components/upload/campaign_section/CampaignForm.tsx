@@ -59,8 +59,12 @@ export default function CampaignForm({ videos, images, requestId }: CampaignForm
       .filter((v) => v.status === "done" && v.storagePath)
       .map((v) => v.storagePath as string);
 
-    const imagePaths = images
-      .filter((img) => img.status === "done" && img.storagePath)
+    const doneImages = images.filter((img) => img.status === "done" && img.storagePath);
+    const productImagePaths = doneImages
+      .filter((img) => img.kind === "product_image")
+      .map((img) => img.storagePath as string);
+    const logoPaths = doneImages
+      .filter((img) => img.kind === "logo")
       .map((img) => img.storagePath as string);
 
     if (mode === "existing") {
@@ -78,7 +82,8 @@ export default function CampaignForm({ videos, images, requestId }: CampaignForm
       .insert({
         request_id: requestId,
         video_storage_paths: videoPaths,
-        product_images: imagePaths,
+        product_image_paths: productImagePaths,
+        logo_paths: logoPaths,
         user_brief: creativeBrief,
         product_url: productUrl,
         campaign_goal: campaignGoal,
@@ -95,7 +100,7 @@ export default function CampaignForm({ videos, images, requestId }: CampaignForm
 
     // Enqueuing a job per video (fan-out) lands here next. The worker's
     // JobPayload still wants a single product_imgs_folder_path, not the
-    // array we now have in product_images — that mismatch needs resolving
+    // array we now have in product_image_paths — that mismatch needs resolving
     // before enqueue_job can be wired up.
     navigate("/result", {
       state: { requestId: request.request_id, videoPaths, productUrl, campaignGoal, creativeBrief },
