@@ -1,14 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { getErrorMessage } from "../../../lib/errorMessage";
 import { supabase } from "../../../lib/supabaseClient";
 import type { UploadedVideo, UploadedImage } from "../../../pages/UploadPage";
-
-function getErrorMessage(error: unknown): string {
-  if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message: unknown }).message);
-  }
-  return "Failed to submit request";
-}
 
 type CampaignMode = "create" | "existing";
 
@@ -94,7 +88,7 @@ export default function CampaignForm({ videos, images, requestId }: CampaignForm
     setSubmitting(false);
 
     if (error) {
-      setSubmitError(getErrorMessage(error));
+      setSubmitError(getErrorMessage(error, "Failed to submit request"));
       return;
     }
 

@@ -6,5 +6,9 @@
 .env.keys
 .env.local
 .env.*.local
+
+# Local env vars for Supabase CLI (GOOGLE_AUTH_CLIENT_ID, etc.)
+.env
+
 functions/.env
 snippets/
