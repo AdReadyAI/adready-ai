@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "assemblyai>=0.64.31",
     "openai>=2.45.0",
     "psycopg2-binary>=2.9.12",
     "pydantic>=2.13.4",

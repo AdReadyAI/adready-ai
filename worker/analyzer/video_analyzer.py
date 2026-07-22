@@ -1,11 +1,21 @@
 import inspect
 import os
-
-from openai import  APIStatusError, APITimeoutError, RateLimitError
+import assemblyai as aai
+import httpx
 
 from analyzer.types import Artifacts
-from config.connection import get_openrouter_client
+from config.connection import get_aai_transcriber
 from app.errors import PermanentError, TransientError
+
+from analyzer.output_models import (
+    TranscriptSegment,
+    TranscriptionResult,
+    ObjectDetectionResult,
+    ContextResult,
+    OcrResult
+)
+
+
 
 
 def analysis_task(name: str):
@@ -19,55 +29,75 @@ def analysis_task(name: str):
 class VideoAnalyzer:
     def __init__(self, artifacts: Artifacts):
         self.artifacts = artifacts
-        self.client = get_openrouter_client()
+
+        
+        self.transcriber = get_aai_transcriber()
 
     @analysis_task("transcription")
-    def transcribe(self):
+    def transcribe(self) -> TranscriptionResult: 
+
 
         if not os.path.exists(self.artifacts.audio_path):
-            raise PermanentError(
-                f"Audio file not found: {self.artifacts.audio_path}"
-            )
+            raise PermanentError(f"Audio file not found: {self.artifacts.audio_path}")
 
         try:
-            with open(self.artifacts.audio_path, "rb") as audio_file:
-                response = self.client.audio.transcriptions.create(
-                    model="openai/whisper-large-v3",
-                    file=audio_file,
-                )
+            config = aai.TranscriptionConfig(speaker_labels=True, punctuate=True)
+            
 
-            return response.text
+            transcript = self.transcriber.transcribe(self.artifacts.audio_path, config)
 
-        except RateLimitError as e:
-            raise TransientError(f"Rate limit exceeded: {e}")
 
-        except APITimeoutError as e:
-            raise TransientError(f"Request timed out: {e}")
+            if transcript.status == aai.TranscriptStatus.error:
+                raise PermanentError(f"AssemblyAI processing failed: {transcript.error}")
 
-        except APIStatusError as e:
-            if e.status_code and e.status_code >= 500:
-                raise TransientError(
-                    f"OpenRouter server error ({e.status_code}): {e}"
-                )
 
-            raise PermanentError(
-                f"OpenRouter request error ({e.status_code}): {e}"
+            segments = [
+                TranscriptSegment(
+                    segment_id=f"tr_{idx:03d}",
+                    start_ms=int(utterance.start),
+                    end_ms=int(utterance.end),
+                    text=utterance.text,
+                    speaker=f"Speaker {utterance.speaker}"
+                ) for idx, utterance in enumerate(transcript.utterances)
+            ]
+
+           
+            return TranscriptionResult(
+                rows=segments
             )
+        except aai.AssemblyAIError as e:
+            status_code = getattr(e, "status_code", None) or 0
+            if status_code == 429 or status_code >= 500:
+                raise TransientError(f"AssemblyAI transient error ({status_code}): {e}")
+            raise PermanentError(f"AssemblyAI API request error ({status_code}): {e}")
+
+
+        except httpx.TimeoutException:
+            raise TransientError("AssemblyAI request timed out")
+        except httpx.TransportError as e:
+            raise TransientError(f"Network failure connecting to AssemblyAI: {e}")
 
         except Exception as e:
-            raise PermanentError(f"Unexpected error: {e}")
+            raise PermanentError(f"Unexpected error in transcribe: {e}")
 
-    @analysis_task("frame_text")
-    def frame_text(self):
-        pass
+   
+        
+
+    @analysis_task("ocr")
+    def ocr(self) -> OcrResult:
+            pass
+
 
     @analysis_task("object_detection")
-    def detect_objects(self):
+    def detect_objects(self) -> ObjectDetectionResult:
         pass
 
+
     @analysis_task("context")
-    def context(self):
+    def context(self) -> ContextResult:
         pass
+
+  
 
     def analysis_tasks(self):
         return {

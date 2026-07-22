@@ -3,7 +3,6 @@ import { AuthProvider } from './contexts/AuthContext'
 import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import UploadPage from './pages/UploadPage'
-import LoadingPage from './pages/LoadingPage'
 import ResultPage from './pages/ResultPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import AuthCallbackPage from './pages/auth/AuthCallbackPage'
@@ -27,7 +26,6 @@ function App() {
           <Route path="privacy" element={<PrivacyPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="upload" element={<UploadPage />} />
-            <Route path="loading" element={<LoadingPage />} />
             <Route path="result" element={<ResultPage />} />
           </Route>
         </Route>

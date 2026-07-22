@@ -8,7 +8,6 @@ const navLinkClasses = ({ isActive }: { isActive: boolean }) =>
 
 export default function AppLayout() {
   const { user, signOut } = useAuth()
-
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
@@ -18,7 +17,6 @@ export default function AppLayout() {
             {user && (
               <>
                 <NavLink to="/upload" className={navLinkClasses}>Upload</NavLink>
-                <NavLink to="/loading" className={navLinkClasses}>Loading</NavLink>
                 <NavLink to="/result" className={navLinkClasses}>Result</NavLink>
                 <button
                   onClick={() => signOut()}

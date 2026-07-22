@@ -1,191 +1,209 @@
-import io
 import os
-import sys
-import unittest
-from unittest.mock import MagicMock, patch
-import httpx
-from openai import APIStatusError, APITimeoutError, RateLimitError
-import pytest
 
-pytestmark = pytest.mark.unit
+import httpx
+
 
 os.environ["DATABASE_URL"] = "mock_db"
 os.environ["OPENROUTER_API_KEY"] = "mock_key"
 
-sys.path.append(
-    os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-)
+import unittest
+from unittest.mock import MagicMock, patch
+import assemblyai as aai
 
 from analyzer.video_analyzer import VideoAnalyzer
 from analyzer.types import Artifacts
+# from analyzer.output_models import TranscriptSegment
 from app.errors import PermanentError, TransientError
 
 
+# @unittest.skip(
+#     "transcribe() is currently a stub on the saveProcessingOutput branch; "
+#     "see test_supabase.py / test_output_models.py for the new persistence logic."
+# )
+
 class TestVideoAnalyzer(unittest.TestCase):
-
     def setUp(self):
-
         self.mock_artifacts = MagicMock(spec=Artifacts)
         self.mock_artifacts.audio_path = "/tmp/fake_audio.mp3"
-        self.mock_artifacts.video_path = "/tmp/fake_video.mp4"
+        
+        self.mock_transcriber = MagicMock()
 
-        self.mock_client = MagicMock()
-
-        self.mock_response = MagicMock()
-        self.mock_response.text = "Test transcription"
-
-        self.mock_client.audio.transcriptions.create.return_value = (
-            self.mock_response
-        )
-
-    def create_analyzer(self):
-        with patch(
-            "analyzer.video_analyzer.get_openrouter_client",
-            return_value=self.mock_client,
-        ):
-            return VideoAnalyzer(self.mock_artifacts)
-
+    
+    @patch("analyzer.video_analyzer.get_aai_transcriber")
     @patch("os.path.exists", return_value=True)
-    def test_transcribe_success(self, mock_exists):
+    def test_transcribe_success(self, mock_exists, mock_get_transcriber):
 
-        analyzer = self.create_analyzer()
+        mock_get_transcriber.return_value = self.mock_transcriber
+        
+        mock_transcript = MagicMock()
+        mock_transcript.status = aai.TranscriptStatus.completed
+         
+        mock_transcript.utterances = [
+            MagicMock(start=0, end=1000, text="Hello", speaker="A"),
+            MagicMock(start=1000, end=2000, text="Hi", speaker="B"),
+        ]
+        
+        self.mock_transcriber.transcribe.return_value = mock_transcript
 
-        with patch(
-            "builtins.open",
-            return_value=io.BytesIO(b"fake audio"),
-        ):
-            result = analyzer.transcribe()
+        analyzer = VideoAnalyzer(self.mock_artifacts)
+        result = analyzer.transcribe()
 
-        self.assertEqual(result, "Test transcription")
+        
+        self.assertEqual(len(result.rows), 2)
+        self.assertEqual(result.rows[0].text, "Hello")
+        self.assertEqual(result.rows[0].speaker, "Speaker A")
+        self.mock_transcriber.transcribe.assert_called_once()
 
-        self.mock_client.audio.transcriptions.create.assert_called_once()
+        
+    @patch("analyzer.video_analyzer.get_aai_transcriber")
+    @patch("os.path.exists", return_value=True)
+    def test_transcribe_api_error_429(self, mock_exists, mock_get_transcriber):
+        mock_get_transcriber.return_value = self.mock_transcriber
+        
+        error = aai.AssemblyAIError("Rate limit exceeded")
+        error.status_code = 429
+        self.mock_transcriber.transcribe.side_effect = error
 
-        _, kwargs = self.mock_client.audio.transcriptions.create.call_args
+        analyzer = VideoAnalyzer(self.mock_artifacts)
+        with self.assertRaises(TransientError):
+            analyzer.transcribe()
 
-        self.assertEqual(
-            kwargs["model"],
-            "openai/whisper-large-v3",
-        )
 
-    @patch("os.path.exists", return_value=False)
-    def test_transcribe_file_not_found(self, mock_exists):
+    @patch("analyzer.video_analyzer.get_aai_transcriber")
+    @patch("os.path.exists", return_value=True)
+    def test_transcribe_api_error_500(self, mock_exists, mock_get_transcriber):
+        mock_get_transcriber.return_value = self.mock_transcriber
 
-        analyzer = self.create_analyzer()
+        error = aai.AssemblyAIError("Internal server error")
+        error.status_code = 500
+        self.mock_transcriber.transcribe.side_effect = error
+
+        analyzer = VideoAnalyzer(self.mock_artifacts)
+
+        with self.assertRaises(TransientError):
+            analyzer.transcribe()
+
+
+
+
+    @patch("analyzer.video_analyzer.get_aai_transcriber")
+    @patch("os.path.exists", return_value=True)
+    def test_transcribe_api_error_400(self, mock_exists, mock_get_transcriber):
+        mock_get_transcriber.return_value = self.mock_transcriber
+
+        error = aai.AssemblyAIError("Bad request")
+        error.status_code = 400
+        self.mock_transcriber.transcribe.side_effect = error
+
+        analyzer = VideoAnalyzer(self.mock_artifacts)
 
         with self.assertRaises(PermanentError):
             analyzer.transcribe()
 
+
+
+
+
+    @patch("analyzer.video_analyzer.get_aai_transcriber")
     @patch("os.path.exists", return_value=True)
-    def test_transcribe_rate_limit(self, mock_exists):
+    def test_transcribe_api_error_without_status_code(self, mock_exists, mock_get_transcriber):
+        mock_get_transcriber.return_value = self.mock_transcriber
 
-        analyzer = self.create_analyzer()
+        error = aai.AssemblyAIError("Unknown error")
+        self.mock_transcriber.transcribe.side_effect = error
 
-        self.mock_client.audio.transcriptions.create.side_effect = (
-            RateLimitError(
-                "Too many requests",
-                response=MagicMock(),
-                body={},
-            )
-        )
+        analyzer = VideoAnalyzer(self.mock_artifacts)
 
-        with patch(
-            "builtins.open",
-            return_value=io.BytesIO(b"fake audio"),
-        ):
-            with self.assertRaises(TransientError):
-                analyzer.transcribe()
+        with self.assertRaises(PermanentError):
+            analyzer.transcribe()
 
+
+
+
+    @patch("analyzer.video_analyzer.get_aai_transcriber")
     @patch("os.path.exists", return_value=True)
-    def test_transcribe_timeout(self, mock_exists):
+    def test_transcribe_processing_error(self, mock_exists, mock_get_transcriber):
+        mock_get_transcriber.return_value = self.mock_transcriber
+        
+        mock_transcript = MagicMock()
+        mock_transcript.status = aai.TranscriptStatus.error
+        mock_transcript.error = "File too large"
+        self.mock_transcriber.transcribe.return_value = mock_transcript
 
-        analyzer = self.create_analyzer()
+        analyzer = VideoAnalyzer(self.mock_artifacts)
+        with self.assertRaises(PermanentError):
+            analyzer.transcribe()
 
-        self.mock_client.audio.transcriptions.create.side_effect = (
-            APITimeoutError(request=MagicMock())
-        )
+    @patch("analyzer.video_analyzer.get_aai_transcriber") 
+    @patch("os.path.exists", return_value=False)
+    def test_transcribe_file_not_found(self, mock_exists, mock_get_transcriber): 
+        mock_get_transcriber.return_value = self.mock_transcriber
+        analyzer = VideoAnalyzer(self.mock_artifacts)
+        with self.assertRaises(PermanentError):
+            analyzer.transcribe()
 
-        with patch(
-            "builtins.open",
-            return_value=io.BytesIO(b"fake audio"),
-        ):
-            with self.assertRaises(TransientError):
-                analyzer.transcribe()
-
+    @patch("analyzer.video_analyzer.get_aai_transcriber")
     @patch("os.path.exists", return_value=True)
-    def test_transcribe_api_error_500(self, mock_exists):
+    def test_transcribe_unexpected_error(self, mock_exists, mock_get_transcriber):
+        mock_get_transcriber.return_value = self.mock_transcriber
+        self.mock_transcriber.transcribe.side_effect = Exception("Boom")
+        
+        analyzer = VideoAnalyzer(self.mock_artifacts)
+        with self.assertRaises(PermanentError):
+            analyzer.transcribe()
 
-        analyzer = self.create_analyzer()
 
-        request = httpx.Request(
-            "POST",
-            "https://openrouter.ai/api/v1/audio/transcriptions",
-        )
 
-        response = httpx.Response(
-            status_code=500,
-            request=request,
-        )
-
-        error = APIStatusError(
-            "Internal Server Error",
-            response=response,
-            body={},
-        )
-
-        self.mock_client.audio.transcriptions.create.side_effect = error
-
-        with patch(
-            "builtins.open",
-            return_value=io.BytesIO(b"fake audio"),
-        ):
-            with self.assertRaises(TransientError):
-                analyzer.transcribe()
-
+    @patch("analyzer.video_analyzer.get_aai_transcriber")
     @patch("os.path.exists", return_value=True)
-    def test_transcribe_api_error_400(self, mock_exists):
+    def test_transcribe_empty_utterances(self, mock_exists, mock_get_transcriber):
+        mock_get_transcriber.return_value = self.mock_transcriber
 
-        analyzer = self.create_analyzer()
+        transcript = MagicMock()
+        transcript.status = aai.TranscriptStatus.completed
+        transcript.utterances = []
 
-        request = httpx.Request(
-            "POST",
-            "https://openrouter.ai/api/v1/audio/transcriptions",
-        )
+        self.mock_transcriber.transcribe.return_value = transcript
 
-        response = httpx.Response(
-            status_code=400,
-            request=request,
-        )
+        analyzer = VideoAnalyzer(self.mock_artifacts)
+        result = analyzer.transcribe()
 
-        error = APIStatusError(
-            "Bad Request",
-            response=response,
-            body={},
-        )
+        self.assertEqual(result.rows, [])
 
-        self.mock_client.audio.transcriptions.create.side_effect = error
 
-        with patch(
-            "builtins.open",
-            return_value=io.BytesIO(b"fake audio"),
-        ):
-            with self.assertRaises(PermanentError):
-                analyzer.transcribe()
 
+    @patch("analyzer.video_analyzer.get_aai_transcriber")
     @patch("os.path.exists", return_value=True)
-    def test_transcribe_unexpected_error(self, mock_exists):
+    def test_transcribe_transport_error(self, mock_exists, mock_get_transcriber):
+        mock_get_transcriber.return_value = self.mock_transcriber
 
-        analyzer = self.create_analyzer()
+        self.mock_transcriber.transcribe.side_effect = httpx.TransportError("network")
 
-        self.mock_client.audio.transcriptions.create.side_effect = Exception(
-            "Boom"
-        )
+        analyzer = VideoAnalyzer(self.mock_artifacts)
 
-        with patch(
-            "builtins.open",
-            return_value=io.BytesIO(b"fake audio"),
-        ):
-            with self.assertRaises(PermanentError):
-                analyzer.transcribe()
+        with self.assertRaises(TransientError):
+            analyzer.transcribe()
+
+
+
+
+    @patch("analyzer.video_analyzer.get_aai_transcriber")
+    @patch("os.path.exists", return_value=True)
+    def test_transcribe_timeout(self, mock_exists, mock_get_transcriber):
+        mock_get_transcriber.return_value = self.mock_transcriber
+
+        self.mock_transcriber.transcribe.side_effect = httpx.TimeoutException("timeout")
+
+        analyzer = VideoAnalyzer(self.mock_artifacts)
+
+        with self.assertRaises(TransientError):
+            analyzer.transcribe()
+
+
+
+
+
+
 
 
 if __name__ == "__main__":
