@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "@std/assert";
 import { SCORE_CONFIG_V0_2 } from "../../../functions/_shared/score-engine/config.ts";
 import {
   clampSeverity,

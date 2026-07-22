@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals } from "@std/assert";
 import { parseScoreEngineRequest } from "../../../functions/_shared/score-engine/parseRequest.ts";
 
 Deno.test("parseScoreEngineRequest accepts valid metric_results", () => {

@@ -3,6 +3,9 @@
     "test:unit": "deno test tests/functions/unit",
     "test:integration": "deno test --allow-env --allow-net tests/functions/integration"
   },
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1"
+  },
   "fmt": {
     "include": ["functions", "tests/functions"]
   },
