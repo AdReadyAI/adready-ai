@@ -1,5 +1,13 @@
 export { SCORE_CONFIG_V0_2, ALL_METRIC_IDS } from "./config.ts";
 export {
+  parseScoreEngineRequest,
+} from "./parseRequest.ts";
+export type {
+  ParseRequestFailure,
+  ParseRequestResult,
+  ParseRequestSuccess,
+} from "./parseRequest.ts";
+export {
   clampSeverity,
   metricScore,
   scoreEngine,
