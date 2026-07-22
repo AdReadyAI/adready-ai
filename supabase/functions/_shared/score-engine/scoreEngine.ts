@@ -7,9 +7,9 @@ import type {
   MetricInput,
   MetricResultValue,
   ReadinessStatus,
+  ScoredMetric,
   ScoreEngineConfig,
   ScoreEngineOutput,
-  ScoredMetric,
   Severity,
 } from "./types.ts";
 

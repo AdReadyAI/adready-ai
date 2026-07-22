@@ -1,4 +1,9 @@
-import type { MetricId, MetricInput, MetricResultValue, Severity } from "./types.ts";
+import type {
+  MetricId,
+  MetricInput,
+  MetricResultValue,
+  Severity,
+} from "./types.ts";
 import { ALL_METRIC_IDS } from "./config.ts";
 
 const RESULTS = new Set<MetricResultValue>([
@@ -68,7 +73,9 @@ export function parseScoreEngineRequest(body: unknown): ParseRequestResult {
         error: `metric_results[${i}].metric_id is invalid`,
       };
     }
-    if (typeof result !== "string" || !RESULTS.has(result as MetricResultValue)) {
+    if (
+      typeof result !== "string" || !RESULTS.has(result as MetricResultValue)
+    ) {
       return {
         ok: false,
         error: `metric_results[${i}].result must be true|false|cannot_assess`,
@@ -99,7 +106,8 @@ export function parseScoreEngineRequest(body: unknown): ParseRequestResult {
       input.explanation = explanation;
     }
 
-    const recommendedFix = (row as { recommended_fix?: unknown }).recommended_fix;
+    const recommendedFix =
+      (row as { recommended_fix?: unknown }).recommended_fix;
     if (recommendedFix !== undefined) {
       if (typeof recommendedFix !== "string") {
         return {
