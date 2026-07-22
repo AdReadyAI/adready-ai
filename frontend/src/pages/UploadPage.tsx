@@ -81,6 +81,9 @@ export default function UploadPage() {
     const validFiles = files.filter((f) => f.type.startsWith("image/"));
 
     const newImages: UploadedImage[] = validFiles.map((file) => {
+      // Naming convention (per PM): a file literally named "logo.<ext>" is
+      // treated as the logo; everything else in this same field is a plain
+      // product image.
       const stem = sanitizeFilename(file.name.replace(/\.[^./]+$/, "")).toLowerCase();
       return {
         id: crypto.randomUUID(),

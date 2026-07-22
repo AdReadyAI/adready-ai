@@ -100,7 +100,7 @@ export default function CampaignForm({ videos, images, requestId }: CampaignForm
 
     // Enqueuing a job per video (fan-out) lands here next. The worker's
     // JobPayload still wants a single product_imgs_folder_path, not the
-    // array we now have in product_images — that mismatch needs resolving
+    // array we now have in product_image_paths — that mismatch needs resolving
     // before enqueue_job can be wired up.
     navigate("/result", {
       state: { requestId: request.request_id, videoPaths, productUrl, campaignGoal, creativeBrief },
