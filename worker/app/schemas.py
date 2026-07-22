@@ -4,4 +4,5 @@ class JobPayload(BaseModel):
     request_id: str
     bucket: str
     video_path: str
-    product_imgs_folder_path: str
+    product_image_paths: list[str]
+    logo_paths: list[str]

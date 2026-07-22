@@ -272,15 +272,17 @@ through the Supabase transaction pooler under load.
 
 ```jsonc
 {
-  "request_id": "uuid",                    // job identifier
-  "bucket": "videos",                      // Storage bucket holding the inputs
-  "video_path": "path/to/video.mp4",       // video object key within the bucket
-  "product_imgs_folder_path": "path/imgs"  // folder of product images for detection
+  "request_id": "uuid",                          // job identifier
+  "bucket": "videos",                            // Storage bucket holding the inputs
+  "video_path": "path/to/video.mp4",             // video object key within the bucket
+  "product_image_paths": ["path/imgs/p1.png"],   // product image object keys for detection
+  "logo_paths": []                               // logo object keys; may be empty
 }
 ```
 
-Validated with pydantic (`JobPayload.model_validate`) — all four fields are
-required. A structurally invalid payload fails identically on every retry and is
+Validated with pydantic (`JobPayload.model_validate`) — all five fields are
+required, though `logo_paths` may be an empty list (not every request has a logo).
+A structurally invalid payload fails identically on every retry and is
 archived after `MAX_RETRIES` (poison-message handling).
 
 ---

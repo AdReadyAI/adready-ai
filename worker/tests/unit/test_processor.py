@@ -20,7 +20,8 @@ VALID_PAYLOAD = {
     "request_id": "req-1",
     "bucket": "videos",
     "video_path": "path/to/video.mp4",
-    "product_imgs_folder_path": "path/to/imgs",
+    "product_image_paths": ["path/to/imgs/product_1.png"],
+    "logo_paths": ["path/to/imgs/logo_1.png"],
 }
 
 
@@ -38,6 +39,13 @@ def test_parse_payload_invalid_raises_value_error():
     # pydantic ValidationError subclasses ValueError.
     with pytest.raises(ValueError):
         processor._parse_payload(1, {"request_id": "only-this"})
+
+
+def test_parse_payload_allows_empty_logo_paths():
+    # A request with no logos is valid; only product_image_paths is guaranteed non-empty.
+    payload = {**VALID_PAYLOAD, "logo_paths": []}
+    parsed = processor._parse_payload(1, payload)
+    assert parsed.logo_paths == []
 
 
 # ---------------------------------------------------------------------------
