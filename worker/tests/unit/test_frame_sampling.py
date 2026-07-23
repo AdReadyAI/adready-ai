@@ -20,6 +20,10 @@ from analyzer.frame_sampling.base import (
     register_probe,
 )
 from analyzer.frame_sampling.context import FrameContext
+from analyzer.frame_sampling.probes.adaptive import (
+    AdaptiveSampler,
+    AdaptiveSamplerResult,
+)
 from analyzer.frame_sampling.sampler import FrameSampler
 from analyzer.frame_sampling.store import FrameStore
 from analyzer.types import VideoMetadata
@@ -100,6 +104,66 @@ def test_probe_result_is_subclassable_carrier():
         cuts: list = field(default_factory=list)
 
     assert WithExtras(cuts=[1.0]).cuts == [1.0]
+
+
+# ---- AdaptiveSampler ----
+def test_adaptive_sampler_degrades_to_no_keyframes_without_scene_signal(tmp_path):
+    store = FrameStore(str(tmp_path))
+    sampler = AdaptiveSampler()
+
+    for index in range(3):
+        ctx = _ctx(index, index / 30, _frame())
+        ctx.store = store
+        sampler.process(ctx)
+
+    result = sampler.finalize()
+
+    assert store.manifest() == []
+    assert result == AdaptiveSamplerResult(keyframe_count=0, keyframe_indices=())
+
+
+def test_adaptive_sampler_keeps_shot_starts_and_resets_budget(tmp_path):
+    store = FrameStore(str(tmp_path))
+    sampler = AdaptiveSampler()
+    frames = [
+        (0, 0.3, False),
+        (1, 0.3, True),
+        (2, 0.3, False),
+    ]
+
+    for index, content_val, shot_boundary in frames:
+        ctx = _ctx(index, index / 30, _frame())
+        ctx.store = store
+        ctx.content_val = content_val
+        ctx.shot_boundary = shot_boundary
+        sampler.process(ctx)
+
+    result = sampler.finalize()
+
+    assert [frame.timestamp for frame in store.manifest()] == [pytest.approx(1 / 30)]
+    assert result.keyframe_indices == (1,)
+
+
+def test_adaptive_sampler_keeps_when_change_budget_reaches_threshold(tmp_path):
+    store = FrameStore(str(tmp_path))
+    sampler = AdaptiveSampler()
+
+    for index, content_val in enumerate([0.2, 0.2, 0.1, 0.4, 0.1]):
+        ctx = _ctx(index, index / 30, _frame())
+        ctx.store = store
+        ctx.content_val = content_val
+        sampler.process(ctx)
+
+    result = sampler.finalize()
+    manifest = store.manifest()
+
+    assert [frame.timestamp for frame in manifest] == [
+        pytest.approx(2 / 30),
+        pytest.approx(4 / 30),
+    ]
+    assert all(frame.tags == ("keyframe",) for frame in manifest)
+    assert result.keyframe_count == 2
+    assert result.keyframe_indices == (2, 4)
 
 
 def test_frame_selection_holds_no_pixels():
