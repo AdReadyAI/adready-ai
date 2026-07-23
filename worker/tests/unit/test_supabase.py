@@ -1,5 +1,8 @@
 """Unit tests for the Supabase persistence layer (app/supabase.py)."""
 
+from types import SimpleNamespace
+from uuid import UUID
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -13,6 +16,8 @@ from analyzer.output_models import (
 )
 
 REQUEST_ID = "11111111-1111-1111-1111-111111111111"
+AD_CREATIVE_ID = "22222222-2222-2222-2222-222222222222"
+OCR_RUN_ID = "33333333-3333-3333-3333-333333333333"
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +72,58 @@ def _segment(idx=0):
         text=f"line {idx}",
         speaker="unknown",
     )
+
+
+def _ocr_payload():
+    """Build the trusted identity and source contract accepted by the store."""
+
+    return SimpleNamespace(
+        request_id=UUID(REQUEST_ID),
+        ad_creative_id=UUID(AD_CREATIVE_ID),
+        ocr_run_id=UUID(OCR_RUN_ID),
+        bucket="uploads",
+        video_path="user/video.mp4",
+    )
+
+
+# ---------------------------------------------------------------------------
+# create_or_resume_ocr_run()
+# ---------------------------------------------------------------------------
+def test_create_or_resume_ocr_run_returns_durable_status():
+    cur = FakeCursor(
+        fetchone_queue=[
+            (UUID(REQUEST_ID), "uploads", "user/video.mp4"),
+            ("processing",),
+        ]
+    )
+    db = Supabase(cur=cur, request_id=UUID(REQUEST_ID))
+
+    status = db.create_or_resume_ocr_run(_ocr_payload())
+
+    assert status == "processing"
+    executed_sql = "\n".join(sql for sql, _ in cur.executed)
+    assert "INSERT INTO ad_creatives" in executed_sql
+    assert "INSERT INTO ocr_runs" in executed_sql
+    assert "ON CONFLICT (ocr_run_id)" in executed_sql
+    assert cur.connection.commits == 1
+
+
+def test_fail_ocr_run_records_failure_for_the_expected_run():
+    cur = FakeCursor(fetchone_queue=[("failed",)])
+    db = Supabase(cur=cur, request_id=UUID(REQUEST_ID))
+
+    db.fail_ocr_run(UUID(OCR_RUN_ID), "Ad Creative duration is invalid")
+
+    sql, params = cur.executed[0]
+    assert "UPDATE ocr_runs" in sql
+    assert "status = 'failed'" in sql
+    assert "RETURNING status" in sql
+    assert params == (
+        "Ad Creative duration is invalid",
+        UUID(OCR_RUN_ID),
+        UUID(REQUEST_ID),
+    )
+    assert cur.connection.commits == 1
 
 
 # ---------------------------------------------------------------------------

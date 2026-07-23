@@ -5,7 +5,7 @@ import httpx
 
 from analyzer.types import Artifacts
 from config.connection import get_aai_transcriber
-from app.errors import PermanentError, TransientError
+from config.errors import PermanentError, TransientError
 
 from analyzer.output_models import (
     TranscriptSegment,

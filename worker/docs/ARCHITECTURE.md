@@ -1,9 +1,9 @@
 # Worker Architecture
 
-The worker is a background service that consumes video-analysis jobs from a
-Postgres-backed queue (**pgmq**), runs four independent AI analyses on each
-video **concurrently**, and persists the results. It has no HTTP surface — it
-pulls work from the queue and is scaled horizontally by running more replicas.
+The worker is a background service that consumes Media Processing jobs from a
+Postgres-backed queue (**pgmq**) and persists durable analysis runs. The first
+vertical slice accepts OCR-only jobs and establishes an idempotent OCR Run plus
+validated media timing before any paid provider call. It has no HTTP surface.
 
 ---
 
@@ -16,7 +16,7 @@ flowchart LR
     Q -->|NOTIFY new_job| W["Worker(s)"]
     W -->|read / heartbeat / delete| Q
     W -->|download video| ST
-    W -->|Whisper / Gemini / Replicate| API["External AI APIs"]
+    W -->|OCR analysis| API["External AI APIs"]
     W -->|persist results| DB["Postgres"]
 ```
 
@@ -37,14 +37,15 @@ worker/
 │   ├── heartbeat.py         # HeartBeat: extends message visibility while working
 │   ├── processor.py         # process_message: parse → preprocess → analyze → persist
 │   ├── schemas.py           # JobPayload (pydantic) — validated job contract
-│   └── errors.py            # TransientError / PermanentError
+│   └── errors.py            # compatibility exports for shared failure types
 ├── config/                  # configuration & infrastructure
 │   ├── settings.py          # env vars + logger
+│   ├── errors.py            # shared TransientError / PermanentError
 │   └── connection.py        # psycopg2 connection factory (autocommit)
 ├── analyzer/                # video analysis domain
 │   ├── types.py             # Artifacts, Frame (immutable dataclasses)
 │   ├── video_preprocessor.py# VideoPreprocessor: video → Artifacts
-│   └── video_analyzer.py    # VideoAnalyzer: the 4 analysis tasks
+│   └── video_analyzer.py    # VideoAnalyzer: registered analysis tasks
 ├── models/                  # model benchmarks (excluded from Docker image)
 ├── Dockerfile
 └── pyproject.toml
@@ -140,38 +141,43 @@ Key design points:
 
 ---
 
-## 6. Job processing & the parallel fan-out (`app/processor.py`)
+## 6. OCR Run intake and Media Processing (`app/processor.py`)
 
 ```mermaid
 flowchart TD
-    PA["parse & validate payload (JobPayload)"] --> PR["VideoPreprocessor.prepare()"]
-    PR --> ART["Artifacts (immutable)"]
-    ART --> FO["_run_analysis: ThreadPoolExecutor(4)"]
-    FO --> T1["transcription"]
-    FO --> T2["ocr"]
-    FO --> T3["object_detection"]
-    FO --> T4["context"]
-    T1 --> G["gather results / errors"]
-    T2 --> G
-    T3 --> G
-    T4 --> G
-    G --> PER["persist results (partial ok)"]
+    PA["validate trusted OCR payload"] --> RUN["create or resume OCR Run"]
+    RUN -->|completed| SKIP["short-circuit redelivery"]
+    RUN -->|processing| PR["download + ffprobe"]
+    PR --> TS{"presentation timestamps?"}
+    TS -->|yes| PTS["record PTS timing"]
+    TS -->|no| CFR["require and record verified CFR fallback"]
+    PTS --> ART["validated Artifacts"]
+    CFR --> ART
+    ART --> FO["run requested registered analysis"]
+    FO --> G["gather results / errors"]
+    G --> PER["persist results"]
     PER --> E{"any errors?"}
     E -->|yes| RAISE["raise → job-level retry"]
     E -->|no| OK["return → delete message"]
 ```
 
-### Preprocess once, then fan out
-`VideoPreprocessor.prepare()` downloads the video **once** and derives the shared
-inputs (audio for Whisper, sampled frames for the frame-based analyzers, plus
-metadata), returning an immutable `Artifacts`. This avoids each analyzer
-re-downloading the video and keeps memory bounded (frames sampled to disk, only
-paths held in memory).
+### Establish identity and timing before analysis
+The caller supplies stable Review Request, Ad Creative, and OCR Run identifiers.
+The worker upserts the Ad Creative identity, creates or resumes the OCR Run, and
+does not repeat a completed run. `VideoPreprocessor.prepare()` then streams the
+private video to temporary storage and uses `ffprobe` to reject undecodable,
+over-60-second, or invalid media before constructing an analysis provider.
 
-### Concurrency model
-The four analyzers are **I/O-bound** (each waits on an external API), so they run
-on a `ThreadPoolExecutor(max_workers=4)`. The GIL is released during network I/O,
-so they genuinely wait in parallel and latency becomes `max(4)` instead of `sum`.
+Presentation timestamps are authoritative, including for variable-frame-rate
+media. Frame-index timing is allowed only when timestamps are absent and ffprobe
+reports matching positive average and real frame rates; that fallback is
+recorded explicitly in `Artifacts`.
+
+### Analysis registry and concurrency
+`app.schemas.SUPPORTED_ANALYSES` is the worker-owned admission registry. The
+current trusted contract contains exactly one requested analysis, `ocr`.
+`_run_analysis` still uses a thread executor so later approved analyses can run
+concurrently without changing the orchestration boundary.
 
 **Thread-safety:** every analyzer only **reads** the shared immutable `Artifacts`
 (paths, frames, metadata). Concurrent reads don't race. Analyzers hold no shared
@@ -237,7 +243,7 @@ Two axes, used together in production:
   for I/O efficiency. Adds shared-fate risks (memory/OOM, DB connections, rate
   limits) — add only when volume justifies it.
 
-**Hard ceiling:** `replicas × jobs_per_replica × 4` simultaneous API calls must
+**Hard ceiling:** `replicas × jobs_per_replica × requested analyses` simultaneous API calls must
 stay under external rate limits and the Supabase connection budget
 (≈ `1 + 2 × in-flight jobs` connections per replica). Route `DATABASE_URL`
 through the Supabase transaction pooler under load.
@@ -265,6 +271,10 @@ through the Supabase transaction pooler under load.
 | `MAX_RETRIES` | `3` | job-level attempts before archiving |
 | `ANALYSIS_TASK_MAX_ATTEMPTS` | `3` | inner per-analyzer total attempts (1 initial + 2 retries) |
 | `RETRY_BASE_DELAY` | `5` | base seconds for outer-layer backoff (`× 2^(read_ct-1)`) on job failure |
+| `SUPABASE_URL` | — (required for media) | Storage project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | — (required for media) | private Storage authentication |
+| `DOWNLOAD_TIMEOUT` | `60` | Storage request timeout in seconds |
+| `FFPROBE_TIMEOUT` | `30` | media inspection timeout in seconds |
 
 ---
 
@@ -272,16 +282,23 @@ through the Supabase transaction pooler under load.
 
 ```jsonc
 {
-  "request_id": "uuid",                    // job identifier
+  "request_id": "uuid",                    // stable Review Request
+  "ad_creative_id": "uuid",                // stable source identity
+  "ocr_run_id": "uuid",                    // idempotency and rerun identity
+  "requested_analyses": ["ocr"],            // validated against worker registry
   "bucket": "videos",                      // Storage bucket holding the inputs
   "video_path": "path/to/video.mp4",       // video object key within the bucket
-  "product_imgs_folder_path": "path/imgs"  // folder of product images for detection
+  "product_imgs_folder_path": "path/imgs", // retained legacy field
+  "logo_imgs_folder_path": "path/logos"    // retained legacy field
 }
 ```
 
-Validated with pydantic (`JobPayload.model_validate`) — all four fields are
-required. A structurally invalid payload fails identically on every retry and is
-archived after `MAX_RETRIES` (poison-message handling).
+The six identity, analysis, and source fields are required. The two image-folder
+fields are optional legacy inputs retained for producer compatibility.
+
+Validated with pydantic (`JobPayload.model_validate`). A structurally invalid
+payload fails identically on every retry and is archived after `MAX_RETRIES`
+(poison-message handling).
 
 ---
 

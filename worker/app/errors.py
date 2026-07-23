@@ -1,6 +1,5 @@
-class TransientError(Exception):
-    """Temporary failure that is worth retrying (429, 5xx, timeout, network)."""
+"""Backward-compatible exports for shared worker failures."""
 
+from config.errors import PermanentError, TransientError
 
-class PermanentError(Exception):
-    """Failure that will never succeed on retry (400, 401, invalid input)."""
+__all__ = ["PermanentError", "TransientError"]
