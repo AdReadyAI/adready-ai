@@ -113,17 +113,22 @@
  *   ]
  */
 
-// import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { AgentRunRequestSchema } from "../shared/schemas.ts";
-// import type { MetricResult } from "../shared/schemas.ts";
-// // import { chat } from "../shared/llm.ts";
+import { createEdgeHandler, ok } from "../shared/index.ts";
+import { AgentRunRequestSchema } from "../shared/schemas.ts";
+import { defaultLlmClient } from "../shared/llm_client.ts";
+import { loadAgentContext } from "../shared/context.ts";
+import { runStorylineAgent } from "./agent.ts";
 
-// createEdgeHandler("storyline-clarity-agent", AgentRunRequestSchema, async (req, ctx) => {
-//   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by request_id.
-
-//   // TODO: Evaluate platform readiness and story flow from DB-loaded context.
-
-//   const results: MetricResult[] = [];
-//   return ok(results);
-// });
+// createEdgeHandler wraps CORS, auth, and AgentRunRequest validation. The agent
+// loads its AgentContext from the DB by request_id (loadAgentContext is a stub
+// until the context tables land), then always returns its two metric_results,
+// degrading to cannot_assess rather than throwing.
+createEdgeHandler(
+  "storyline-clarity-agent",
+  AgentRunRequestSchema,
+  async (_req, ctx) => {
+    const context = await loadAgentContext(ctx.body.request_id);
+    const results = await runStorylineAgent(context, defaultLlmClient);
+    return ok(results);
+  },
+);
