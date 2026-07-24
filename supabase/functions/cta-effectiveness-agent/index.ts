@@ -122,7 +122,9 @@ createEdgeHandler(
   "cta-effectiveness-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
-    const context = await loadAgentContext(ctx.body.request_id);
+    const context = await loadAgentContext(ctx.body.request_id, undefined, {
+      userId: ctx.user.id,
+    });
     const results = await runCtaAgent(context, defaultLlmClient);
     return ok(results);
   },
