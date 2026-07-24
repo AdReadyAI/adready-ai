@@ -87,11 +87,13 @@ export function evaluationPrompt(
     "— using the frames labeled detour and their timestamps, judge whether the time they take is disproportionate " +
     "to the ad's length.\n\n" +
     CREATIVE_EFFECTIVENESS_RUBRIC +
-    "\n\nReturn only JSON: { sub_checks: [{ check_id, result (passed|failed|cannot_assess), severity " +
-    "(none|low|medium|high|critical), explanation (only when failed, naming the timestamp/frame) }], plus for " +
-    "the metric as a whole: confidence (high|medium|low), evidence (array of {type, text, timestamp}), " +
-    "explanation, suggested_correction (a specific actionable fix), correction_type }. Use cannot_assess when the " +
-    "inputs do not let you judge a sub-check; do not guess and do not report a pass to fill a gap.";
+    "\n\nReturn ONLY a single JSON object with these exact TOP-LEVEL keys and NO wrapper object around them: " +
+    '"sub_checks" (array of { check_id, result: passed|failed|cannot_assess, severity: ' +
+    "none|low|medium|high|critical, explanation (only when failed, naming the timestamp/frame) }), " +
+    '"confidence" (high|medium|low), "evidence" (array of { type: transcript|ocr|visual|brief|metadata, text, ' +
+    'timestamp }), "explanation", "suggested_correction" (a specific actionable fix), "correction_type". Do not ' +
+    "nest confidence/evidence/explanation under any other key. Use cannot_assess when the inputs do not let you " +
+    "judge a sub-check; do not guess and do not report a pass to fill a gap.";
   return [
     { role: "system", content: system },
     { role: "user", content: evaluationInput(ctx, arc) },

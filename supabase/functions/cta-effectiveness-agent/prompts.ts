@@ -88,11 +88,13 @@ export function evaluationPrompt(
     "cta_destination_unclear — would a viewer know where the CTA sends them (a website, store, or app named or " +
     "shown)?\n\n" +
     CTA_CLARITY_RUBRIC +
-    "\n\nReturn only JSON: { sub_checks: [{ check_id, result (passed|failed|cannot_assess), severity " +
-    "(none|low|medium|high|critical), explanation (only when failed, quoting the CTA text and its timestamp) }], " +
-    "plus for the metric as a whole: confidence (high|medium|low), evidence (array of {type, text, timestamp}), " +
-    "explanation, suggested_correction (a specific CTA rewrite or placement fix), correction_type }. Use " +
-    "cannot_assess when the inputs do not let you judge a sub-check; do not guess.";
+    "\n\nReturn ONLY a single JSON object with these exact TOP-LEVEL keys and NO wrapper object around them: " +
+    '"sub_checks" (array of { check_id, result: passed|failed|cannot_assess, severity: ' +
+    "none|low|medium|high|critical, explanation (only when failed, quoting the CTA text and its timestamp) }), " +
+    '"confidence" (high|medium|low), "evidence" (array of { type: transcript|ocr|visual|brief|metadata, text, ' +
+    'timestamp }), "explanation", "suggested_correction" (a specific CTA rewrite or placement fix), ' +
+    '"correction_type". Do not nest confidence/evidence/explanation under any other key. Use cannot_assess when ' +
+    "the inputs do not let you judge a sub-check; do not guess.";
   return [
     { role: "system", content: system },
     { role: "user", content: evaluationInput(ctx, acquisition, benchmark) },

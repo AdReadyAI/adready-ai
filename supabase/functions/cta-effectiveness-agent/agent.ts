@@ -26,6 +26,7 @@ import { assembleMetric, type MetricLevelFields } from "../shared/metric.ts";
 import { cannotAssess, failed, passed } from "../shared/subcheck.ts";
 import {
   coerceCorrectionType,
+  coerceEvidence,
   fromLlmSubCheck,
   indexSubChecks,
 } from "../shared/llm_eval.ts";
@@ -212,7 +213,7 @@ function buildCtaClarity(
 
   const fields: MetricLevelFields = {
     confidence: evaluation?.confidence ?? "low",
-    evidence: evaluation?.evidence,
+    evidence: coerceEvidence(evaluation?.evidence),
     explanation: evaluation?.explanation ??
       (evaluation === null
         ? "The evaluation call did not return a usable result."

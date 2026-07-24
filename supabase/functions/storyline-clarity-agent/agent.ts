@@ -23,6 +23,7 @@ import { assembleMetric, type MetricLevelFields } from "../shared/metric.ts";
 import { cannotAssess } from "../shared/subcheck.ts";
 import {
   coerceCorrectionType,
+  coerceEvidence,
   fromLlmSubCheck,
   indexSubChecks,
 } from "../shared/llm_eval.ts";
@@ -205,7 +206,7 @@ function buildCreativeEffectiveness(
 
   const fields: MetricLevelFields = {
     confidence,
-    evidence: evaluation?.evidence,
+    evidence: coerceEvidence(evaluation?.evidence),
     explanation: evaluation?.explanation ??
       (evaluation === null
         ? "The evaluation call did not return a usable result."

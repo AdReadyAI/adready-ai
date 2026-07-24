@@ -11,7 +11,7 @@
 import { z } from "zod";
 import {
   ConfidenceLevelSchema,
-  EvidenceRefSchema,
+  type EvidenceRef,
   type MetricResult,
   type SeverityLevel,
   SeverityLevelSchema,
@@ -25,20 +25,62 @@ export const LlmSubCheckSchema = z.object({
   check_id: z.string(),
   result: z.enum(["passed", "failed", "cannot_assess"]),
   severity: SeverityLevelSchema,
-  explanation: z.string().optional(),
+  explanation: z.string().nullish(), // model may send null on passing checks
 });
 export type LlmSubCheck = z.infer<typeof LlmSubCheckSchema>;
 
-/** The standard Call-2 envelope: sub-check verdicts + metric-level fields. */
+/**
+ * Lenient evidence as the model may emit it — `type` is a free string and
+ * `timestamp` may be absent. `coerceEvidence` normalizes it to a valid
+ * EvidenceRef before it reaches the metric_result.
+ */
+const LlmEvidenceSchema = z.object({
+  type: z.string(),
+  text: z.string(),
+  timestamp: z.string().nullish(), // model may send null or omit it
+});
+
+/**
+ * The standard Call-2 envelope: the sub-check verdicts (load-bearing) plus
+ * metric-level fields. Everything except `sub_checks` is optional so a reply that
+ * nests or omits the metric-level fields still parses on the strength of its
+ * sub-checks rather than being discarded whole.
+ */
 export const EvaluationResponseSchema = z.object({
   sub_checks: z.array(LlmSubCheckSchema),
-  confidence: ConfidenceLevelSchema,
-  evidence: z.array(EvidenceRefSchema).optional(),
+  // Metric-level fields are all optional so a reply that nests or omits them
+  // still parses on the strength of its sub_checks. The item schemas above accept
+  // the null-vs-omitted variants models actually emit (nullish explanation/timestamp).
+  confidence: ConfidenceLevelSchema.optional(),
+  evidence: z.array(LlmEvidenceSchema).optional(),
   explanation: z.string().optional(),
   suggested_correction: z.string().optional(),
   correction_type: z.string().optional(),
 });
 export type EvaluationResponse = z.infer<typeof EvaluationResponseSchema>;
+
+const EVIDENCE_TYPES = [
+  "transcript",
+  "ocr",
+  "visual",
+  "brief",
+  "product_page",
+  "metadata",
+] as const;
+
+/** Normalize model-supplied evidence into valid EvidenceRefs (unknown type → metadata). */
+export function coerceEvidence(
+  evidence: EvaluationResponse["evidence"],
+): EvidenceRef[] | undefined {
+  if (evidence === undefined) return undefined;
+  return evidence.map((e) => ({
+    type: (EVIDENCE_TYPES as readonly string[]).includes(e.type)
+      ? (e.type as EvidenceRef["type"])
+      : "metadata",
+    text: e.text,
+    timestamp: e.timestamp ?? "",
+  }));
+}
 
 const VALID_CORRECTION_TYPES = [
   "rewrite",
