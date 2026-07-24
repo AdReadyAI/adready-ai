@@ -45,3 +45,48 @@ Everything below is billed in **credits**. Sources at the bottom.
 - Open-source server, Apache 2.0, no-key foundation models, credit metering with key: https://github.com/roboflow/inference
 
 *Confirm your exact included-credit allotment in-app — Roboflow's pricing page rendered the base tier ambiguously (15 vs 50 credits/mo). All figures above assume 15 credits/mo.*
+
+---
+
+# AssemblyAI — Pricing & Architecture Decision Summary
+
+Model: AssemblyAI Speech-to-Text (Universal-3.5 Pro / Universal-2) with add-on features and LeMUR capabilities.
+Everything below is billed based on **audio duration (per hour)**. Sources at the bottom.
+
+## Pricing structure & Model tiers
+| Model / Tier | Price | Description & Features |
+|---|---|---|
+| **Universal-3.5 Pro** | **$0.21 / hour** | (Default) Most accurate async model across 18 languages, native code-switching, most accurate speaker diarization yet. |
+| **Universal-2** | **$0.15 / hour** | Highly accurate model trained on 12.5M+ hours of audio, supports 99 languages. |
+| **Custom Tier** | *Contact Sales* | Custom rate limits, enhanced concurrency, and enterprise-grade flexibility. |
+
+## Add-on Features & Pricing (per hour of audio)
+| Add-on Feature | Universal-3.5 Pro | Universal-2 | Description |
+|---|---|---|---|
+| **Keyterms Prompting** | **$0.05 / hr** | **Included** | Provide up to 1,000 words or phrases (max 6 words per phrase) to improve accuracy. |
+| **Prompting** | **$0.05 / hr** | *Not supported* | Describe your audio in plain language (domain, scenario, or full conversation details). |
+| **Speaker Diarization** | **$0.02 / hr** | **$0.02 / hr** | Detect multiple speakers and segment the transcript into utterances (upper limit: 10 speakers). |
+| **Medical Mode** (New) | **$0.15 / hr** | **$0.15 / hr** | Optimize transcription for medical terminology and healthcare conversations. |
+
+## Model Selection Classes (SDK Parameters)
+You can select the class of models to balance cost and performance tradeoffs:
+- **`aai.SpeechModel.best`** (Default): Uses the most accurate and capable models with the best results (Universal-3.5 Pro).
+- **`aai.SpeechModel.nano`**: Uses less accurate, but much lower cost models to produce results quickly and economically.
+
+## Optional / Advanced Possibility: LeMUR Framework
+- **Apply LLMs to spoken data**: AssemblyAI's **LeMUR** framework lets you apply Large Language Models directly to audio transcripts using natural language processing (e.g., call summaries, structured data extraction).
+
+## Measured example (one real video audio track)
+- Audio duration: **60 seconds (1 minute)** using Universal-3.5 Pro + Speaker Diarization:
+- Base rate ($0.21) + Diarization add-on ($0.02) = **$0.23 / hour** ($0.0000639 per second).
+- Cost per minute: **$0.0038**.
+
+## Cost-minimizing takeaways
+1. **Choose the right model tier**: Use `aai.SpeechModel.nano` or Universal-2 for cost-sensitive workloads, and `aai.SpeechModel.best` (Universal-3.5 Pro) when top-tier accuracy is critical.
+2. **Enable add-ons selectively**: Only activate features like Prompting or Medical Mode when required, as they add incremental per-hour costs.
+3. **Pre-trim silence or irrelevant segments** before sending to the API to avoid paying for empty audio length.
+
+## Sources
+- Pricing : https://www.assemblyai.com/pricing
+- Model options: https://assembly-preview.mintlify.app/docs/speech-to-text/speech-recognition
+- Speaker Diarization documentation and limits (max 10 speakers): https://assembly-preview.mintlify.app/docs/speech-to-text/speaker-diarization
