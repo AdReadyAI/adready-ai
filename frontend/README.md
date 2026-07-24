@@ -68,11 +68,15 @@ submission = however many videos they uploaded together.
 ## Current status
 
 Real: auth (email/password + Google), upload to Storage, `requests` row
-creation (fanned out per video, per above).
+creation (fanned out per video, per above), and enqueueing — a DB trigger
+(`supabase/migrations/012_enqueue_on_request_insert.sql`,
+`trg_enqueue_job_on_request_insert`) fires `enqueue_job()` automatically for
+every `requests` row inserted, building the `JobPayload` from that row and
+sending it to `pgmq`. Runs inside the same transaction as the insert, so a
+failed enqueue rolls the request insert back too. The frontend itself never
+calls `enqueue_job()` directly.
 
 Still mocked / not wired:
-- Nothing calls `enqueue_job()` yet — a submitted request never reaches the
-  worker queue.
 - `ResultPage.tsx` renders entirely from `mocks/results.ts`; there's no
   processing/loading view driven by real status (the old fake-progress
   `LoadingPage` was deleted as dead code, not replaced yet).
@@ -96,6 +100,11 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-07-22** — `supabase/migrations/012_enqueue_on_request_insert.sql`
+  adds a DB trigger that calls `enqueue_job()` automatically on every
+  `requests` insert. This was the last Phase 1 blocker (see the pipeline
+  handoff notes) — submitting a campaign now actually reaches the worker
+  queue.
 - **2026-07-22** — `supabase/migrations/011_add_batch_id.sql` rebuilds
   `requests` (drop + recreate, no data to migrate yet) so `batch_id` sits
   right after `request_id` instead of at the end.

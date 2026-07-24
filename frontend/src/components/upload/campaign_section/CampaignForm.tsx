@@ -103,9 +103,9 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
       return;
     }
 
-    // Enqueuing a job per video (fan-out) lands here next. JobPayload now
-    // accepts product_image_paths/logo_paths as arrays (matching what we
-    // send above), but enqueue_job itself still isn't called from here.
+    // enqueue_job() isn't called from here — a DB trigger
+    // (trg_enqueue_job_on_request_insert) fires it automatically for each
+    // row inserted above.
     navigate("/result", {
       state: {
         batchId,
