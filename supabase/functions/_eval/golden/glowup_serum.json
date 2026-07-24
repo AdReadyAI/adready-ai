@@ -1,0 +1,111 @@
+{
+  "request_id": "00000000-0000-4000-8000-000000000001",
+  "campaign_goal": "conversion",
+  "destination_platform": "tiktok",
+  "parsed_creative_brief": {
+    "raw_text": "GlowUp Serum 15-second TikTok ad. Required message: highlight visible brightening in 2-4 weeks and drive viewers to glowup.com. Tone should be relatable and aspirational, targeting women 25-40 interested in skincare. Required CTA: Shop now at glowup.com. Brand logo must appear in the final 3 seconds.",
+    "brand_voice": "relatable, aspirational, and clear",
+    "target_audience": "women 25-40 interested in skincare",
+    "required_messages": ["visible brightening in 2-4 weeks"],
+    "required_ctas": ["Shop now at glowup.com"],
+    "approved_claims": ["visible results in 2-4 weeks with consistent use"],
+    "forbidden_claims": ["clinically proven brightening in 2 weeks"],
+    "brand_guidelines": ["logo appears in final 3 seconds"],
+    "policy_requirements": ["avoid unsupported clinical claims"]
+  },
+  "video_metadata": {
+    "duration_ms": 15000,
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "dropped_frame_markers": [],
+    "corruption_detected": false
+  },
+  "transcript_segments": [
+    {
+      "segment_id": "tr_001",
+      "start_ms": 0,
+      "end_ms": 2500,
+      "text": "Tired of dull skin every morning?",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_002",
+      "start_ms": 9000,
+      "end_ms": 12500,
+      "text": "Clinically proven to brighten skin in just two weeks.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_003",
+      "start_ms": 12500,
+      "end_ms": 15000,
+      "text": "Shop now at glowup dot com.",
+      "speaker": "narrator"
+    }
+  ],
+  "ocr_segments": [
+    {
+      "ocr_id": "ocr_001",
+      "frame_ids": ["frame_005"],
+      "start_ms": 13000,
+      "end_ms": 15000,
+      "text": "SHOP NOW - glowup.com",
+      "on_screen_duration_ms": 2000,
+      "region_size": 0.12,
+      "font_size_px": 28
+    }
+  ],
+  "visual_frames": [
+    {
+      "frame_id": "frame_001",
+      "timestamp_ms": 500,
+      "image_url": "https://cdn.example.com/frames/request_001/frame_001.jpg",
+      "visual_description": "Close-up of a person in dim bathroom lighting looking at their reflection.",
+      "people": {
+        "count": 1,
+        "apparent_ages": ["adult, 30s"],
+        "apparent_presentation": ["skincare user"],
+        "activity": "looking in mirror",
+        "clothing_style": "casual"
+      },
+      "color_palette": {
+        "dominant_colors": ["blue-gray", "white"],
+        "lighting_quality": "dim"
+      },
+      "background": { "location_type": "bathroom", "mood": "frustrated" },
+      "camera_movement": "static",
+      "technical_flags": []
+    }
+  ],
+  "product_frames": [
+    {
+      "frame_id": "frame_004",
+      "timestamp_ms": 7500,
+      "location": { "x": 120, "y": 840, "w": 360, "h": 520 },
+      "confidence_score": 0.96,
+      "prominence": "foreground_static",
+      "focus_quality": "sharp",
+      "framing": "fully_visible",
+      "usage_context": "bottle shown on counter"
+    }
+  ],
+  "logo_frames": [
+    {
+      "frame_id": "frame_005",
+      "timestamp_ms": 13500,
+      "location": { "x": 60, "y": 1560, "w": 180, "h": 80 },
+      "confidence_score": 0.91,
+      "prominence": "small_corner",
+      "reference_match": "matches_reference"
+    }
+  ],
+  "product_context": {
+    "raw_text": "GlowUp Serum is a vitamin C brightening serum. Product page supports visible results in 2-4 weeks with consistent use based on an internal user survey.",
+    "claims": ["visible results in 2-4 weeks with consistent use"],
+    "contraindications": ["not a formal clinical study"],
+    "reference_asset_urls": [
+      "https://cdn.example.com/reference/glowup_logo.png",
+      "https://cdn.example.com/reference/glowup_bottle_front.png"
+    ]
+  }
+}

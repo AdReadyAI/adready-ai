@@ -1,0 +1,137 @@
+{
+  "request_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "campaign_goal": "conversion",
+  "destination_platform": "tiktok",
+  "parsed_creative_brief": {
+    "raw_text": "Launch spot for Mango Moon, a tropical energy drink. Communicate fun, refreshing tropical energy for Gen-Z snackers. Required CTA: 'Try Mango Moon'. Drive to mangomoon.com.",
+    "brand_voice": "playful, high-energy, casual",
+    "target_audience": "Gen-Z, 18-24, snack and energy-drink buyers",
+    "required_messages": ["fun tropical energy", "refreshing"],
+    "required_ctas": ["Try Mango Moon"],
+    "approved_claims": ["natural flavors", "40mg caffeine"],
+    "forbidden_claims": ["boosts metabolism", "clinically proven"],
+    "brand_guidelines": ["use the coral + teal palette", "logo bottom-right"],
+    "policy_requirements": ["show 'contains caffeine' disclaimer"]
+  },
+  "video_metadata": {
+    "duration_ms": 15000,
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "dropped_frame_markers": [],
+    "corruption_detected": false
+  },
+  "transcript_segments": [
+    {
+      "segment_id": "t1",
+      "start_ms": 0,
+      "end_ms": 2500,
+      "text": "Thirsty? Meet Mango Moon."
+    },
+    {
+      "segment_id": "t2",
+      "start_ms": 2500,
+      "end_ms": 8000,
+      "text": "Real tropical mango, a splash of citrus, and just enough kick to keep you going."
+    },
+    {
+      "segment_id": "t3",
+      "start_ms": 8000,
+      "end_ms": 12000,
+      "text": "Ice cold, endlessly refreshing."
+    },
+    {
+      "segment_id": "t4",
+      "start_ms": 12000,
+      "end_ms": 15000,
+      "text": "Try Mango Moon today at mangomoon dot com."
+    }
+  ],
+  "ocr_segments": [
+    {
+      "ocr_id": "o1",
+      "frame_ids": ["f4"],
+      "start_ms": 12500,
+      "end_ms": 15000,
+      "text": "Try Mango Moon",
+      "on_screen_duration_ms": 2500,
+      "region_size": 0.22,
+      "font_size_px": 64
+    },
+    {
+      "ocr_id": "o2",
+      "frame_ids": ["f4"],
+      "start_ms": 13000,
+      "end_ms": 15000,
+      "text": "mangomoon.com",
+      "on_screen_duration_ms": 2000,
+      "region_size": 0.09,
+      "font_size_px": 34
+    },
+    {
+      "ocr_id": "o3",
+      "frame_ids": ["f2"],
+      "start_ms": 4000,
+      "end_ms": 6000,
+      "text": "Contains caffeine",
+      "on_screen_duration_ms": 2000,
+      "region_size": 0.03,
+      "font_size_px": 18
+    }
+  ],
+  "visual_frames": [
+    {
+      "frame_id": "f1",
+      "timestamp_ms": 500,
+      "visual_description": "Close-up of a frosty Mango Moon can being pulled from ice, condensation dripping, bright sunlight."
+    },
+    {
+      "frame_id": "f2",
+      "timestamp_ms": 5000,
+      "visual_description": "A young woman on a rooftop takes a sip and smiles; coral and teal color grade; can label clearly visible."
+    },
+    {
+      "frame_id": "f3",
+      "timestamp_ms": 9500,
+      "visual_description": "Slow-motion pour over ice with mango slices splashing."
+    },
+    {
+      "frame_id": "f4",
+      "timestamp_ms": 13500,
+      "visual_description": "End card: the can centered on a teal background with 'Try Mango Moon' and the URL, logo bottom-right."
+    }
+  ],
+  "product_frames": [
+    {
+      "frame_id": "f1",
+      "timestamp_ms": 500,
+      "confidence_score": 0.98,
+      "prominence": "foreground_in_use",
+      "focus_quality": "sharp",
+      "framing": "fully_visible",
+      "usage_context": "product hero shot"
+    },
+    {
+      "frame_id": "f2",
+      "timestamp_ms": 5000,
+      "confidence_score": 0.9,
+      "prominence": "foreground_static",
+      "focus_quality": "sharp",
+      "framing": "fully_visible"
+    }
+  ],
+  "logo_frames": [
+    {
+      "frame_id": "f4",
+      "timestamp_ms": 13500,
+      "confidence_score": 0.95,
+      "prominence": "small_corner",
+      "reference_match": "matches_reference"
+    }
+  ],
+  "product_context": {
+    "raw_text": "Mango Moon — sparkling tropical energy drink. 40mg caffeine from green tea. Natural mango and citrus flavors.",
+    "claims": ["40mg caffeine", "natural flavors"],
+    "contraindications": ["not recommended for children"],
+    "reference_asset_urls": ["https://example.test/mango-moon-can.png"]
+  }
+}
