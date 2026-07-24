@@ -1,18 +1,18 @@
 /**
  * agent.ts — Orchestration for the Product Representation Agent: the
- * deterministic screen-time coverage check, the OpenRouter tool-forced call
+ * deterministic product-frame coverage check, the OpenRouter tool-forced call
  * for the remaining sub-checks, and guardrails on the merged result.
  */
 
 import type {
+  AgentContext,
   ConfidenceLevel,
-  EvidenceBundle,
   EvidenceRef,
   MetricResult,
   SeverityLevel,
   SubCheckResult,
 } from "../shared/schemas.ts";
-import { SONNET } from "../shared/claude.ts";
+import { SONNET } from "./llm.ts";
 import {
   buildToolSchema,
   CONFIDENCE_LEVELS,
@@ -48,19 +48,19 @@ export type ChatClient = {
 };
 
 const SYSTEM_PROMPT =
-  `You are the Product Representation agent in an ad-review pipeline. You ` +
-  `grade whether the advertised product is clearly represented, using only ` +
-  `the product-moment scene descriptions, transcript, and on-screen text ` +
-  `you are given — you never see the raw video or keyframe images. ` +
-  `product_appearance_wrong can only be judged from on-screen text (OCR) ` +
-  `compared against the brief's product/packaging description; return ` +
-  `cannot_assess for it if there is no relevant OCR text, do not guess from ` +
-  `scene descriptions alone. Grade severity (none, low, medium, high, ` +
-  `critical), cite specific evidence, and self-report confidence (low, ` +
-  `medium, high) — if you cannot cite specific evidence, confidence must be ` +
-  `low. Call the ${TOOL_NAME} tool with your findings; do not respond with ` +
-  `plain text, and do not include an insufficient_visibility sub-check — ` +
-  `that one is computed separately.`;
+  `You are the Product Representation agent in an ad-review pipeline. You grade ` +
+  `whether the advertised product is clearly represented, using only the ` +
+  `product-frame descriptions, logo-frame descriptions, transcript, on-screen ` +
+  `text, and product context you are given — you never see the raw video or the ` +
+  `frame images. product_appearance_wrong can only be judged from on-screen ` +
+  `text (OCR) or product context compared against the brief's product/packaging ` +
+  `description; return cannot_assess for it if there is no relevant OCR text or ` +
+  `product context, do not guess from frame descriptions alone. Grade severity ` +
+  `(none, low, medium, high, critical), cite specific evidence, and self-report ` +
+  `confidence (low, medium, high) — if you cannot cite specific evidence, ` +
+  `confidence must be low. Call the ${TOOL_NAME} tool with your findings; do ` +
+  `not respond with plain text, and do not include an insufficient_visibility ` +
+  `sub-check — that one is computed separately.`;
 
 export const APPEARANCE_DEADLINE_MS = 3000;
 export const MIN_COVERAGE_RATIO = 0.15;
@@ -78,34 +78,38 @@ function worseSeverity(a: SeverityLevel, b: SeverityLevel): SeverityLevel {
   return SEVERITY_RANK[b] > SEVERITY_RANK[a] ? b : a;
 }
 
+/**
+ * Deterministic screen-time coverage check, computed from product frames rather
+ * than the model. Coverage is approximated as the fraction of sampled visual
+ * frames in which the product is present, since the frame-based context no longer
+ * carries product time intervals. "Late" is the first frame in which the product
+ * is present relative to APPEARANCE_DEADLINE_MS.
+ */
 export function computeInsufficientVisibilitySubCheck(
-  bundle: EvidenceBundle,
+  context: AgentContext,
 ): SubCheckResult {
-  const duration = bundle.video_metadata.duration_ms;
   const name = SUB_CHECK_NAMES.insufficient_visibility;
+  const present = context.product_frames.filter(
+    (f) => f.prominence !== "not_visible",
+  );
 
-  if (!bundle.product_moments.length || !duration) {
+  if (!context.product_frames.length || !present.length) {
     return {
       check_id: "insufficient_visibility",
       name,
       result: "cannot_assess",
       severity: "cannot_assess",
       explanation:
-        "No product moments or video duration to compute screen-time coverage from.",
+        "No product frames indicate the product is visible, so screen-time coverage cannot be computed.",
     };
   }
 
-  const firstAppearanceMs = Math.min(
-    ...bundle.product_moments.map((m) => m.start_ms),
-  );
-  const coveredMs = bundle.product_moments.reduce(
-    (sum, m) => sum + Math.max(0, m.end_ms - m.start_ms),
-    0,
-  );
-  const coverageRatio = coveredMs / duration;
+  const firstAppearanceMs = Math.min(...present.map((f) => f.timestamp_ms));
+  const visualCount = context.visual_frames.length;
+  const coverageRatio = visualCount > 0 ? present.length / visualCount : null;
 
   const late = firstAppearanceMs > APPEARANCE_DEADLINE_MS;
-  const thin = coverageRatio < MIN_COVERAGE_RATIO;
+  const thin = coverageRatio !== null && coverageRatio < MIN_COVERAGE_RATIO;
 
   if (!late && !thin) {
     return {
@@ -121,10 +125,10 @@ export function computeInsufficientVisibilitySubCheck(
     late
       ? `first appears at ${firstAppearanceMs}ms (after the ${APPEARANCE_DEADLINE_MS}ms deadline)`
       : "",
-    thin
-      ? `covers only ${(coverageRatio * 100).toFixed(1)}% of runtime (below ${
-        (MIN_COVERAGE_RATIO * 100).toFixed(0)
-      }%)`
+    thin && coverageRatio !== null
+      ? `appears in only ${
+        (coverageRatio * 100).toFixed(1)
+      }% of sampled frames (below ${(MIN_COVERAGE_RATIO * 100).toFixed(0)}%)`
       : "",
   ].filter(Boolean).join(" and ");
 
@@ -265,7 +269,7 @@ function buildLlmMetricResult(raw: RawFinding | undefined): MetricResult {
 }
 
 export async function runProductRepresentationAgent(
-  bundle: EvidenceBundle,
+  context: AgentContext,
   client: ChatClient,
   model: string = SONNET,
 ): Promise<MetricResult[]> {
@@ -274,7 +278,7 @@ export async function runProductRepresentationAgent(
     temperature: 0,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: buildUserContent(bundle) },
+      { role: "user", content: buildUserContent(context) },
     ],
     tools: [buildToolSchema()],
     tool_choice: { type: "function", function: { name: TOOL_NAME } },
@@ -293,7 +297,7 @@ export async function runProductRepresentationAgent(
   }
 
   const llmResult = buildLlmMetricResult(raw);
-  const visibilityCheck = computeInsufficientVisibilitySubCheck(bundle);
+  const visibilityCheck = computeInsufficientVisibilitySubCheck(context);
 
   const finalSeverity = worseSeverity(
     llmResult.severity,

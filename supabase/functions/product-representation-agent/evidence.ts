@@ -1,147 +1,92 @@
 /**
- * evidence.ts — EvidenceBundle validation, keyframe→scene join, and
- * prompt-context building for the Product Representation Agent.
+ * evidence.ts — Prompt-context building for the Product Representation Agent.
  *
- * No vision: Keyframe only carries frame_id/timestamp_ms/scene_id/image_url,
- * so each product moment's keyframes are described to the model via the
- * linked scene_segments.visual_description / visual_elements rather than
- * the actual image. Revisit this once Media Processing confirms whether
- * keyframes will carry real descriptions or images become viewable.
+ * Consumes the DB-loaded AgentContext. Product visibility is frame-based: each
+ * product_frame is described to the model via the matching visual_frame's
+ * visual_description (joined by frame_id) plus the product frame's own prominence
+ * / focus / framing attributes — the model never sees the raw image. Request
+ * validation is handled by the shared edge handler via AgentRunRequestSchema, and
+ * the context shape is validated by the loader, so no bespoke input validation
+ * lives here.
  */
 
-import type { EvidenceBundle } from "../shared/schemas.ts";
+import type {
+  AgentContext,
+  LogoFrame,
+  ProductFrame,
+  VisualFrame,
+} from "../shared/schemas.ts";
 
-export class InvalidEvidenceBundleError extends Error {}
-
-export function validateEvidenceBundle(body: unknown): EvidenceBundle {
-  if (typeof body !== "object" || body === null) {
-    throw new InvalidEvidenceBundleError("body must be a JSON object");
-  }
-  const b = body as Record<string, unknown>;
-
-  if (typeof b.review_id !== "string" || b.review_id.length === 0) {
-    throw new InvalidEvidenceBundleError("review_id is required");
-  }
-  if (typeof b.variant_id !== "string" || b.variant_id.length === 0) {
-    throw new InvalidEvidenceBundleError("variant_id is required");
-  }
-  if (typeof b.creative_brief !== "string") {
-    throw new InvalidEvidenceBundleError("creative_brief is required");
-  }
-  if (!Array.isArray(b.product_moments)) {
-    throw new InvalidEvidenceBundleError("product_moments must be an array");
-  }
-  if (!Array.isArray(b.keyframes)) {
-    throw new InvalidEvidenceBundleError("keyframes must be an array");
-  }
-  if (!Array.isArray(b.scene_segments)) {
-    throw new InvalidEvidenceBundleError("scene_segments must be an array");
-  }
-  if (!Array.isArray(b.reference_assets)) {
-    throw new InvalidEvidenceBundleError("reference_assets must be an array");
-  }
-  if (!Array.isArray(b.transcript_segments)) {
-    throw new InvalidEvidenceBundleError(
-      "transcript_segments must be an array",
-    );
-  }
-  if (!Array.isArray(b.ocr_segments)) {
-    throw new InvalidEvidenceBundleError("ocr_segments must be an array");
-  }
-  const videoMetadata = b.video_metadata as Record<string, unknown> | undefined;
-  if (!videoMetadata || typeof videoMetadata.duration_ms !== "number") {
-    throw new InvalidEvidenceBundleError(
-      "video_metadata.duration_ms is required",
-    );
-  }
-
-  return b as unknown as EvidenceBundle;
+function describeProductFrame(
+  frame: ProductFrame,
+  visual?: VisualFrame,
+): string {
+  const attrs = [
+    frame.prominence ? `prominence: ${frame.prominence}` : "",
+    frame.focus_quality ? `focus: ${frame.focus_quality}` : "",
+    frame.framing ? `framing: ${frame.framing}` : "",
+    frame.usage_context ? `usage: ${frame.usage_context}` : "",
+  ].filter(Boolean).join(", ");
+  const description = visual?.visual_description ??
+    "(no matching visual-frame description)";
+  return `[${frame.timestamp_ms}ms${attrs ? ", " + attrs : ""}] ${description}`;
 }
 
-export type ProductMomentContext = {
-  moment_id: string;
-  start_ms: number;
-  end_ms: number;
-  frame_ids: string[];
-  scene_descriptions: string[];
-};
-
-export function buildProductMomentContexts(
-  bundle: EvidenceBundle,
-): ProductMomentContext[] {
-  const keyframeById = new Map(bundle.keyframes.map((k) => [k.frame_id, k]));
-  const sceneById = new Map(bundle.scene_segments.map((s) => [s.scene_id, s]));
-
-  return bundle.product_moments.map((moment) => {
-    const descriptions: string[] = [];
-    for (const frameId of moment.frame_ids) {
-      const keyframe = keyframeById.get(frameId);
-      if (!keyframe) continue;
-      const scene = sceneById.get(keyframe.scene_id);
-      if (!scene) continue;
-
-      const elements = scene.visual_elements;
-      const extras = elements
-        ? [
-          elements.detected_people?.length
-            ? `people: ${elements.detected_people.join(", ")}`
-            : "",
-          elements.dominant_colors?.length
-            ? `colors: ${elements.dominant_colors.join(", ")}`
-            : "",
-          elements.tone_mood ? `mood: ${elements.tone_mood}` : "",
-        ].filter(Boolean).join("; ")
-        : "";
-
-      descriptions.push(
-        extras
-          ? `${scene.visual_description} (${extras})`
-          : scene.visual_description,
-      );
-    }
-
-    return {
-      moment_id: moment.moment_id,
-      start_ms: moment.start_ms,
-      end_ms: moment.end_ms,
-      frame_ids: moment.frame_ids,
-      scene_descriptions: [...new Set(descriptions)],
-    };
-  });
+function describeLogoFrame(frame: LogoFrame, visual?: VisualFrame): string {
+  const attrs = [
+    frame.prominence ? `prominence: ${frame.prominence}` : "",
+    frame.reference_match ? `reference_match: ${frame.reference_match}` : "",
+  ].filter(Boolean).join(", ");
+  const description = visual?.visual_description ??
+    "(no matching visual-frame description)";
+  return `[${frame.timestamp_ms}ms${attrs ? ", " + attrs : ""}] ${description}`;
 }
 
-export function buildUserContent(bundle: EvidenceBundle): string {
-  const moments = buildProductMomentContexts(bundle);
-  const momentsText = moments
-    .map((m) =>
-      `[moment ${m.moment_id}, ${m.start_ms}-${m.end_ms}ms] ${
-        m.scene_descriptions.length
-          ? m.scene_descriptions.join(" | ")
-          : "(no scene description available for this moment's keyframes)"
-      }`
-    )
+export function buildUserContent(context: AgentContext): string {
+  const visualById = new Map(
+    context.visual_frames.map((f) => [f.frame_id, f]),
+  );
+
+  const productFrames = context.product_frames
+    .map((f) => describeProductFrame(f, visualById.get(f.frame_id)))
     .join("\n");
-  const transcript = bundle.transcript_segments
+  const logoFrames = context.logo_frames
+    .map((f) => describeLogoFrame(f, visualById.get(f.frame_id)))
+    .join("\n");
+  const transcript = context.transcript_segments
     .map((s) => `[${s.start_ms}-${s.end_ms}ms] ${s.text}`)
     .join("\n");
-  const ocr = bundle.ocr_segments
+  const ocr = context.ocr_segments
     .map((s) => `[${s.start_ms}-${s.end_ms}ms] ${s.text}`)
     .join("\n");
-  const referenceAssets = bundle.reference_assets
-    .filter((a) => a.type === "product_image")
-    .map((a) => `product_image reference: ${a.asset_id}`)
-    .join("\n");
+
+  const product = context.product_context;
+  const productContextLines: string[] = [];
+  if (product?.raw_text) productContextLines.push(product.raw_text);
+  if (product?.claims.length) {
+    productContextLines.push(
+      `Verified claims: ${product.claims.join("; ")}`,
+    );
+  }
+  if (product?.reference_asset_urls.length) {
+    productContextLines.push(
+      `Reference assets available (URLs only, not viewable by you): ${product.reference_asset_urls.length}`,
+    );
+  }
 
   return [
-    `CREATIVE BRIEF (contains the product name/packaging description):\n${bundle.creative_brief}`,
-    `PRODUCT MOMENTS (time ranges the product is detected on screen, described via linked scene text — no direct image access):\n${
-      momentsText || "(no product moments detected)"
+    `CREATIVE BRIEF (contains the product name/packaging description):\n${
+      context.parsed_creative_brief.raw_text || "(none)"
     }`,
+    `PRODUCT FRAMES (frames where the product was detected, described via the matching visual frame — no direct image access):\n${
+      productFrames || "(no product frames detected)"
+    }`,
+    `LOGO FRAMES:\n${logoFrames || "(no logo frames detected)"}`,
     `TRANSCRIPT:\n${transcript || "(none)"}`,
     `ON-SCREEN TEXT (OCR):\n${ocr || "(none)"}`,
-    `REFERENCE ASSETS AVAILABLE (image URLs only, not viewable by you):\n${
-      referenceAssets || "(none)"
+    `PRODUCT CONTEXT:\n${
+      productContextLines.length ? productContextLines.join("\n") : "(none)"
     }`,
-    `TOTAL VIDEO DURATION: ${bundle.video_metadata.duration_ms}ms`,
+    `TOTAL VIDEO DURATION: ${context.video_metadata.duration_ms}ms`,
   ].join("\n\n");
 }

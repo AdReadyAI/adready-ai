@@ -1,4 +1,4 @@
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals } from "@std/assert";
 import {
   buildToolSchema,
   LLM_SUB_CHECK_IDS,
@@ -13,7 +13,10 @@ Deno.test("METRIC_ID is product_clarity", () => {
 
 Deno.test("LLM_SUB_CHECK_IDS has four entries and excludes insufficient_visibility", () => {
   assertEquals(LLM_SUB_CHECK_IDS.length, 4);
-  assertEquals(LLM_SUB_CHECK_IDS.includes("insufficient_visibility" as never), false);
+  assertEquals(
+    LLM_SUB_CHECK_IDS.includes("insufficient_visibility" as never),
+    false,
+  );
 });
 
 Deno.test("SUB_CHECK_NAMES covers both LLM and deterministic sub-checks", () => {
@@ -31,7 +34,8 @@ Deno.test("buildToolSchema names the forced function and excludes insufficient_v
       sub_checks: { items: { properties: { check_id: { enum: string[] } } } };
     };
   };
-  const allowedCheckIds = params.properties.sub_checks.items.properties.check_id.enum;
+  const allowedCheckIds =
+    params.properties.sub_checks.items.properties.check_id.enum;
   assertEquals(allowedCheckIds.includes("insufficient_visibility"), false);
   assertEquals(allowedCheckIds.length, 4);
 });

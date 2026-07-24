@@ -1,12 +1,23 @@
 /**
  * metrics.ts — Static metric/sub-check metadata and OpenAI-style tool schema
- * for the Product Representation Agent. Nothing here comes from the model
- * at runtime; this is the fixed shape the agent grades against.
+ * for the Product Representation Agent. Nothing here comes from the model at
+ * runtime; this is the fixed shape the agent grades against.
  *
- * insufficient_visibility is intentionally excluded from the tool schema:
- * it's computed deterministically in agent.ts from product_moments timing,
+ * insufficient_visibility is intentionally excluded from the tool schema: it's
+ * computed deterministically in agent.ts from product-frame timing/coverage,
  * not graded by the model.
+ *
+ * The enum value lists are sourced from the shared Zod schemas so the tool
+ * schema and validation stay in lockstep with the shared MetricResult contract.
  */
+
+import {
+  ConfidenceLevelSchema,
+  EvidenceRefSchema,
+  MetricResultSchema,
+  SeverityLevelSchema,
+  SubCheckResultSchema,
+} from "../shared/schemas.ts";
 
 export type LlmSubCheckId =
   | "product_not_shown"
@@ -38,40 +49,16 @@ export const METRIC_NAME = "Product Clarity";
 export const METRIC_QUESTION =
   "Can a viewer clearly identify what product is being advertised?";
 
-export const SEVERITY_LEVELS = [
-  "none",
-  "low",
-  "medium",
-  "high",
-  "critical",
-  "cannot_assess",
-] as const;
-
-export const CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
-
-export const RESULT_VALUES = ["true", "false", "cannot_assess"] as const;
-
-export const SUB_CHECK_RESULT_VALUES = [
-  "passed",
-  "failed",
-  "cannot_assess",
-] as const;
-
-export const CORRECTION_TYPES = [
-  "rewrite",
-  "edit_recommendation",
-  "technical_fix",
-  "none",
-] as const;
-
-export const EVIDENCE_TYPES = [
-  "transcript",
-  "ocr",
-  "visual",
-  "brief",
-  "product_page",
-  "metadata",
-] as const;
+// Enum value lists sourced from the shared schemas (single source of truth).
+export const SEVERITY_LEVELS = SeverityLevelSchema.options;
+export const CONFIDENCE_LEVELS = ConfidenceLevelSchema.options;
+export const RESULT_VALUES = MetricResultSchema.shape.result.options;
+export const SUB_CHECK_RESULT_VALUES =
+  SubCheckResultSchema.shape.result.options;
+export const CORRECTION_TYPES =
+  MetricResultSchema.shape.correction_type.unwrap()
+    .options;
+export const EVIDENCE_TYPES = EvidenceRefSchema.shape.type.options;
 
 export const TOOL_NAME = "submit_product_representation_findings";
 
@@ -84,7 +71,7 @@ export function buildToolSchema() {
         "Submit the graded product_clarity finding for this ad, covering " +
         "product_not_shown, product_obscured, product_appearance_wrong, " +
         "and product_name_unspoken. Do not include insufficient_visibility " +
-        "— that sub-check is computed separately from timing data.",
+        "— that sub-check is computed separately from product-frame timing.",
       parameters: {
         type: "object",
         required: [

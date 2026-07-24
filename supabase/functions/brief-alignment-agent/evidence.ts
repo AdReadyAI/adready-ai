@@ -1,73 +1,55 @@
 /**
- * evidence.ts — EvidenceBundle validation and prompt-context building for
- * the Brief Alignment Agent.
+ * evidence.ts — Prompt-context building for the Brief Alignment Agent.
+ *
+ * Consumes the DB-loaded AgentContext (parsed creative brief, campaign context,
+ * transcript, OCR, and visual frames) and renders the plain-text context the
+ * model grades against. Request validation is handled by the shared edge handler
+ * via AgentRunRequestSchema, and the context shape is validated by the loader, so
+ * no bespoke input validation lives here.
  */
 
-import type { EvidenceBundle } from "../shared/schemas.ts";
+import type { AgentContext, ParsedCreativeBrief } from "../shared/schemas.ts";
 
-const CAMPAIGN_GOALS = [
-  "awareness",
-  "consideration",
-  "conversion",
-  "repurchase",
-];
-
-export class InvalidEvidenceBundleError extends Error {}
-
-export function validateEvidenceBundle(body: unknown): EvidenceBundle {
-  if (typeof body !== "object" || body === null) {
-    throw new InvalidEvidenceBundleError("body must be a JSON object");
+function formatBrief(brief: ParsedCreativeBrief): string {
+  const lines = [`RAW BRIEF:\n${brief.raw_text || "(none)"}`];
+  if (brief.target_audience) {
+    lines.push(`TARGET AUDIENCE: ${brief.target_audience}`);
   }
-  const b = body as Record<string, unknown>;
-
-  if (typeof b.review_id !== "string" || b.review_id.length === 0) {
-    throw new InvalidEvidenceBundleError("review_id is required");
+  if (brief.brand_voice) {
+    lines.push(`BRAND VOICE: ${brief.brand_voice}`);
   }
-  if (typeof b.variant_id !== "string" || b.variant_id.length === 0) {
-    throw new InvalidEvidenceBundleError("variant_id is required");
-  }
-  if (typeof b.creative_brief !== "string") {
-    throw new InvalidEvidenceBundleError("creative_brief is required");
-  }
-  if (
-    typeof b.campaign_goal !== "string" ||
-    !CAMPAIGN_GOALS.includes(b.campaign_goal)
-  ) {
-    throw new InvalidEvidenceBundleError(
-      `campaign_goal must be one of ${CAMPAIGN_GOALS.join("|")}`,
+  if (brief.required_messages.length) {
+    lines.push(
+      `REQUIRED MESSAGES:\n${
+        brief.required_messages.map((m) => `- ${m}`).join("\n")
+      }`,
     );
   }
-  if (!Array.isArray(b.transcript_segments)) {
-    throw new InvalidEvidenceBundleError(
-      "transcript_segments must be an array",
+  if (brief.required_ctas.length) {
+    lines.push(
+      `REQUIRED CTAS:\n${brief.required_ctas.map((c) => `- ${c}`).join("\n")}`,
     );
   }
-  if (!Array.isArray(b.ocr_segments)) {
-    throw new InvalidEvidenceBundleError("ocr_segments must be an array");
-  }
-  if (!Array.isArray(b.scene_segments)) {
-    throw new InvalidEvidenceBundleError("scene_segments must be an array");
-  }
-
-  return b as unknown as EvidenceBundle;
+  return lines.join("\n");
 }
 
-export function buildUserContent(bundle: EvidenceBundle): string {
-  const transcript = bundle.transcript_segments
+export function buildUserContent(context: AgentContext): string {
+  const transcript = context.transcript_segments
     .map((s) => `[${s.start_ms}-${s.end_ms}ms] ${s.text}`)
     .join("\n");
-  const ocr = bundle.ocr_segments
+  const ocr = context.ocr_segments
     .map((s) => `[${s.start_ms}-${s.end_ms}ms] ${s.text}`)
     .join("\n");
-  const scenes = bundle.scene_segments
-    .map((s) => `[${s.start_ms}-${s.end_ms}ms] ${s.visual_description}`)
+  const visuals = context.visual_frames
+    .map((f) => `[${f.timestamp_ms}ms] ${f.visual_description}`)
     .join("\n");
 
   return [
-    `CREATIVE BRIEF:\n${bundle.creative_brief}`,
-    `CAMPAIGN GOAL: ${bundle.campaign_goal}`,
+    formatBrief(context.parsed_creative_brief),
+    `CAMPAIGN GOAL: ${context.campaign_goal}`,
+    `DESTINATION PLATFORM: ${context.destination_platform}`,
     `TRANSCRIPT:\n${transcript || "(none)"}`,
     `ON-SCREEN TEXT (OCR):\n${ocr || "(none)"}`,
-    `SCENE DESCRIPTIONS:\n${scenes || "(none)"}`,
+    `VISUAL FRAMES:\n${visuals || "(none)"}`,
   ].join("\n\n");
 }

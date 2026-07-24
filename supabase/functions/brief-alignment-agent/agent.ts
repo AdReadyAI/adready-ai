@@ -4,14 +4,14 @@
  */
 
 import type {
+  AgentContext,
   ConfidenceLevel,
-  EvidenceBundle,
   EvidenceRef,
   MetricResult,
   SeverityLevel,
   SubCheckResult,
 } from "../shared/schemas.ts";
-import { SONNET } from "../shared/claude.ts";
+import { SONNET } from "./llm.ts";
 import {
   buildToolSchema,
   CONFIDENCE_LEVELS,
@@ -46,15 +46,15 @@ export type ChatClient = {
 
 const SYSTEM_PROMPT =
   `You are the Brief Alignment agent in an ad-review pipeline. You grade a ` +
-  `video ad against its creative brief using only the transcript, on-screen ` +
-  `text, and scene descriptions you are given. You never see the raw video. ` +
-  `For each metric, decide status, grade severity (none, low, medium, high, ` +
-  `critical), cite specific evidence (a transcript span, an OCR line, or a ` +
-  `scene description), and self-report confidence (low, medium, high). If ` +
-  `you cannot cite specific evidence for a finding, your confidence for it ` +
-  `must be low. Use cannot_assess when the brief gives nothing to check a ` +
-  `metric against. Call the ${TOOL_NAME} tool with your findings for every ` +
-  `metric listed; do not respond with plain text.`;
+  `video ad against its creative brief using only the parsed brief, transcript, ` +
+  `on-screen text, and visual-frame descriptions you are given. You never see ` +
+  `the raw video. For each metric, decide status, grade severity (none, low, ` +
+  `medium, high, critical), cite specific evidence (a transcript span, an OCR ` +
+  `line, a visual-frame description, or a brief line), and self-report ` +
+  `confidence (low, medium, high). If you cannot cite specific evidence for a ` +
+  `finding, your confidence for it must be low. Use cannot_assess when the ` +
+  `brief gives nothing to check a metric against. Call the ${TOOL_NAME} tool ` +
+  `with your findings for every metric listed; do not respond with plain text.`;
 
 type RawFinding = {
   metric_id?: unknown;
@@ -191,7 +191,7 @@ function buildMetricResult(
 }
 
 export async function runBriefAlignmentAgent(
-  bundle: EvidenceBundle,
+  context: AgentContext,
   client: ChatClient,
   model: string = SONNET,
 ): Promise<MetricResult[]> {
@@ -200,7 +200,7 @@ export async function runBriefAlignmentAgent(
     temperature: 0,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: buildUserContent(bundle) },
+      { role: "user", content: buildUserContent(context) },
     ],
     tools: [buildToolSchema()],
     tool_choice: { type: "function", function: { name: TOOL_NAME } },
