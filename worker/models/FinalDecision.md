@@ -86,6 +86,10 @@ You can select the class of models to balance cost and performance tradeoffs:
 2. **Enable add-ons selectively**: Only activate features like Prompting or Medical Mode when required, as they add incremental per-hour costs.
 3. **Pre-trim silence or irrelevant segments** before sending to the API to avoid paying for empty audio length.
 
+## Architectural Decision & Justification
+- **Selected Configuration**: Universal-3.5 Pro (`aai.SpeechModel.best`) combined with Speaker Diarization.
+- **Rationale**: It is critical to ensure high-fidelity transcription and accurate speaker separation because the entire downstream AI pipeline—including subsequent LLM-based agent evaluation steps (such as claim triage and visual/audio alignment)—relies directly on the structural integrity and precision of this initial text data.
+
 ## Sources
 - Pricing : https://www.assemblyai.com/pricing
 - Model options: https://assembly-preview.mintlify.app/docs/speech-to-text/speech-recognition
