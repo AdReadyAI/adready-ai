@@ -1,12 +1,8 @@
 """Unit tests for the worker's durable-message lifecycle."""
 
-import os
 from unittest.mock import Mock
 
 import pytest
-
-# Worker configuration is loaded at import time, but unit tests never connect to this URL.
-os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
 
 import app.worker_queue as worker_queue  # noqa: E402  (configuration must be initialized before this import)
 

@@ -1,14 +1,8 @@
 """Unit tests for the worker processor orchestration (app/processor.py)."""
 
-import os
-
 import pytest
 
 pytestmark = pytest.mark.unit
-
-# config.settings reads DATABASE_URL at import time; processor never connects in unit tests.
-os.environ.setdefault("DATABASE_URL", "mock_db")
-os.environ.setdefault("OPENROUTER_API_KEY", "mock_key")
 
 import app.processor as processor  # noqa: E402
 from app.errors import PermanentError, TransientError  # noqa: E402
@@ -21,6 +15,7 @@ VALID_PAYLOAD = {
     "bucket": "videos",
     "video_path": "path/to/video.mp4",
     "product_imgs_folder_path": "path/to/imgs",
+    "logo_imgs_folder_path": "path/to/logos",
 }
 
 
