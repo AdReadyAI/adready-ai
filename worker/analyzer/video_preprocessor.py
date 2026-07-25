@@ -181,11 +181,7 @@ class VideoPreprocessor:
         return audio_path
 
     def _sample_frames(self, video_path, metadata: VideoMetadata) -> list[Frame]:
-        """Decode once and select tagged frames via the probe pipeline.
-
-        Also captures the per-probe results (keyed by probe name) so downstream
-        code can read non-frame facts via Artifacts.probe_results.
-        """
+        """Decode once and select tagged frames via the probe pipeline."""
         sampler = FrameSampler(
             video_path,
             metadata,

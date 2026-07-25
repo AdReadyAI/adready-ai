@@ -9,17 +9,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class FrameContext:
-    """Per-frame bundle passed to every probe.
-
-    Cheap shared features (gray, small, edges) are computed ONCE per frame so
-    no probe recomputes them. The full-res `frame` is kept in hand so a chosen
-    frame can be saved at good quality without re-seeking (analyze small, save big).
-
-    `content_val` is the per-frame change score: normalized to [0, 1], higher
-    means more change vs the previous frame. `shot_boundary` is True on the
-    first frame of a new shot. Both are written by SceneProbe and read by
-    AdaptiveSampler.
-    """
+    """Per-frame bundle passed to every probe."""
 
     index: int
     timestamp: float

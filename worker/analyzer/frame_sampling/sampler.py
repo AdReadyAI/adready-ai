@@ -22,8 +22,6 @@ class FrameSampler:
     """Owns the single-pass decode loop that produces the tagged frame pool.
 
     decoder -> FrameContext -> ordered probe chain -> collectors -> finalize.
-    Single-threaded by design: parallelism comes from cost cascades and
-    deferred model batching, not from threading the loop.
     """
     _CANNY_LOW = 50
     _CANNY_HIGH = 150
@@ -55,12 +53,6 @@ class FrameSampler:
 
     # ---- public entry point ----
     def run(self) -> list[Frame]:
-        """Decode once; probes write kept frames to the store during process().
-
-        A probe that raises is isolated: it's disabled for the rest of the run,
-        the error is logged and recorded in `probe_errors`, and the manifest plus
-        the other probes still complete.
-        """
         store = FrameStore(self.work_dir)
         active = list(self.probes)
         for ctx in self._decode():

@@ -16,12 +16,7 @@ class _Kept:
 
 
 class FrameStore:
-    """Writes selected frames to disk at selection time; retains no pixels.
-
-    Memory invariant: only the current frame's pixels (held in FrameContext)
-    exist at any moment. The store keeps just paths + lightweight metadata,
-    so selections never accumulate full-res frames in RAM.
-    """
+    """Writes selected frames to disk at selection time."""
 
     def __init__(self, work_dir: str) -> None:
         self._frames_dir = os.path.join(work_dir, "frames")
