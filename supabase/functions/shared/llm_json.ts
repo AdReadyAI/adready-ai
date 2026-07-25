@@ -48,8 +48,19 @@ export function extractJsonText(raw: string): string | null {
   return body.slice(start, end + 1);
 }
 
-/** Parse + validate raw model text against `schema`. Returns null on any failure. */
-export function safeParseJson<T>(raw: string, schema: z.ZodType<T>): T | null {
+/**
+ * Parse + validate raw model text against `schema`. Returns null on any failure.
+ *
+ * Generic over the schema (not a bare `z.ZodType<T>`) so the return type is the
+ * schema's *output* (`z.infer<S>`). This matters for schemas whose fields use
+ * `.transform` (e.g. null→undefined normalization in EvaluationResponseSchema):
+ * a `z.ZodType<T>` signature would collapse input and output and leak the raw
+ * `null` back into T.
+ */
+export function safeParseJson<S extends z.ZodTypeAny>(
+  raw: string,
+  schema: S,
+): z.infer<S> | null {
   const text = extractJsonText(raw);
   if (text === null) return null;
   let parsed: unknown;

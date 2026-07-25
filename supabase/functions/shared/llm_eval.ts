@@ -41,21 +41,30 @@ const LlmEvidenceSchema = z.object({
 });
 
 /**
+ * An optional field that also tolerates an explicit `null`. Models routinely emit
+ * `"suggested_correction": null` (or `explanation`/`correction_type`/`confidence`)
+ * when a field is N/A; a bare `.optional()` accepts omitted-but-not-null and would
+ * reject the whole reply. This accepts value | null | omitted and normalizes null
+ * to `undefined` so downstream `?.`/`??` usage is unaffected.
+ */
+function nullishToUndefined<T extends z.ZodTypeAny>(schema: T) {
+  return schema.nullish().transform((v) => v ?? undefined);
+}
+
+/**
  * The standard Call-2 envelope: the sub-check verdicts (load-bearing) plus
  * metric-level fields. Everything except `sub_checks` is optional so a reply that
  * nests or omits the metric-level fields still parses on the strength of its
- * sub-checks rather than being discarded whole.
+ * sub-checks rather than being discarded whole. Optional fields also tolerate an
+ * explicit `null` (real model variance) via `nullishToUndefined`.
  */
 export const EvaluationResponseSchema = z.object({
   sub_checks: z.array(LlmSubCheckSchema),
-  // Metric-level fields are all optional so a reply that nests or omits them
-  // still parses on the strength of its sub_checks. The item schemas above accept
-  // the null-vs-omitted variants models actually emit (nullish explanation/timestamp).
-  confidence: ConfidenceLevelSchema.optional(),
-  evidence: z.array(LlmEvidenceSchema).optional(),
-  explanation: z.string().optional(),
-  suggested_correction: z.string().optional(),
-  correction_type: z.string().optional(),
+  confidence: nullishToUndefined(ConfidenceLevelSchema),
+  evidence: nullishToUndefined(z.array(LlmEvidenceSchema)),
+  explanation: nullishToUndefined(z.string()),
+  suggested_correction: nullishToUndefined(z.string()),
+  correction_type: nullishToUndefined(z.string()),
 });
 export type EvaluationResponse = z.infer<typeof EvaluationResponseSchema>;
 

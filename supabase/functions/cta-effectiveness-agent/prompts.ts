@@ -91,6 +91,8 @@ export function evaluationPrompt(
     "\n\nReturn ONLY a single JSON object with these exact TOP-LEVEL keys and NO wrapper object around them: " +
     '"sub_checks" (array of { check_id, result: passed|failed|cannot_assess, severity: ' +
     "none|low|medium|high|critical, explanation (only when failed, quoting the CTA text and its timestamp) }), " +
+    'where check_id is the exact snake_case identifier — one of "cta_absent", "cta_language_weak", ' +
+    '"cta_goal_mismatch", "cta_no_urgency", "cta_destination_unclear" — and NEVER the list number, ' +
     '"confidence" (high|medium|low), "evidence" (array of { type: transcript|ocr|visual|brief|metadata, text, ' +
     'timestamp }), "explanation", "suggested_correction" (a specific CTA rewrite or placement fix), ' +
     '"correction_type". Do not nest confidence/evidence/explanation under any other key. Use cannot_assess when ' +
