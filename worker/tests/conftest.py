@@ -12,7 +12,7 @@ _TEST_ENV_DEFAULTS = {
     "DATABASE_URL": "postgresql://postgres:postgres@localhost:54322/postgres",
     "SUPABASE_URL": "http://localhost:54321",
     "SUPABASE_SERVICE_ROLE_KEY": "test-service-role-key",
-    "OPENROUTER_API_KEY": "test-openrouter-key",
+    "ASSEMBLYAI_API_KEY": "test-assemblyai-key",
 }
 
 for _key, _value in _TEST_ENV_DEFAULTS.items():

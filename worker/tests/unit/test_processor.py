@@ -15,6 +15,7 @@ VALID_PAYLOAD = {
     "bucket": "videos",
     "video_path": "path/to/video.mp4",
     "product_imgs_folder_path": "path/to/imgs",
+    "logo_imgs_folder_path": "path/to/logos",
 }
 
 
