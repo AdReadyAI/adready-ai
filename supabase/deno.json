@@ -1,7 +1,8 @@
 {
   "tasks": {
     "test:unit": "deno test tests/functions/unit",
-    "test:integration": "deno test --allow-env --allow-net tests/functions/integration"
+    "test:integration": "deno test --allow-env --allow-net tests/functions/integration",
+    "eval": "deno run --allow-env --allow-net --allow-read --env-file=functions/.env functions/_eval/run_golden.ts"
   },
   "fmt": {
     "include": ["functions", "tests/functions"]
