@@ -1,7 +1,6 @@
 """Unit tests for VideoPreprocessor: metadata, audio, download, orchestration."""
 
 import json
-import os
 import subprocess
 from unittest.mock import MagicMock
 
@@ -9,11 +8,6 @@ import pytest
 import requests
 
 pytestmark = pytest.mark.unit
-
-# Configuration loads at import time; unit tests never reach these services.
-os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:54322/postgres")
-os.environ.setdefault("SUPABASE_URL", "http://localhost:54321")
-os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
 
 import analyzer.video_preprocessor as vp  # noqa: E402
 from analyzer.types import VideoMetadata  # noqa: E402
