@@ -8,3 +8,6 @@ create table public.logo_frames (
   reference_match text check (reference_match in ('matches_reference', 'differs_from_reference', 'cannot_determine')),
   primary key (request_id, frame_id)
 );
+
+alter table public.logo_frames enable row level security;
+grant select, insert, update, delete on public.logo_frames to service_role;

@@ -10,3 +10,6 @@ create table public.ocr_segments (
   font_size_px integer,
   primary key (request_id, ocr_id)
 );
+
+alter table public.ocr_segments enable row level security;
+grant select, insert, update, delete on public.ocr_segments to service_role;

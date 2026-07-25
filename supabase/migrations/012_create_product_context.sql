@@ -5,3 +5,6 @@ create table public.product_context (
   contraindications text[] not null default '{}',
   reference_asset_urls text[] not null default '{}'
 );
+
+alter table public.product_context enable row level security;
+grant select, insert, update, delete on public.product_context to service_role;

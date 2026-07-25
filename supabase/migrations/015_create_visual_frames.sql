@@ -11,3 +11,6 @@ create table public.visual_frames (
   technical_flags text[] not null default '{}',
   primary key (request_id, frame_id)
 );
+
+alter table public.visual_frames enable row level security;
+grant select, insert, update, delete on public.visual_frames to service_role;

@@ -11,3 +11,6 @@ create table public.parsed_creative_briefs (
   brand_guidelines text[] not null default '{}',
   policy_requirements text[] not null default '{}'
 );
+
+alter table public.parsed_creative_briefs enable row level security;
+grant select, insert, update, delete on public.parsed_creative_briefs to service_role;

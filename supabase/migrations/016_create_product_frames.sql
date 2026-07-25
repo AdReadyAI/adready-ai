@@ -10,3 +10,6 @@ create table public.product_frames (
   usage_context text,
   primary key (request_id, frame_id)
 );
+
+alter table public.product_frames enable row level security;
+grant select, insert, update, delete on public.product_frames to service_role;

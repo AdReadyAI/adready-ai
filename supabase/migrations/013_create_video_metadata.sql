@@ -6,3 +6,6 @@ create table public.video_metadata (
   dropped_frame_markers integer[] not null default '{}',
   corruption_detected boolean
 );
+
+alter table public.video_metadata enable row level security;
+grant select, insert, update, delete on public.video_metadata to service_role;
