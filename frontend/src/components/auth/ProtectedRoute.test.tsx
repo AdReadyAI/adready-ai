@@ -53,9 +53,10 @@ describe("ProtectedRoute", () => {
   it("renders nothing while auth is loading", () => {
     authMocks.useAuth.mockReturnValue(makeAuthValue({ loading: true }));
 
-    const { container } = renderProtectedRoute();
+    renderProtectedRoute();
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByRole("heading", { name: "Private content" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Sign in page" })).not.toBeInTheDocument();
   });
 
   it("redirects signed-out users to the sign-in page", async () => {

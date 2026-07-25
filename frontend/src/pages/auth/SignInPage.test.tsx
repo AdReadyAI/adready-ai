@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Session } from "@supabase/supabase-js";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -42,9 +42,12 @@ function renderAuthRoutes(initialEntry = "/auth/signin") {
 }
 
 function submitButton(name: RegExp) {
-  const form = screen.getByLabelText("Email").closest("form");
-  if (!form) throw new Error("Expected auth form to render");
-  return within(form).getByRole("button", { name });
+  const button = screen
+    .getAllByRole("button", { name })
+    .find((element) => element.getAttribute("type") === "submit");
+
+  if (!button) throw new Error(`Expected submit button named ${name} to render`);
+  return button;
 }
 
 beforeEach(() => {
