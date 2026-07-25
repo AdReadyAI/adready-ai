@@ -1,8 +1,9 @@
 /**
  * checks.ts — Storyline deterministic sub-checks (no model call).
  *
- * channel_readiness has a single deterministic sub-check, format_noncompliant.
- * pacing_misallocation is no longer deterministic: the AgentContext exposes
+ * channel_readiness's deterministic sub-check is format_noncompliant; its
+ * placement/audience-fit sub-check (placement_mismatch) is LLM-judged in agent.ts.
+ * pacing_misallocation is likewise not deterministic: the AgentContext exposes
  * point-in-time visual_frames (no scene durations to sum), so pacing is judged
  * by the LLM in Call 2. format_noncompliant is a pure function of
  * (metadata, spec); it gates on the platform spec table via `gateOnConfig`.

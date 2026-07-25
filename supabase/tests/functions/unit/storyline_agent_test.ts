@@ -59,6 +59,7 @@ const ALL_PASS = evalJson([
   { check_id: "value_prop_unclear", result: "passed", severity: "none" },
   { check_id: "story_incomplete", result: "passed", severity: "none" },
   { check_id: "pacing_misallocation", result: "passed", severity: "none" },
+  { check_id: "placement_mismatch", result: "passed", severity: "none" },
 ]);
 
 function metricsById(results: MetricResult[]) {
@@ -93,9 +94,79 @@ Deno.test("happy path with populated config: both metrics pass", async () => {
   const byId = metricsById(
     await runStorylineAgent(makeAgentContext(), llm, POPULATED),
   );
-  assertEquals(byId.get("channel_readiness")!.result, "true");
+  const channel = byId.get("channel_readiness")!;
+  assertEquals(channel.result, "true");
+  assertEquals(channel.severity, "none");
+  // channel_readiness rolls up the deterministic format check + the LLM placement check.
+  assertEquals(channel.sub_checks!.map((s) => s.check_id).sort(), [
+    "format_noncompliant",
+    "placement_mismatch",
+  ]);
   assertEquals(byId.get("creative_effectiveness")!.result, "true");
   assertEquals(byId.get("creative_effectiveness")!.severity, "none");
+});
+
+Deno.test("placement_mismatch failure rolls up into channel_readiness (format passes)", async () => {
+  const llm = scriptedLlm([
+    ARC_OK,
+    evalJson([
+      { check_id: "hook_missing", result: "passed", severity: "none" },
+      { check_id: "narrative_gap", result: "passed", severity: "none" },
+      { check_id: "value_prop_unclear", result: "passed", severity: "none" },
+      { check_id: "story_incomplete", result: "passed", severity: "none" },
+      { check_id: "pacing_misallocation", result: "passed", severity: "none" },
+      {
+        check_id: "placement_mismatch",
+        result: "failed",
+        severity: "high",
+        explanation: "Long-form talking-head pacing is wrong for TikTok.",
+      },
+    ]),
+  ]);
+  // Format is spec-compliant (nominal fixture), so only placement fails.
+  const byId = metricsById(
+    await runStorylineAgent(makeAgentContext(), llm, POPULATED),
+  );
+  const channel = byId.get("channel_readiness")!;
+  assertEquals(channel.result, "false");
+  assertEquals(channel.severity, "high");
+  assertEquals(
+    channel.sub_checks!.find((s) => s.check_id === "placement_mismatch")!
+      .severity,
+    "high",
+  );
+  // creative_effectiveness is unaffected by the channel-only failure.
+  assertEquals(byId.get("creative_effectiveness")!.result, "true");
+});
+
+Deno.test("placement_mismatch severity is clamped to high", async () => {
+  const llm = scriptedLlm([
+    ARC_OK,
+    evalJson([
+      { check_id: "hook_missing", result: "passed", severity: "none" },
+      { check_id: "narrative_gap", result: "passed", severity: "none" },
+      { check_id: "value_prop_unclear", result: "passed", severity: "none" },
+      { check_id: "story_incomplete", result: "passed", severity: "none" },
+      { check_id: "pacing_misallocation", result: "passed", severity: "none" },
+      // placement_mismatch max is "high" — model over-reports "critical".
+      {
+        check_id: "placement_mismatch",
+        result: "failed",
+        severity: "critical",
+        explanation: "wrong platform",
+      },
+    ]),
+  ]);
+  const byId = metricsById(
+    await runStorylineAgent(makeAgentContext(), llm, POPULATED),
+  );
+  const channel = byId.get("channel_readiness")!;
+  assertEquals(
+    channel.sub_checks!.find((s) => s.check_id === "placement_mismatch")!
+      .severity,
+    "high", // clamped down from critical
+  );
+  assertEquals(channel.severity, "high");
 });
 
 Deno.test("merge: deterministic format failure + LLM gap failure roll up per metric", async () => {
@@ -228,11 +299,19 @@ Deno.test("total LLM failure: deterministic channel still stands, creative → c
   assertEquals(byId.get("creative_effectiveness")!.result, "cannot_assess");
 });
 
-Deno.test("default (unpopulated) config: channel cannot_assess, creative judged on assessable", async () => {
+Deno.test("default (unpopulated) config: channel judged on the LLM placement check", async () => {
   const llm = scriptedLlm([ARC_OK, ALL_PASS]);
   // No config arg → resolves from the (null) global config surface.
   const byId = metricsById(await runStorylineAgent(makeAgentContext(), llm));
-  assertEquals(byId.get("channel_readiness")!.result, "cannot_assess");
+  const channel = byId.get("channel_readiness")!;
+  // format_noncompliant gates off (null spec) → cannot_assess, but the LLM
+  // placement_mismatch check is not config-gated and passes, so the metric stands.
+  assertEquals(
+    channel.sub_checks!.find((s) => s.check_id === "format_noncompliant")!
+      .result,
+    "cannot_assess",
+  );
+  assertEquals(channel.result, "true");
   // hook/narrative/value/pacing passed; story cannot_assess → judged on the passes.
   assertEquals(byId.get("creative_effectiveness")!.result, "true");
 });

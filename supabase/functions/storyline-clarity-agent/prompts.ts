@@ -3,9 +3,11 @@
  *
  * Wording follows the spec's two prompts, adapted to the AgentContext: the
  * narrative arc is labeled over point-in-time visual_frames, and pacing is judged
- * entirely by the model (there are no scene durations to sum). The hook window is
- * passed as a tunable default rather than hardcoded in prose. Functional first
- * drafts, expected to be tuned once Evaluation Science supplies numbers.
+ * entirely by the model (there are no scene durations to sum). Call 2 also judges
+ * placement_mismatch — the channel_readiness appropriateness check — using the
+ * destination_platform, campaign_goal, and audience_brief evidence. The hook
+ * window is passed as a tunable default rather than hardcoded in prose. Functional
+ * first drafts, expected to be tuned once Evaluation Science supplies numbers.
  */
 
 import type { ChatMessage } from "../shared/llm_client.ts";
@@ -46,10 +48,18 @@ export function derivationPrompt(ctx: AgentContext): ChatMessage[] {
 }
 
 function evaluationInput(ctx: AgentContext, arc: ArcLabeling | null): string {
+  const brief = ctx.parsed_creative_brief;
   return JSON.stringify(
     {
       duration_ms: ctx.video_metadata.duration_ms,
       destination_platform: ctx.destination_platform,
+      campaign_goal: ctx.campaign_goal,
+      // Audience-brief evidence for placement_mismatch; any field may be null.
+      audience_brief: {
+        target_audience: brief.target_audience ?? null,
+        brand_voice: brief.brand_voice ?? null, // tone
+        required_messages: brief.required_messages,
+      },
       visual_frames: ctx.visual_frames,
       transcript_segments: ctx.transcript_segments,
       hook_window_ms: DEFAULT_HOOK_WINDOW_MS,
@@ -68,28 +78,46 @@ const CREATIVE_EFFECTIVENESS_RUBRIC =
   "pacing_misallocation (range none→medium): judge whether the frames labeled detour take a disproportionate " +
   "share of the runtime.";
 
+const CHANNEL_READINESS_RUBRIC =
+  "Severity rubric for channel_readiness (grade against this, do not invent a scale). " +
+  "placement_mismatch (range none→high): none = well-matched to the platform and audience; " +
+  "low = minor tonal or pacing mismatch; medium = noticeably off for the placement or the audience; " +
+  "high = wrong platform/format for the content, or content that would clearly alienate the target audience.";
+
 export function evaluationPrompt(
   ctx: AgentContext,
   arc: ArcLabeling | null,
 ): ChatMessage[] {
   const system =
-    "You are evaluating the storyline clarity of a short-form ad against the creative_effectiveness metric. " +
-    "You are given the visual_frames with their visual_descriptions and timestamps, the transcript_segments, " +
-    "the total duration, the destination_platform, and the narrative arc labeled in the previous step (each " +
+    "You are evaluating a short-form ad on two metrics: creative_effectiveness (its internal storytelling) and " +
+    "channel_readiness (its fit for the intended placement and audience). You are given the visual_frames with " +
+    "their visual_descriptions and timestamps, the transcript_segments, the total duration, the " +
+    "destination_platform, the campaign_goal, an audience_brief (target_audience, brand_voice/tone, and " +
+    "required_messages — any field may be null), and the narrative arc labeled in the previous step (each " +
     "frame's arc role, which roles are unfilled, and where the payoff resolves). If narrative_arc is null the " +
     "labeling failed; judge only what the transcript and frames allow and use cannot_assess for arc-dependent " +
-    "checks. You are not given a creative brief; judge the ad on its own internal coherence.\n\n" +
+    "checks. Judge the five creative_effectiveness sub-checks (1–5) on the ad's own internal coherence, not on " +
+    "brief conformance; use the audience_brief only for the channel_readiness sub-check (6).\n\n" +
     "Run each of these sub-checks and report each separately: (1) hook_missing — does the opening hook_window_ms " +
     "establish a relevant, attention-grabbing hook? (2) narrative_gap — do the frames flow logically, or is there " +
     "a jump/contradiction/unrelated cut? (3) value_prop_unclear — would a viewer with no prior knowledge " +
     "understand what the product is and why it matters? (4) story_incomplete — does the arc resolve within the " +
     "runtime, using unfilled_roles and payoff_resolved_at, adjusting for very short ads? (5) pacing_misallocation " +
     "— using the frames labeled detour and their timestamps, judge whether the time they take is disproportionate " +
-    "to the ad's length.\n\n" +
+    "to the ad's length. (6) placement_mismatch — is the ad appropriate for the destination_platform and its " +
+    "viewing context, and do its tone, message, pacing, and use-case suit the target audience's needs and " +
+    "motivations? Draw on the destination_platform, campaign_goal, and audience_brief. When target_audience is " +
+    "null, judge only the platform/placement/viewing-context fit and do not guess the audience dimension; if " +
+    "neither can be judged, use cannot_assess.\n\n" +
     CREATIVE_EFFECTIVENESS_RUBRIC +
+    " " +
+    CHANNEL_READINESS_RUBRIC +
     "\n\nReturn ONLY a single JSON object with these exact TOP-LEVEL keys and NO wrapper object around them: " +
     '"sub_checks" (array of { check_id, result: passed|failed|cannot_assess, severity: ' +
-    "none|low|medium|high|critical, explanation (only when failed, naming the timestamp/frame) }), " +
+    "none|low|medium|high|critical, explanation (only when failed, naming the timestamp/frame) }), where " +
+    'check_id is the exact snake_case identifier — one of "hook_missing", "narrative_gap", ' +
+    '"value_prop_unclear", "story_incomplete", "pacing_misallocation", "placement_mismatch" — and NEVER the ' +
+    "list number, " +
     '"confidence" (high|medium|low), "evidence" (array of { type: transcript|ocr|visual|brief|metadata, text, ' +
     'timestamp }), "explanation", "suggested_correction" (a specific actionable fix), "correction_type". Do not ' +
     "nest confidence/evidence/explanation under any other key. Use cannot_assess when the inputs do not let you " +
