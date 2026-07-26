@@ -127,7 +127,7 @@ createEdgeHandler(
   "storyline-clarity-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
-    const context = await loadAgentContext(ctx.body.request_id, undefined, {
+    const context = await loadAgentContext(ctx.body.request_id, {
       userId: ctx.user.id,
     });
     const results = await runStorylineAgent(context, defaultLlmClient);

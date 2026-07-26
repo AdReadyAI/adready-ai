@@ -21,7 +21,7 @@
  *   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... (from `supabase status`)
  *   deno run --allow-env --allow-net --allow-read \
  *     --config supabase/deno.json \
- *     supabase/functions/_eval/run_golden.ts --db <request_id> [video_id]
+ *     supabase/functions/_eval/run_golden.ts --db <request_id>
  *
  * Default golden file: functions/_eval/golden/mango_moon.json
  *
@@ -69,19 +69,12 @@ async function loadContext(): Promise<AgentContext> {
     requireEnv("SUPABASE_URL");
     requireEnv("SUPABASE_SERVICE_ROLE_KEY");
     const requestId = Deno.args[1];
-    const videoId = Deno.args[2];
     if (!requestId) {
-      console.error(
-        "✗ --db mode requires a <request_id> (and optional [video_id]).",
-      );
+      console.error("✗ --db mode requires a <request_id>.");
       Deno.exit(1);
     }
-    console.log(
-      `Source: DB  request_id=${requestId}${
-        videoId ? ` video_id=${videoId}` : " (primary video)"
-      }`,
-    );
-    return await loadAgentContext(requestId, videoId);
+    console.log(`Source: DB  request_id=${requestId}`);
+    return await loadAgentContext(requestId);
   }
 
   const path = Deno.args[0] ?? DEFAULT_GOLDEN;
