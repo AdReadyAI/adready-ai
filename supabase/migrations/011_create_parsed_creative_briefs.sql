@@ -24,3 +24,20 @@ create policy "users read own creative brief"
       where user_id = auth.uid()
     )
   );
+
+create policy "users update own creative brief"
+  on public.parsed_creative_briefs
+  for update
+  to authenticated
+  using (
+    request_id in (
+      select request_id from public.requests
+      where user_id = auth.uid()
+    )
+  )
+  with check (
+    request_id in (
+      select request_id from public.requests
+      where user_id = auth.uid()
+    )
+  );
