@@ -14,15 +14,8 @@
 
 import { chat } from "../../shared/llm.ts";
 import type { OCRSegment, TranscriptSegment } from "../../shared/schemas.ts";
-import {
-  buildExtractionUserPrompt,
-  EXTRACTION_SYSTEM_PROMPT,
-} from "../prompts/extraction.ts";
-import type {
-  ClaimCandidateExtractor,
-  ClaimInstance,
-  DerivedClaim,
-} from "../types.ts";
+import { buildExtractionUserPrompt, EXTRACTION_SYSTEM_PROMPT } from "../prompts/extraction.ts";
+import type { ClaimCandidateExtractor, ClaimInstance, DerivedClaim } from "../types.ts";
 import { msToTimestamp } from "../utils.ts";
 import { ExtractionResponseSchema, parseLLMJson } from "./llm-response.ts";
 
@@ -39,11 +32,7 @@ export function processExtractionResponse(
   transcript: TranscriptSegment[],
   ocr: OCRSegment[],
 ): DerivedClaim[] {
-  const parsed = parseLLMJson(
-    raw,
-    ExtractionResponseSchema,
-    "claims-extraction",
-  );
+  const parsed = parseLLMJson(raw, ExtractionResponseSchema, "claims-extraction");
 
   // Look up each referenced segment's real source/start_ms/timestamp --
   // don't trust the model to transcribe those correctly.
