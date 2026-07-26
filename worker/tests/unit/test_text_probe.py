@@ -463,3 +463,42 @@ def test_ambiguous_identical_regions_remain_separate_segments(tmp_path):
         right.rectangle,
         ambiguous.rectangle,
     }
+
+
+def test_text_segments_receive_deterministic_run_scoped_identifiers(tmp_path):
+    """Stable identifiers let later OCR consolidation retain Text Segment provenance."""
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    context = FrameContext(
+        index=0,
+        timestamp=0.0,
+        frame=frame,
+        gray=frame[:, :, 0],
+        small=frame,
+        edges=np.zeros((100, 200), dtype=np.uint8),
+        store=FrameStore(str(tmp_path)),
+    )
+    detector = FakeTextRegionDetector(
+        [
+            [
+                TextDetection(
+                    rectangle=(0.1, 0.2, 0.2, 0.1),
+                    confidence=0.9,
+                ),
+                TextDetection(
+                    rectangle=(0.6, 0.2, 0.2, 0.1),
+                    confidence=0.8,
+                ),
+            ]
+        ]
+    )
+
+    first_result = TextProbe(detector=detector)
+    first_result.process(context)
+    segments = first_result.finalize().text_segments
+
+    # Identifiers are deterministic within one run and restart for a new run,
+    # allowing durable OCR records to link back without using visual hashes.
+    assert [segment.identifier for segment in segments] == [
+        "text_segment_0001",
+        "text_segment_0002",
+    ]

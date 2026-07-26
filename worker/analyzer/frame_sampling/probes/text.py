@@ -1,6 +1,6 @@
 """Cost-cascaded detection and tracking of on-screen text-like regions."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 import numpy as np
@@ -21,7 +21,7 @@ class TextDetection:
 
 @dataclass(frozen=True)
 class TextSegment:
-    """Detector-only Media Evidence for one tracked text-like region."""
+    """Detector-only diagnostic provenance for one tracked text-like region."""
 
     start_s: float
     end_s: float
@@ -32,6 +32,7 @@ class TextSegment:
     candidate_sources: tuple[str, ...]
     missed_observations: int
     timing_uncertainty_s: float
+    identifier: str = ""
 
 
 @dataclass
@@ -190,6 +191,12 @@ class TextProbe(DeferredModelProbe):
                 segment.rectangle[0],
             )
         )
+        # Identifiers follow the normalized public order and restart for every
+        # probe instance, which scopes them deterministically to one OCR Run.
+        self._text_segments = [
+            replace(segment, identifier=f"text_segment_{position:04d}")
+            for position, segment in enumerate(self._text_segments, start=1)
+        ]
         return TextProbeResult(text_segments=self._text_segments)
 
     def _close_open_segments(self) -> None:
