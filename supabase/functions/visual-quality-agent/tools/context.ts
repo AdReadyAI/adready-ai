@@ -11,17 +11,14 @@
  * without changing the rest of the agent pipeline.
  */
 
-import {
-  AgentContextSchema,
-} from "../../shared/schemas.ts";
+import { AgentContextSchema } from "../../shared/schemas.ts";
 
-import type {
-  AgentContext,
-} from "../../shared/schemas.ts";
+import type { AgentContext } from "../../shared/schemas.ts";
 
 export async function getAgentContext(
   requestId: string,
 ): Promise<AgentContext> {
+  await new Promise((resolve) => setTimeout(resolve, 100));
   const mockContext: AgentContext = {
     request_id: requestId,
 
@@ -33,11 +30,9 @@ export async function getAgentContext(
       raw_text:
         "Create a short-form social video introducing the product with a clear, premium visual style.",
 
-      brand_voice:
-        "Premium, modern, confident, approachable.",
+      brand_voice: "Premium, modern, confident, approachable.",
 
-      target_audience:
-        "Young adults interested in premium lifestyle products.",
+      target_audience: "Young adults interested in premium lifestyle products.",
 
       required_messages: [
         "Show the product clearly.",
@@ -145,21 +140,21 @@ export async function getAgentContext(
         frame_id: "frame-3",
         timestamp_ms: 7000,
         visual_description:
-            "A transition between scenes with the product moving across frame. The product shape visibly morphs between frames, the background flickers, and parts of the object appear duplicated or distorted.",
+          "A transition between scenes with the product moving across frame. The product shape visibly morphs between frames, the background flickers, and parts of the object appear duplicated or distorted.",
         color_palette: {
-            dominant_colors: ["blue", "white"],
-            lighting_quality: "consistent",
+          dominant_colors: ["blue", "white"],
+          lighting_quality: "consistent",
         },
         background: {
-            location_type: "interior",
-            mood: "dynamic",
+          location_type: "interior",
+          mood: "dynamic",
         },
         camera_movement: "pan",
         technical_flags: [
-            "AI morphing artifact",
-            "flickering background",
-            "object distortion",
-            "ghosting",
+          "AI morphing artifact",
+          "flickering background",
+          "object distortion",
+          "ghosting",
         ],
       },
       {

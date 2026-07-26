@@ -17,21 +17,16 @@
 
 import { z } from "zod";
 
-import type {
-  AgentContext,
-} from "../../shared/schemas.ts";
+import type { AgentContext } from "../../shared/schemas.ts";
 
 import { chat } from "../../shared/llm.ts";
 
 import {
-  VISUAL_AUDIT_SYSTEM_PROMPT,
   buildVisualAuditUserPrompt,
+  VISUAL_AUDIT_SYSTEM_PROMPT,
 } from "../prompts/visual-audit.ts";
 
-import type {
-  VisualAuditFinding,
-  VisualAuditLLMResponse,
-} from "../types.ts";
+import type { VisualAuditFinding, VisualAuditLLMResponse } from "../types.ts";
 
 const VisualAuditResponseSchema = z.object({
   findings: z.array(
@@ -82,18 +77,15 @@ export async function auditVisualQuality(
 
   const parsed = parseLLMJson(response);
 
-  const validated =
-    VisualAuditResponseSchema.parse(parsed);
+  const validated = VisualAuditResponseSchema.parse(parsed);
 
   return validated.findings.map((finding) => ({
     check_id: finding.check_id,
     severity: finding.severity as 0 | 1 | 2 | 3 | 4,
     explanation: finding.explanation,
     evidence_text: finding.evidence_text,
-    evidence_timestamp_ms:
-      finding.evidence_timestamp_ms,
-    confidence_score:
-      finding.confidence_score,
+    evidence_timestamp_ms: finding.evidence_timestamp_ms,
+    confidence_score: finding.confidence_score,
   }));
 }
 

@@ -37,7 +37,9 @@ export function msToTimestamp(ms: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
 
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return `${String(minutes).padStart(2, "0")}:${
+    String(seconds).padStart(2, "0")
+  }`;
 }
 
 export function worstSeverity(
@@ -67,9 +69,6 @@ export function evidenceFromTimestamp(
   return {
     type,
     text,
-    timestamp:
-      timestampMs === null
-        ? ""
-        : msToTimestamp(timestampMs),
+    timestamp: timestampMs === null ? "" : msToTimestamp(timestampMs),
   };
 }

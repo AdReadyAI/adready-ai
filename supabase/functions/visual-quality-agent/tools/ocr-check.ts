@@ -15,18 +15,11 @@
  * rendered text.
  */
 
-import type {
-  AgentContext,
-  OCRSegment,
-} from "../../shared/schemas.ts";
+import type { AgentContext, OCRSegment } from "../../shared/schemas.ts";
 
-import type {
-  InternalCheckResult,
-} from "../types.ts";
+import type { InternalCheckResult } from "../types.ts";
 
-import {
-  evidenceFromTimestamp,
-} from "../utils.ts";
+import { evidenceFromTimestamp } from "../utils.ts";
 
 export function checkOCR(
   context: AgentContext,
@@ -75,8 +68,7 @@ export function checkOCR(
         legibilityRiskScore(a),
     )[0];
 
-  const severityScore =
-    legibilityRiskScore(mostSevere);
+  const severityScore = legibilityRiskScore(mostSevere);
 
   return {
     illegible_text: {
