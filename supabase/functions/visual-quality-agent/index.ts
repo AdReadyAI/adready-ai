@@ -124,3 +124,17 @@
 //   const results: MetricResult[] = [];
 //   return ok(results);
 // });
+
+Deno.serve(() => {
+  return new Response(
+    JSON.stringify({
+      message: "Hello World",
+    }),
+    {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    },
+  );
+});
