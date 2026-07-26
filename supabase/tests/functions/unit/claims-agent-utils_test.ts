@@ -40,10 +40,30 @@ Deno.test("claims-agent utils buckets confidence levels", () => {
 Deno.test("claims-agent utils preserves unique verifiable categories", () => {
   assertEquals(
     uniqueCategories([
-      { claim_id: "c1", is_verifiable_claim: true, category: "factual_claim", reasoning: "a" },
-      { claim_id: "c2", is_verifiable_claim: true, category: "health_or_medical_claim", reasoning: "b" },
-      { claim_id: "c3", is_verifiable_claim: false, category: null, reasoning: "c" },
-      { claim_id: "c4", is_verifiable_claim: true, category: "factual_claim", reasoning: "d" },
+      {
+        claim_id: "c1",
+        is_verifiable_claim: true,
+        category: "factual_claim",
+        reasoning: "a",
+      },
+      {
+        claim_id: "c2",
+        is_verifiable_claim: true,
+        category: "health_or_medical_claim",
+        reasoning: "b",
+      },
+      {
+        claim_id: "c3",
+        is_verifiable_claim: false,
+        category: null,
+        reasoning: "c",
+      },
+      {
+        claim_id: "c4",
+        is_verifiable_claim: true,
+        category: "factual_claim",
+        reasoning: "d",
+      },
     ]),
     ["factual_claim", "health_or_medical_claim"],
   );

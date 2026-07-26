@@ -11,17 +11,11 @@
  * already provided by the media-processing pipeline.
  */
 
-import type {
-  AgentContext,
-} from "../../shared/schemas.ts";
+import type { AgentContext } from "../../shared/schemas.ts";
 
-import type {
-  InternalCheckResult,
-} from "../types.ts";
+import type { InternalCheckResult } from "../types.ts";
 
-import {
-  evidenceFromTimestamp,
-} from "../utils.ts";
+import { evidenceFromTimestamp } from "../utils.ts";
 
 export function checkMetadata(
   context: AgentContext,
@@ -42,8 +36,7 @@ export function checkMetadata(
 function checkVideoCorruption(
   context: AgentContext,
 ): InternalCheckResult {
-  const corrupted =
-    context.video_metadata.corruption_detected === true;
+  const corrupted = context.video_metadata.corruption_detected === true;
 
   if (!corrupted) {
     return {
@@ -76,8 +69,7 @@ function checkVideoCorruption(
 function checkDroppedFrames(
   context: AgentContext,
 ): InternalCheckResult {
-  const markers =
-    context.video_metadata.dropped_frame_markers;
+  const markers = context.video_metadata.dropped_frame_markers;
 
   if (markers.length === 0) {
     return {
@@ -91,13 +83,11 @@ function checkDroppedFrames(
     };
   }
 
-  const duration =
-    context.video_metadata.duration_ms;
+  const duration = context.video_metadata.duration_ms;
 
-  const markerRatio =
-    duration > 0
-      ? markers.length / Math.max(1, duration / 1000)
-      : 1;
+  const markerRatio = duration > 0
+    ? markers.length / Math.max(1, duration / 1000)
+    : 1;
 
   let severityScore: 1 | 2 | 3;
 
@@ -109,21 +99,21 @@ function checkDroppedFrames(
     severityScore = 1;
   }
 
-  const timestamp =
-    markers.length > 0
-      ? markers[0]
-      : null;
+  const timestamp = markers.length > 0 ? markers[0] : null;
 
   return {
     check_id: "dropped_frames",
     name: "Frame Sync Check",
     result: "failed",
     severityScore,
-    explanation:
-      `${markers.length} dropped-frame marker${markers.length === 1 ? "" : "s"} were detected in the video metadata.`,
+    explanation: `${markers.length} dropped-frame marker${
+      markers.length === 1 ? "" : "s"
+    } were detected in the video metadata.`,
     evidence: evidenceFromTimestamp(
       "metadata",
-      `Dropped-frame marker detected at ${timestamp === null ? "an unspecified time" : `${timestamp}ms`}.`,
+      `Dropped-frame marker detected at ${
+        timestamp === null ? "an unspecified time" : `${timestamp}ms`
+      }.`,
       timestamp,
     ),
     confidence_score: 0.98,

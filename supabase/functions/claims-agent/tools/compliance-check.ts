@@ -15,7 +15,10 @@
 
 import { chat } from "../../shared/llm.ts";
 import type { OCRSegment, ParsedCreativeBrief } from "../../shared/schemas.ts";
-import { buildComplianceUserPrompt, COMPLIANCE_SYSTEM_PROMPT } from "../prompts/compliance.ts";
+import {
+  buildComplianceUserPrompt,
+  COMPLIANCE_SYSTEM_PROMPT,
+} from "../prompts/compliance.ts";
 import type {
   ComplianceCheckAgent,
   ComplianceFinding,
@@ -26,11 +29,15 @@ import { ComplianceResponseSchema, parseLLMJson } from "./llm-response.ts";
 
 const STANDARD_MODEL = Deno.env.get("OPENROUTER_MODEL_COMPLIANCE") ??
   Deno.env.get("OPENROUTER_MODEL");
-const HIGH_STAKES_MODEL = Deno.env.get("OPENROUTER_MODEL_COMPLIANCE_HIGH_STAKES") ??
-  STANDARD_MODEL;
+const HIGH_STAKES_MODEL =
+  Deno.env.get("OPENROUTER_MODEL_COMPLIANCE_HIGH_STAKES") ??
+    STANDARD_MODEL;
 
 /** Categories with real regulatory/legal exposure — escalate to the stronger model. */
-export const HIGH_STAKES_CATEGORIES = new Set(["health_or_medical_claim", "safety_claim"]);
+export const HIGH_STAKES_CATEGORIES = new Set([
+  "health_or_medical_claim",
+  "safety_claim",
+]);
 
 /**
  * Pure: parses/validates one batch's raw LLM response and applies the
@@ -40,7 +47,11 @@ export function processComplianceResponse(
   raw: string,
   claims: VerifiableClaim[],
 ): ComplianceFinding[] {
-  const parsed = parseLLMJson(raw, ComplianceResponseSchema, "compliance-check");
+  const parsed = parseLLMJson(
+    raw,
+    ComplianceResponseSchema,
+    "compliance-check",
+  );
   const byId = new Map(parsed.map((r) => [r.claim_id, r]));
 
   return claims.map((claim): ComplianceFinding => {
@@ -55,7 +66,8 @@ export function processComplianceResponse(
       policy_excerpt: "",
       issue_description:
         "Compliance response did not cover this claim; flagged for manual review.",
-      recommendation: "Review this claim manually against applicable regulations.",
+      recommendation:
+        "Review this claim manually against applicable regulations.",
       confidence_score: 0.2,
       excerpt_verified: false,
     };
@@ -73,7 +85,10 @@ async function runComplianceBatch(
   const raw = await chat(
     [
       { role: "system", content: COMPLIANCE_SYSTEM_PROMPT },
-      { role: "user", content: buildComplianceUserPrompt(claims, evidence, ocrSegments) },
+      {
+        role: "user",
+        content: buildComplianceUserPrompt(claims, evidence, ocrSegments),
+      },
     ],
     model,
   );
@@ -87,8 +102,12 @@ export const checkCompliance: ComplianceCheckAgent = async (
   ocrSegments: OCRSegment[],
   _brief: ParsedCreativeBrief,
 ): Promise<ComplianceFinding[]> => {
-  const highStakes = claims.filter((c) => HIGH_STAKES_CATEGORIES.has(c.category));
-  const standard = claims.filter((c) => !HIGH_STAKES_CATEGORIES.has(c.category));
+  const highStakes = claims.filter((c) =>
+    HIGH_STAKES_CATEGORIES.has(c.category)
+  );
+  const standard = claims.filter((c) =>
+    !HIGH_STAKES_CATEGORIES.has(c.category)
+  );
 
   const [highStakesResults, standardResults] = await Promise.all([
     runComplianceBatch(highStakes, evidence, ocrSegments, HIGH_STAKES_MODEL),
@@ -96,6 +115,8 @@ export const checkCompliance: ComplianceCheckAgent = async (
   ]);
 
   // Preserve the original claim order in the returned array.
-  const byId = new Map([...highStakesResults, ...standardResults].map((r) => [r.claim_id, r]));
+  const byId = new Map(
+    [...highStakesResults, ...standardResults].map((r) => [r.claim_id, r]),
+  );
   return claims.map((c) => byId.get(c.claim_id)!);
 };

@@ -25,17 +25,9 @@ import type {
   SubCheckResult,
 } from "../shared/schemas.ts";
 
-import type {
-  ProductionReadinessChecks,
-  SeverityScore,
-} from "./types.ts";
+import type { ProductionReadinessChecks, SeverityScore } from "./types.ts";
 
-import {
-  confidenceBucket,
-  msToTimestamp,
-  severityFromScore,
-  worstSeverity,
-} from "./utils.ts";
+import { confidenceBucket, severityFromScore, worstSeverity } from "./utils.ts";
 
 export function evaluateProductionReadiness(
   context: AgentContext,
@@ -77,9 +69,7 @@ export function evaluateProductionReadiness(
     name: check.name,
     result: check.result,
     severity: severityFromScore(check.severityScore),
-    ...(check.explanation
-      ? { explanation: check.explanation }
-      : {}),
+    ...(check.explanation ? { explanation: check.explanation } : {}),
   }));
 
   const correction = buildCorrection(
@@ -94,10 +84,9 @@ export function evaluateProductionReadiness(
     question:
       "Is the video technically complete enough to be reviewed or launched?",
     result,
-    severity:
-      result === "cannot_assess"
-        ? "cannot_assess"
-        : severityFromScore(overallSeverityScore),
+    severity: result === "cannot_assess"
+      ? "cannot_assess"
+      : severityFromScore(overallSeverityScore),
     confidence: confidenceBucket(confidenceScore),
     ...(evidence.length > 0 ? { evidence } : {}),
     explanation: buildExplanation(
@@ -115,7 +104,8 @@ export function evaluateProductionReadiness(
 function determineOverallResult(
   allChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
   failedChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-  cannotAssessChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
+  cannotAssessChecks:
+    ProductionReadinessChecks[keyof ProductionReadinessChecks][],
 ): "true" | "false" | "cannot_assess" {
   if (failedChecks.length > 0) {
     return "false";
@@ -135,7 +125,8 @@ function determineOverallResult(
 function calculateOverallConfidence(
   allChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
   failedChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-  cannotAssessChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
+  cannotAssessChecks:
+    ProductionReadinessChecks[keyof ProductionReadinessChecks][],
 ): number {
   if (allChecks.length === 0) {
     return 0;
@@ -145,26 +136,23 @@ function calculateOverallConfidence(
     return 0;
   }
 
-  const relevantChecks =
-    failedChecks.length > 0
-      ? failedChecks
-      : allChecks.filter(
-          (check) => check.result !== "cannot_assess",
-        );
+  const relevantChecks = failedChecks.length > 0
+    ? failedChecks
+    : allChecks.filter(
+      (check) => check.result !== "cannot_assess",
+    );
 
   if (relevantChecks.length === 0) {
     return 0;
   }
 
-  const average =
-    relevantChecks.reduce(
-      (sum, check) => sum + check.confidence_score,
-      0,
-    ) / relevantChecks.length;
+  const average = relevantChecks.reduce(
+    (sum, check) => sum + check.confidence_score,
+    0,
+  ) / relevantChecks.length;
 
   // Missing checks reduce confidence.
-  const completeness =
-    (allChecks.length - cannotAssessChecks.length) /
+  const completeness = (allChecks.length - cannotAssessChecks.length) /
     allChecks.length;
 
   return Math.min(1, average * completeness);
@@ -182,10 +170,9 @@ function collectEvidence(
     (check) => check.severityScore === overallSeverityScore,
   );
 
-  const sourceChecks =
-    highestSeverityChecks.length > 0
-      ? highestSeverityChecks
-      : failedChecks;
+  const sourceChecks = highestSeverityChecks.length > 0
+    ? highestSeverityChecks
+    : failedChecks;
 
   return sourceChecks
     .filter((check) => check.evidence)
@@ -196,7 +183,8 @@ function collectEvidence(
 function buildExplanation(
   _context: AgentContext,
   failedChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-  cannotAssessChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
+  cannotAssessChecks:
+    ProductionReadinessChecks[keyof ProductionReadinessChecks][],
   overallSeverityScore: SeverityScore,
 ): string {
   if (failedChecks.length === 0 && cannotAssessChecks.length === 0) {
@@ -217,7 +205,9 @@ function buildExplanation(
 
   const severity = severityFromScore(overallSeverityScore);
 
-  return `Production readiness is ${severity} due to the following detected issue${issues.length === 1 ? "" : "s"}: ${issues.join(" ")}`;
+  return `Production readiness is ${severity} due to the following detected issue${
+    issues.length === 1 ? "" : "s"
+  }: ${issues.join(" ")}`;
 }
 
 function buildCorrection(
@@ -287,10 +277,9 @@ function buildCorrection(
   }
 
   return {
-    text:
-      overallSeverityScore >= 3
-        ? "Correct the major production-quality issues before launch."
-        : "Review and correct the identified production-quality issues before final export.",
+    text: overallSeverityScore >= 3
+      ? "Correct the major production-quality issues before launch."
+      : "Review and correct the identified production-quality issues before final export.",
     type: "edit_recommendation",
   };
 }

@@ -98,8 +98,6 @@ export type ComplianceFinding = {
   excerpt_verified: boolean;
 };
 
-
-
 /** PORT: loads all DB-backed context needed to run this agent, keyed by request_id. */
 export type AgentContextProvider = (
   request_id: string,

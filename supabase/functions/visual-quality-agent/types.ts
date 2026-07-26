@@ -13,11 +13,7 @@
  * the shared public schemas used by the Edge Function API.
  */
 
-import type {
-  AgentContext,
-  EvidenceRef,
-  SubCheckResult,
-} from "../shared/schemas.ts";
+import type { AgentContext, EvidenceRef } from "../shared/schemas.ts";
 
 export type SeverityScore = 0 | 1 | 2 | 3 | 4;
 

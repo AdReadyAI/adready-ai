@@ -2,10 +2,7 @@ import { MetricResultSchema } from "../shared/schemas.ts";
 import type { MetricResult } from "../shared/schemas.ts";
 
 import { evaluateProductionReadiness } from "./metrics.ts";
-import type {
-  ProductionReadinessChecks,
-  VisualAuditFinding,
-} from "./types.ts";
+import type { ProductionReadinessChecks, VisualAuditFinding } from "./types.ts";
 
 import { getAgentContext } from "./tools/context.ts";
 import { checkMetadata } from "./tools/metadata-check.ts";
@@ -93,34 +90,28 @@ function buildVisualChecks(
         ];
       }
 
-      const hasEvidence =
-        finding.evidence_text.trim().length > 0;
+      const hasEvidence = finding.evidence_text.trim().length > 0;
 
       return [
         checkId,
         {
           check_id: checkId,
           name: getCheckName(checkId),
-          result:
-            finding.severity === 0
-              ? "passed"
-              : "failed",
+          result: finding.severity === 0 ? "passed" : "failed",
           severityScore: finding.severity,
           explanation: finding.explanation,
           evidence: hasEvidence
             ? {
-                type: "visual" as const,
-                text: finding.evidence_text,
-                timestamp:
-                  finding.evidence_timestamp_ms === null
-                    ? ""
-                    : msToTimestamp(
-                        finding.evidence_timestamp_ms,
-                      ),
-              }
+              type: "visual" as const,
+              text: finding.evidence_text,
+              timestamp: finding.evidence_timestamp_ms === null
+                ? ""
+                : msToTimestamp(
+                  finding.evidence_timestamp_ms,
+                ),
+            }
             : undefined,
-          confidence_score:
-            finding.confidence_score,
+          confidence_score: finding.confidence_score,
         },
       ];
     }),
