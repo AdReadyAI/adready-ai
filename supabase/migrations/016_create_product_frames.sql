@@ -12,4 +12,3 @@ create table public.product_frames (
 );
 
 alter table public.product_frames enable row level security;
-grant select, insert, update, delete on public.product_frames to service_role;

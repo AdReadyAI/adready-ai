@@ -14,5 +14,3 @@ create table public.agent_result_sub_checks (
 );
 
 alter table public.agent_result_sub_checks enable row level security;
-
-grant select, insert, update, delete on public.agent_result_sub_checks to service_role;

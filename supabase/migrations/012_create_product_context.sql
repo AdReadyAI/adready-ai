@@ -7,4 +7,3 @@ create table public.product_context (
 );
 
 alter table public.product_context enable row level security;
-grant select, insert, update, delete on public.product_context to service_role;

@@ -13,4 +13,14 @@ create table public.parsed_creative_briefs (
 );
 
 alter table public.parsed_creative_briefs enable row level security;
-grant select, insert, update, delete on public.parsed_creative_briefs to service_role;
+
+create policy "users read own creative brief"
+  on public.parsed_creative_briefs
+  for select
+  to authenticated
+  using (
+    request_id in (
+      select request_id from public.requests
+      where user_id = auth.uid()
+    )
+  );

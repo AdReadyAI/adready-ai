@@ -13,5 +13,3 @@ create table public.agent_results (
 );
 
 alter table public.agent_results enable row level security;
-
-grant select, insert, update, delete on public.agent_results to service_role;

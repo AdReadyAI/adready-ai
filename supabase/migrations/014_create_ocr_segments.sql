@@ -12,4 +12,3 @@ create table public.ocr_segments (
 );
 
 alter table public.ocr_segments enable row level security;
-grant select, insert, update, delete on public.ocr_segments to service_role;

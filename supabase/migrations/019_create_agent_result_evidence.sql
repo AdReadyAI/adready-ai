@@ -13,5 +13,3 @@ create table public.agent_result_evidence (
 );
 
 alter table public.agent_result_evidence enable row level security;
-
-grant select, insert, update, delete on public.agent_result_evidence to service_role;

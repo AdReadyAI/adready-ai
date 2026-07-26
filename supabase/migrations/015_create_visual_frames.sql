@@ -13,4 +13,3 @@ create table public.visual_frames (
 );
 
 alter table public.visual_frames enable row level security;
-grant select, insert, update, delete on public.visual_frames to service_role;

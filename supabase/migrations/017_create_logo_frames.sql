@@ -10,4 +10,3 @@ create table public.logo_frames (
 );
 
 alter table public.logo_frames enable row level security;
-grant select, insert, update, delete on public.logo_frames to service_role;
