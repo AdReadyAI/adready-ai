@@ -17,22 +17,19 @@ import type {
   MetricResult,
   SubCheckResult,
 } from "../shared/schemas.ts";
-import type { LlmClient } from "../shared/llm_client.ts";
-import { runTwoCall, type TwoCallFlow } from "../shared/two_call.ts";
+import type { LlmClient } from "../shared/evaluator/llm_client.ts";
+import { runTwoCall, type TwoCallFlow } from "../shared/evaluator/two_call.ts";
 import { safeParseJson } from "../shared/llm_json.ts";
-import { assembleMetric, type MetricLevelFields } from "../shared/metric.ts";
-import { cannotAssess } from "../shared/subcheck.ts";
+import { assembleMetric, type MetricLevelFields } from "../shared/evaluator/metric.ts";
+import { cannotAssess } from "../shared/evaluator/subcheck.ts";
 import {
   coerceCorrectionType,
   coerceEvidence,
   fromLlmSubCheck,
   indexSubChecks,
-} from "../shared/llm_eval.ts";
-import {
-  getArcExpectation,
-  getPlatformSpec,
-  type PlatformSpec,
-} from "../shared/config/index.ts";
+} from "../shared/evaluator/llm_eval.ts";
+import { getArcExpectation } from "../shared/evaluator/config/index.ts";
+import { getPlatformSpec, type PlatformSpec } from "../shared/config/index.ts";
 import {
   type ArcLabeling,
   ArcLabelingSchema,

@@ -36,4 +36,4 @@ export type AcquiredCta = CtaAcquisition["ctas"][number];
 export {
   type EvaluationResponse as CtaEvaluation,
   EvaluationResponseSchema as CtaEvaluationSchema,
-} from "../shared/llm_eval.ts";
+} from "../shared/evaluator/llm_eval.ts";

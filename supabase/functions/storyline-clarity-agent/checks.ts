@@ -10,7 +10,7 @@
  */
 
 import type { SubCheckResult, VideoMetadata } from "../shared/schemas.ts";
-import { failed, gateOnConfig, passed } from "../shared/subcheck.ts";
+import { failed, gateOnConfig, passed } from "../shared/evaluator/subcheck.ts";
 import type { PlatformSpec } from "../shared/config/index.ts";
 
 const FORMAT = { id: "format_noncompliant", name: "Format Compliance" };

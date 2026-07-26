@@ -9,7 +9,7 @@
  * calls made. Production wiring passes `defaultLlmClient`.
  */
 
-import { chat, type ChatMessage } from "./llm.ts";
+import { chat, type ChatMessage } from "../llm.ts";
 
 export type { ChatMessage };
 

@@ -7,7 +7,7 @@
  * and the envelope shape in one place so no agent hand-rolls (and skews) it.
  */
 
-import type { EvidenceRef, MetricResult, SubCheckResult } from "./schemas.ts";
+import type { EvidenceRef, MetricResult, SubCheckResult } from "../schemas.ts";
 import { rollupMetric, type RollupStrategy } from "./rollup.ts";
 
 export type MetricLevelFields = {

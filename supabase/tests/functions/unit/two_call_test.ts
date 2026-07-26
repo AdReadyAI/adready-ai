@@ -1,6 +1,6 @@
 /**
- * Unit tests for the two-call flow runner (shared/two_call.ts) and the
- * LlmClient seam (shared/llm_client.ts).
+ * Unit tests for the two-call flow runner (shared/evaluator/two_call.ts) and the
+ * LlmClient seam (shared/evaluator/llm_client.ts).
  *
  * The load-bearing guarantee: a flow run through runTwoCall makes EXACTLY two
  * LLM calls — the spec forbids sub-checks becoming N separate calls. Pure logic
@@ -11,9 +11,9 @@ import { assertEquals } from "@std/assert";
 import {
   runTwoCall,
   type TwoCallFlow,
-} from "../../../functions/shared/two_call.ts";
-import { defaultLlmClient } from "../../../functions/shared/llm_client.ts";
-import type { ChatMessage } from "../../../functions/shared/llm_client.ts";
+} from "../../../functions/shared/evaluator/two_call.ts";
+import { defaultLlmClient } from "../../../functions/shared/evaluator/llm_client.ts";
+import type { ChatMessage } from "../../../functions/shared/evaluator/llm_client.ts";
 import { scriptedLlm } from "../support/mock_llm.ts";
 
 /** A minimal flow: derive a number, then echo it into the evaluation prompt. */

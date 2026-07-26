@@ -41,4 +41,4 @@ export type ArcLabeling = z.infer<typeof ArcLabelingSchema>;
 export {
   type EvaluationResponse as StorylineEvaluation,
   EvaluationResponseSchema as StorylineEvaluationSchema,
-} from "../shared/llm_eval.ts";
+} from "../shared/evaluator/llm_eval.ts";

@@ -8,9 +8,9 @@
  * Functional first drafts, expected to be tuned.
  */
 
-import type { ChatMessage } from "../shared/llm_client.ts";
+import type { ChatMessage } from "../shared/evaluator/llm_client.ts";
 import type { AgentContext } from "../shared/schemas.ts";
-import type { GoalBenchmark } from "../shared/config/index.ts";
+import type { GoalBenchmark } from "../shared/evaluator/config/index.ts";
 import type { CtaAcquisition } from "./response_schemas.ts";
 
 function acquisitionInput(ctx: AgentContext): string {

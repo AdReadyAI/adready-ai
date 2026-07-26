@@ -16,7 +16,7 @@ import {
   type SeverityLevel,
   SeverityLevelSchema,
   type SubCheckResult,
-} from "./schemas.ts";
+} from "../schemas.ts";
 import { cannotAssess, failed, passed } from "./subcheck.ts";
 import { clampSeverity, severityRank } from "./severity.ts";
 

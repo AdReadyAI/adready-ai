@@ -8,7 +8,7 @@
  * populated yet returns `cannot_assess`, never a fabricated pass or fail.
  */
 
-import type { SeverityLevel, SubCheckResult } from "./schemas.ts";
+import type { SeverityLevel, SubCheckResult } from "../schemas.ts";
 
 export function passed(checkId: string, name: string): SubCheckResult {
   return { check_id: checkId, name, result: "passed", severity: "none" };

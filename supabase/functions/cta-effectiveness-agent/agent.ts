@@ -19,17 +19,17 @@ import type {
   MetricResult,
   SubCheckResult,
 } from "../shared/schemas.ts";
-import type { LlmClient } from "../shared/llm_client.ts";
-import { runTwoCall, type TwoCallFlow } from "../shared/two_call.ts";
+import type { LlmClient } from "../shared/evaluator/llm_client.ts";
+import { runTwoCall, type TwoCallFlow } from "../shared/evaluator/two_call.ts";
 import { safeParseJson } from "../shared/llm_json.ts";
-import { assembleMetric, type MetricLevelFields } from "../shared/metric.ts";
-import { cannotAssess, failed, passed } from "../shared/subcheck.ts";
+import { assembleMetric, type MetricLevelFields } from "../shared/evaluator/metric.ts";
+import { cannotAssess, failed, passed } from "../shared/evaluator/subcheck.ts";
 import {
   coerceCorrectionType,
   coerceEvidence,
   fromLlmSubCheck,
   indexSubChecks,
-} from "../shared/llm_eval.ts";
+} from "../shared/evaluator/llm_eval.ts";
 import {
   type CtaTiming,
   type CtaVisibilityThresholds,
@@ -38,7 +38,7 @@ import {
   getGoalBenchmark,
   getPlatformPhrasing,
   type PlatformPhrasing,
-} from "../shared/config/index.ts";
+} from "../shared/evaluator/config/index.ts";
 import {
   type CtaAcquisition,
   CtaAcquisitionSchema,

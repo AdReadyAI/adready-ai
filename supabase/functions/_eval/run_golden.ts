@@ -31,7 +31,7 @@
 
 import { AgentContextSchema } from "../shared/schemas.ts";
 import type { AgentContext, MetricResult } from "../shared/schemas.ts";
-import { defaultLlmClient } from "../shared/llm_client.ts";
+import { defaultLlmClient } from "../shared/evaluator/llm_client.ts";
 import { loadAgentContext } from "../shared/context.ts";
 import { runStorylineAgent } from "../storyline-clarity-agent/agent.ts";
 import { runCtaAgent } from "../cta-effectiveness-agent/agent.ts";

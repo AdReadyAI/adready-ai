@@ -9,7 +9,7 @@
 import type {
   ChatMessage,
   LlmClient,
-} from "../../../functions/shared/llm_client.ts";
+} from "../../../functions/shared/evaluator/llm_client.ts";
 
 export type ScriptedLlm = LlmClient & {
   /** Messages passed to each `chat` call, in call order. */

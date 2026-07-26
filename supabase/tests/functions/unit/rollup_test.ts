@@ -1,5 +1,5 @@
 /**
- * Unit tests for the shared metric rollup (shared/rollup.ts).
+ * Unit tests for the shared metric rollup (shared/evaluator/rollup.ts).
  *
  * Pure logic, no services, no network. Covers worst-wins across sub-checks,
  * all-cannot_assess → metric cannot_assess, mixed cannot_assess/assessable
@@ -12,7 +12,7 @@ import {
   rollupMetric,
   type RollupStrategy,
   worstWinsRollup,
-} from "../../../functions/shared/rollup.ts";
+} from "../../../functions/shared/evaluator/rollup.ts";
 import type {
   SeverityLevel,
   SubCheckResult,
