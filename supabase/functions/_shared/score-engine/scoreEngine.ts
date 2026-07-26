@@ -1,5 +1,7 @@
-import { SCORE_CONFIG_V0_2 } from "./config.ts";
+import { SCORE_CONFIG_V0_3 } from "./config.ts";
 import type {
+  Confidence,
+  ConfidenceLevel,
   DimensionScore,
   FixListItem,
   GatingFailure,
@@ -41,9 +43,16 @@ export function clampSeverity(
   return severity;
 }
 
+/** Omitted confidence → unknown (do not invent high). */
+export function normalizeConfidence(
+  confidence: Confidence | undefined,
+): ConfidenceLevel {
+  return confidence ?? "unknown";
+}
+
 export function metricScore(
   severity: Severity,
-  config: ScoreEngineConfig = SCORE_CONFIG_V0_2,
+  config: ScoreEngineConfig = SCORE_CONFIG_V0_3,
 ): number {
   return 100 - config.severity_deductions[severity];
 }
@@ -98,6 +107,7 @@ function scoreOne(
     metric_score: score,
     coef,
     is_gating_failure: gating,
+    confidence: normalizeConfidence(input?.confidence),
     explanation: input?.explanation,
     recommended_fix: input?.recommended_fix,
     owner: input?.owner,
@@ -217,6 +227,7 @@ function buildFixList(
       metric_id: m.metric_id,
       severity: m.severity,
       is_gating_failure: m.is_gating_failure,
+      confidence: m.confidence,
       explanation: m.explanation,
       recommended_fix: m.recommended_fix,
       owner: m.owner,
@@ -224,11 +235,12 @@ function buildFixList(
 }
 
 /**
- * Score Engine v0.2: metric_results → Ad Ready %, status, dimensions, gating, fix list.
+ * Score Engine v0.3: metric_results → Ad Ready %, status, dimensions, gating, fix list.
+ * Confidence is passthrough on metrics / fix list only (non-scoring).
  */
 export function scoreEngine(
   inputs: MetricInput[],
-  config: ScoreEngineConfig = SCORE_CONFIG_V0_2,
+  config: ScoreEngineConfig = SCORE_CONFIG_V0_3,
 ): ScoreEngineOutput {
   const byInput = indexInputs(inputs);
   const metricIds = Object.keys(config.weights) as MetricId[];

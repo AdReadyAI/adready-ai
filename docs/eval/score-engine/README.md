@@ -1,30 +1,35 @@
 # Score Engine (Eval)
 
-Deterministic scoring for AdReady Rubric v0.1 metric results.
+Deterministic scoring for AdReady rubric metric results.
 
 ## Contents
 
 | File | Purpose |
 |------|---------|
-| `score_engine_proposal_v0.2.md` | Design proposal (human-readable) |
-| `score_config_v0.2.yaml` | Tunable weights, deductions, thresholds, dimensions |
+| `score_engine_proposal_v0.2.md` | Design proposal v0.2 (preserved) |
+| `score_config_v0.2.yaml` | Config v0.2 (preserved) |
+| `score_engine_proposal_v0.3.md` | Design proposal v0.3 — 9 metrics, Plan A weights, issue confidence |
+| `score_config_v0.3.yaml` | Config v0.3 companion (`active_weight_plan: A`) |
+| `confidence_handling_plan.md` | Earlier confidence UX draft; **v0.3 §7 is normative** (fix-list only) |
 
 ## Implementation
 
 | Path | Role |
 |------|------|
-| `supabase/functions/_shared/score-engine/` | Pure Score Engine + request parser |
+| `supabase/functions/_shared/score-engine/` | Pure Score Engine v0.3 + request parser |
 | `supabase/functions/score-engine/` | Thin HTTP Edge Function (no DB writes) |
 | `supabase/tests/functions/unit/` | Deno unit tests |
 
-- Agents emit `metric_results` only (no scores).
-- Score Engine owns Ad Readiness %, status, 6 display dimensions, gating, and fix-list sort.
+- Agents emit `metric_results` only (no scores); optional `confidence` on metrics.
+- Score Engine owns Ad Ready %, status, 6 display dimensions, gating, fix-list sort, and fix-list confidence passthrough.
 - Edge Function is a stateless wrapper: validate body → `scoreEngine()` → JSON.
 
 ## Quick test (unit)
 
 ```bash
 cd supabase
+deno fmt --config deno.json --check
+deno lint --config deno.json
 deno task --config deno.json test:unit
 ```
 
@@ -36,26 +41,4 @@ With local Supabase running:
 supabase functions serve score-engine --env-file supabase/.env.local
 ```
 
-Example request:
-
-```bash
-curl -s -X POST "http://127.0.0.1:54321/functions/v1/score-engine" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <ANON_OR_SERVICE_KEY>" \
-  -d '{
-    "metric_results": [
-      { "metric_id": "brief_adherence", "result": "false", "severity": "medium" },
-      { "metric_id": "product_truth", "result": "false", "severity": "critical" },
-      { "metric_id": "product_clarity", "result": "true", "severity": "none" },
-      { "metric_id": "audience_fit", "result": "true", "severity": "none" },
-      { "metric_id": "brand_fit", "result": "true", "severity": "none" },
-      { "metric_id": "cta_clarity", "result": "false", "severity": "high" },
-      { "metric_id": "channel_readiness", "result": "true", "severity": "none" },
-      { "metric_id": "creative_effectiveness", "result": "true", "severity": "none" },
-      { "metric_id": "production_readiness", "result": "true", "severity": "none" },
-      { "metric_id": "policy_compliance", "result": "true", "severity": "none" }
-    ]
-  }'
-```
-
-Expected: `ad_readiness_pct` ≈ 72, `readiness_status` = `Needs Revision`.
+Use Rubric v0.3 metric ids (including `audience_channel_fit`; no `audience_fit` / `channel_readiness`). Mini-example expects `ad_readiness_pct` ≈ 70, `Needs Revision`.

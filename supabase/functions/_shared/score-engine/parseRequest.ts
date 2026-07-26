@@ -1,4 +1,5 @@
 import type {
+  Confidence,
   MetricId,
   MetricInput,
   MetricResultValue,
@@ -19,6 +20,8 @@ const SEVERITIES = new Set<Severity>([
   "high",
   "critical",
 ]);
+
+const CONFIDENCES = new Set<Confidence>(["high", "medium", "low"]);
 
 const METRIC_IDS = new Set<string>(ALL_METRIC_IDS);
 
@@ -94,6 +97,20 @@ export function parseScoreEngineRequest(body: unknown): ParseRequestResult {
       result: result as MetricResultValue,
       severity: severity as Severity,
     };
+
+    const confidence = (row as { confidence?: unknown }).confidence;
+    if (confidence !== undefined) {
+      if (
+        typeof confidence !== "string" ||
+        !CONFIDENCES.has(confidence as Confidence)
+      ) {
+        return {
+          ok: false,
+          error: `metric_results[${i}].confidence must be high|medium|low`,
+        };
+      }
+      input.confidence = confidence as Confidence;
+    }
 
     const explanation = (row as { explanation?: unknown }).explanation;
     if (explanation !== undefined) {

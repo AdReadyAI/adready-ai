@@ -1,19 +1,18 @@
 import type { ScoreEngineConfig } from "./types.ts";
 
 /**
- * Machine-readable Score Engine v0.2 config.
- * Mirrors docs/eval/score-engine/score_config_v0.2.yaml
+ * Machine-readable Score Engine v0.3 config (Plan A locked).
+ * Mirrors docs/eval/score-engine/score_config_v0.3.yaml weights_plan_a.
  */
-export const SCORE_CONFIG_V0_2: ScoreEngineConfig = {
-  version: "0.2",
+export const SCORE_CONFIG_V0_3: ScoreEngineConfig = {
+  version: "0.3",
   weights: {
     brief_adherence: 20,
     product_truth: 20,
     product_clarity: 15,
-    audience_fit: 10,
+    audience_channel_fit: 15,
     brand_fit: 10,
-    cta_clarity: 10,
-    channel_readiness: 10,
+    cta_clarity: 15,
     creative_effectiveness: 5,
     production_readiness: 0,
     policy_compliance: 0,
@@ -59,7 +58,7 @@ export const SCORE_CONFIG_V0_2: ScoreEngineConfig = {
       metrics: [
         "brief_adherence",
         "creative_effectiveness",
-        "channel_readiness",
+        "audience_channel_fit",
       ],
     },
     {
@@ -70,7 +69,7 @@ export const SCORE_CONFIG_V0_2: ScoreEngineConfig = {
     {
       id: "brand_alignment",
       name: "Brand Alignment",
-      metrics: ["brand_fit", "audience_fit"],
+      metrics: ["brand_fit"],
     },
     {
       id: "visual_asset_quality",
@@ -82,6 +81,9 @@ export const SCORE_CONFIG_V0_2: ScoreEngineConfig = {
   gating_sort_effective_weight: 100,
 };
 
+/** @deprecated Use SCORE_CONFIG_V0_3. Alias kept for older imports. */
+export const SCORE_CONFIG_V0_2 = SCORE_CONFIG_V0_3;
+
 export const ALL_METRIC_IDS = Object.keys(
-  SCORE_CONFIG_V0_2.weights,
-) as Array<keyof typeof SCORE_CONFIG_V0_2.weights>;
+  SCORE_CONFIG_V0_3.weights,
+) as Array<keyof typeof SCORE_CONFIG_V0_3.weights>;
