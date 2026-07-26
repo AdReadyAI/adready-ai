@@ -110,31 +110,16 @@
  *   Stage 4: Synthesis & Scoring - Map findings to production_readiness result.
  */
 
-// import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { AgentRunRequestSchema } from "../shared/schemas.ts";
-// import type { MetricResult } from "../shared/schemas.ts";
-// // import { chat } from "../shared/llm.ts";
+import { createEdgeHandler, ok } from "../shared/index.ts";
+import { AgentRunRequestSchema } from "../shared/schemas.ts";
+import { runVisualQualityAgent } from "./agent.ts";
 
-// createEdgeHandler("visual-quality-agent", AgentRunRequestSchema, async (req, ctx) => {
-//   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by request_id.
+createEdgeHandler(
+  "visual-quality-agent",
+  AgentRunRequestSchema,
+  async (_req, ctx) => {
+    const { request_id } = ctx.body;
 
-//   // TODO: Evaluate production readiness from DB-loaded metadata/OCR/frame context.
-
-//   const results: MetricResult[] = [];
-//   return ok(results);
-// });
-
-Deno.serve(() => {
-  return new Response(
-    JSON.stringify({
-      message: "Hello World",
-    }),
-    {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-      },
-    },
-  );
-});
+    return ok(await runVisualQualityAgent(request_id));
+  },
+);
