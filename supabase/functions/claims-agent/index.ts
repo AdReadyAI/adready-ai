@@ -118,17 +118,12 @@
  *   ]
  */
 
-// import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { AgentRunRequestSchema } from "../shared/schemas.ts";
-// import type { MetricResult } from "../shared/schemas.ts";
-// // import { chat } from "../shared/llm.ts";
+import { createEdgeHandler, ok } from "../shared/index.ts";
+import { AgentRunRequestSchema } from "../shared/schemas.ts";
+import { runClaimsAgent } from "./agent.ts";
 
-// createEdgeHandler("claims-agent", AgentRunRequestSchema, async (req, ctx) => {
-//   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by request_id.
+createEdgeHandler("claims-agent", AgentRunRequestSchema, async (_req, ctx) => {
+  const { request_id } = ctx.body;
 
-//   // TODO: Extract claims from transcript/OCR and evaluate against product context.
-
-//   const results: MetricResult[] = [];
-//   return ok(results);
-// });
+  return ok(await runClaimsAgent(request_id));
+});
