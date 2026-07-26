@@ -13,7 +13,11 @@
  * the shared public schemas used by the Edge Function API.
  */
 
-import type { AgentContext, EvidenceRef } from "../shared/schemas.ts";
+import type {
+  AgentContext,
+  EvidenceRef,
+  MetricResult,
+} from "../shared/schemas.ts";
 
 export type SeverityScore = 0 | 1 | 2 | 3 | 4;
 
@@ -41,24 +45,6 @@ export type InternalCheckResult = {
   confidence_score: number;
 };
 
-export type ProductionReadinessChecks = {
-  video_corruption: InternalCheckResult;
-  dropped_frames: InternalCheckResult;
-  ai_artifacts: InternalCheckResult;
-  poor_framing_lighting: InternalCheckResult;
-  jarring_transitions: InternalCheckResult;
-  illegible_text: InternalCheckResult;
-};
-
-export type VisualAuditFinding = {
-  check_id: VisualCheckId;
-  severity: SeverityScore;
-  explanation: string;
-  evidence_text: string;
-  evidence_timestamp_ms: number | null;
-  confidence_score: number;
-};
-
 export type VisualAuditLLMResponse = {
   findings: Array<{
     check_id: VisualCheckId;
@@ -70,6 +56,59 @@ export type VisualAuditLLMResponse = {
   }>;
 };
 
+export type ProductionCheckResult =
+  | "passed"
+  | "failed"
+  | "cannot_assess";
+
+export type ProductionReadinessCheck = {
+  check_id:
+    | "video_corruption"
+    | "dropped_frames"
+    | "ai_artifacts"
+    | "poor_framing_lighting"
+    | "jarring_transitions"
+    | "illegible_text";
+
+  name: string;
+
+  result: ProductionCheckResult;
+
+  severityScore: SeverityScore;
+
+  confidence_score: number;
+
+  explanation?: string;
+
+  evidence?: EvidenceRef;
+};
+
+export type ProductionReadinessChecks = {
+  video_corruption: ProductionReadinessCheck;
+  dropped_frames: ProductionReadinessCheck;
+  ai_artifacts: ProductionReadinessCheck;
+  poor_framing_lighting: ProductionReadinessCheck;
+  jarring_transitions: ProductionReadinessCheck;
+  illegible_text: ProductionReadinessCheck;
+};
+
+export type VisualAuditFinding = {
+  check_id:
+    | "ai_artifacts"
+    | "poor_framing_lighting"
+    | "jarring_transitions";
+
+  severity: SeverityScore;
+
+  explanation: string;
+
+  evidence_text: string;
+
+  evidence_timestamp_ms: number | null;
+
+  confidence_score: number;
+};
+
 export type VisualQualityContextProvider = (
   requestId: string,
 ) => Promise<AgentContext>;
@@ -78,7 +117,19 @@ export type VisualQualityAuditor = (
   context: AgentContext,
 ) => Promise<VisualAuditFinding[]>;
 
+export type ProductionChecksEvaluator = (
+  context: AgentContext,
+  visualFindings: VisualAuditFinding[],
+) => ProductionReadinessChecks;
+
 export type ProductionReadinessEvaluator = (
   context: AgentContext,
   checks: ProductionReadinessChecks,
-) => import("../shared/schemas.ts").MetricResult;
+) => MetricResult;
+
+export type VisualQualityDependencies = {
+  getAgentContext: VisualQualityContextProvider;
+  auditVisualQuality: VisualQualityAuditor;
+  evaluateProductionChecks: ProductionChecksEvaluator;
+  evaluateProductionReadiness: ProductionReadinessEvaluator;
+};

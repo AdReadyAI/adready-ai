@@ -55,8 +55,13 @@ export function worstSeverity(
 export function confidenceBucket(
   score: number,
 ): ConfidenceLevel {
-  if (score >= 0.8) return "high";
-  if (score >= 0.5) return "medium";
+  if (score >= 0.8) {
+    return "high";
+  }
+
+  if (score >= 0.5) {
+    return "medium";
+  }
 
   return "low";
 }

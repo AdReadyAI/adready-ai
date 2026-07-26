@@ -44,7 +44,9 @@ export function evaluateProductionReadiness(
   );
 
   const overallSeverityScore = worstSeverity(
-    failedChecks.map((check) => check.severityScore),
+    failedChecks.map(
+      (check) => check.severityScore,
+    ),
   );
 
   const result = determineOverallResult(
@@ -68,8 +70,14 @@ export function evaluateProductionReadiness(
     check_id: check.check_id,
     name: check.name,
     result: check.result,
-    severity: severityFromScore(check.severityScore),
-    ...(check.explanation ? { explanation: check.explanation } : {}),
+    severity: severityFromScore(
+      check.severityScore,
+    ),
+    ...(check.explanation
+      ? {
+        explanation: check.explanation,
+      }
+      : {}),
   }));
 
   const correction = buildCorrection(
@@ -84,19 +92,24 @@ export function evaluateProductionReadiness(
     question:
       "Is the video technically complete enough to be reviewed or launched?",
     result,
-    severity: result === "cannot_assess"
-      ? "cannot_assess"
-      : severityFromScore(overallSeverityScore),
+    severity: result === "cannot_assess" ? "cannot_assess" : severityFromScore(
+      overallSeverityScore,
+    ),
     confidence: confidenceBucket(confidenceScore),
+
     ...(evidence.length > 0 ? { evidence } : {}),
+
     explanation: buildExplanation(
       context,
       failedChecks,
       cannotAssessChecks,
       overallSeverityScore,
     ),
+
     suggested_correction: correction.text,
+
     correction_type: correction.type,
+
     sub_checks: subChecks,
   };
 }
@@ -132,14 +145,19 @@ function calculateOverallConfidence(
     return 0;
   }
 
-  if (cannotAssessChecks.length === allChecks.length) {
+  if (
+    cannotAssessChecks.length ===
+      allChecks.length
+  ) {
     return 0;
   }
 
   const relevantChecks = failedChecks.length > 0
     ? failedChecks
     : allChecks.filter(
-      (check) => check.result !== "cannot_assess",
+      (check) =>
+        check.result !==
+          "cannot_assess",
     );
 
   if (relevantChecks.length === 0) {
@@ -151,11 +169,14 @@ function calculateOverallConfidence(
     0,
   ) / relevantChecks.length;
 
-  // Missing checks reduce confidence.
-  const completeness = (allChecks.length - cannotAssessChecks.length) /
+  const completeness = (allChecks.length -
+    cannotAssessChecks.length) /
     allChecks.length;
 
-  return Math.min(1, average * completeness);
+  return Math.min(
+    1,
+    average * completeness,
+  );
 }
 
 function collectEvidence(
@@ -167,7 +188,9 @@ function collectEvidence(
   }
 
   const highestSeverityChecks = failedChecks.filter(
-    (check) => check.severityScore === overallSeverityScore,
+    (check) =>
+      check.severityScore ===
+        overallSeverityScore,
   );
 
   const sourceChecks = highestSeverityChecks.length > 0
@@ -176,7 +199,9 @@ function collectEvidence(
 
   return sourceChecks
     .filter((check) => check.evidence)
-    .map((check) => check.evidence!)
+    .map(
+      (check) => check.evidence!,
+    )
     .slice(0, 5);
 }
 
@@ -187,11 +212,17 @@ function buildExplanation(
     ProductionReadinessChecks[keyof ProductionReadinessChecks][],
   overallSeverityScore: SeverityScore,
 ): string {
-  if (failedChecks.length === 0 && cannotAssessChecks.length === 0) {
+  if (
+    failedChecks.length === 0 &&
+    cannotAssessChecks.length === 0
+  ) {
     return "No material production-quality issues were detected across the evaluated technical, visual, transition, framing, lighting, and text-quality checks.";
   }
 
-  if (failedChecks.length === 0 && cannotAssessChecks.length > 0) {
+  if (
+    failedChecks.length === 0 &&
+    cannotAssessChecks.length > 0
+  ) {
     const names = cannotAssessChecks
       .map((check) => check.name)
       .join(", ");
@@ -200,10 +231,14 @@ function buildExplanation(
   }
 
   const issues = failedChecks
-    .map((check) => check.explanation)
+    .map(
+      (check) => check.explanation,
+    )
     .filter(Boolean);
 
-  const severity = severityFromScore(overallSeverityScore);
+  const severity = severityFromScore(
+    overallSeverityScore,
+  );
 
   return `Production readiness is ${severity} due to the following detected issue${
     issues.length === 1 ? "" : "s"
@@ -215,7 +250,11 @@ function buildCorrection(
   overallSeverityScore: SeverityScore,
 ): {
   text: string;
-  type: "rewrite" | "edit_recommendation" | "technical_fix" | "none";
+  type:
+    | "rewrite"
+    | "edit_recommendation"
+    | "technical_fix"
+    | "none";
 } {
   if (failedChecks.length === 0) {
     return {
@@ -225,7 +264,9 @@ function buildCorrection(
   }
 
   const ids = new Set(
-    failedChecks.map((check) => check.check_id),
+    failedChecks.map(
+      (check) => check.check_id,
+    ),
   );
 
   if (ids.has("video_corruption")) {
@@ -252,7 +293,9 @@ function buildCorrection(
     };
   }
 
-  if (ids.has("jarring_transitions")) {
+  if (
+    ids.has("jarring_transitions")
+  ) {
     return {
       text:
         "Refine the affected scene transition by replacing problematic cuts, flash frames, or inconsistent color treatment.",
@@ -260,7 +303,9 @@ function buildCorrection(
     };
   }
 
-  if (ids.has("poor_framing_lighting")) {
+  if (
+    ids.has("poor_framing_lighting")
+  ) {
     return {
       text:
         "Adjust framing, exposure, lighting, or cropping so the primary subject remains clearly visible and consistently presented.",
