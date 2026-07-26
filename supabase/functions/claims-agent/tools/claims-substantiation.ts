@@ -6,10 +6,7 @@
  */
 
 import { chat } from "../../shared/llm.ts";
-import type {
-  ParsedCreativeBrief,
-  ProductContext,
-} from "../../shared/schemas.ts";
+import type { ParsedCreativeBrief, ProductContext } from "../../shared/schemas.ts";
 import {
   buildSubstantiationUserPrompt,
   SUBSTANTIATION_SYSTEM_PROMPT,
@@ -33,11 +30,7 @@ export function processSubstantiationResponse(
   raw: string,
   claims: VerifiableClaim[],
 ): SubstantiationFinding[] {
-  const parsed = parseLLMJson(
-    raw,
-    SubstantiationResponseSchema,
-    "claims-substantiation",
-  );
+  const parsed = parseLLMJson(raw, SubstantiationResponseSchema, "claims-substantiation");
   const byId = new Map(parsed.map((r) => [r.claim_id, r]));
 
   return claims.map((claim): SubstantiationFinding => {
@@ -49,8 +42,7 @@ export function processSubstantiationResponse(
       severity: 2,
       issue_description:
         "Substantiation response did not cover this claim; flagged for manual review.",
-      recommendation:
-        "Review this claim manually against the product page and creative brief.",
+      recommendation: "Review this claim manually against the product page and creative brief.",
       confidence_score: 0.2,
     };
   });
@@ -67,15 +59,7 @@ export const substantiateClaims: ClaimSubstantiationAgent = async (
   const raw = await chat(
     [
       { role: "system", content: SUBSTANTIATION_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: buildSubstantiationUserPrompt(
-          claims,
-          evidence,
-          brief,
-          productContext,
-        ),
-      },
+      { role: "user", content: buildSubstantiationUserPrompt(claims, evidence, brief, productContext) },
     ],
     SUBSTANTIATION_MODEL,
   );

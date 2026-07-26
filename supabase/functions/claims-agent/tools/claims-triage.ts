@@ -8,24 +8,17 @@
 
 import { chat } from "../../shared/llm.ts";
 import type { ParsedCreativeBrief } from "../../shared/schemas.ts";
-import {
-  buildTriageUserPrompt,
-  TRIAGE_SYSTEM_PROMPT,
-} from "../prompts/triage.ts";
+import { buildTriageUserPrompt, TRIAGE_SYSTEM_PROMPT } from "../prompts/triage.ts";
 import type { ClaimTriageAgent, DerivedClaim, TriageResult } from "../types.ts";
 import { parseLLMJson, TriageResponseSchema } from "./llm-response.ts";
 
-const TRIAGE_MODEL = Deno.env.get("OPENROUTER_MODEL_TRIAGE") ??
-  Deno.env.get("OPENROUTER_MODEL");
+const TRIAGE_MODEL = Deno.env.get("OPENROUTER_MODEL_TRIAGE") ?? Deno.env.get("OPENROUTER_MODEL");
 
 /**
  * Pure: parses/validates the raw LLM response and applies the
  * missing-claim fallback. No network call, no Deno.env access.
  */
-export function processTriageResponse(
-  raw: string,
-  claims: DerivedClaim[],
-): TriageResult[] {
+export function processTriageResponse(raw: string, claims: DerivedClaim[]): TriageResult[] {
   const parsed = parseLLMJson(raw, TriageResponseSchema, "claims-triage");
   const byId = new Map(parsed.map((r) => [r.claim_id, r]));
 
