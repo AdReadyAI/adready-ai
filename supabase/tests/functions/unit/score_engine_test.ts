@@ -64,18 +64,18 @@ Deno.test("metricScore applies severity deductions", () => {
   assertEquals(metricScore("critical"), 0);
 });
 
-Deno.test("mini-example returns 70 Needs Revision with v0.3 dims and fix confidence", () => {
+Deno.test("mini-example returns 72 Needs Revision with v0.3 dims and fix confidence", () => {
   const out = scoreEngine(MINI_EXAMPLE);
 
   assertEquals(out.config_version, "0.3");
-  assertEquals(out.ad_readiness_pct, 70);
+  assertEquals(out.ad_readiness_pct, 72);
   assertEquals(out.readiness_status, "Needs Revision");
   assertEquals(out.gating_failures, []);
 
   const byDim = Object.fromEntries(out.dimensions.map((d) => [d.id, d.score]));
   assertEquals(byDim.claims_accuracy, 0);
   assertEquals(byDim.product_representation, 100);
-  assertEquals(byDim.storyline_brief, 90);
+  assertEquals(byDim.storyline_brief, 91.1);
   assertEquals(byDim.cta_effectiveness, 60);
   assertEquals(byDim.brand_alignment, 100);
   assertEquals(byDim.visual_asset_quality, 100);
@@ -158,7 +158,7 @@ Deno.test("cannot_assess is excluded from Ad Ready % weight sum", () => {
       : row
   );
   const out = scoreEngine(inputs);
-  assertEquals(out.applicable_weight_sum, 95);
+  assertEquals(out.applicable_weight_sum, 90);
   assertEquals(out.ad_readiness_pct, 100);
   assertEquals(out.readiness_status, "Ready");
 });

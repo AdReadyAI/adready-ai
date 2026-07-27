@@ -83,11 +83,11 @@ Merging removed 20 weight (`audience_fit` 10 + `channel_readiness` 10) and intro
 | `product_clarity` | 15 |
 | `audience_channel_fit` | **15** |
 | `brand_fit` | 10 |
-| `cta_clarity` | **15** |
-| `creative_effectiveness` | 5 |
+| `cta_clarity` | 10 |
+| `creative_effectiveness` | **10** |
 | **Total** | **100** |
 
-**Why Plan A:** After the merge, the `audience_channel_fit` question is not compressed. This metric still covers channel, placement, and audience, so it keeps a higher weight (**15**). Separately, `cta_clarity` was underweighted: even a severe CTA failure barely moved the overall score or ship decision, so its weight increases by 5 (**10 → 15**).
+**Why Plan A:** After the merge, the `audience_channel_fit` question is not compressed. This metric still covers channel, placement, and audience, so it keeps a higher weight (**15**). Separately, `creative_effectiveness` was underweighted: even a severe creative failure barely moved the overall score or ship decision, so its weight increases by 5 (**5 → 10**).
 
 #### Alternative considered (not selected): Plan B
 
@@ -195,14 +195,14 @@ Same failure pattern as v0.2, mapped to v0.3 ids: `product_truth` critical, `cta
 | product_truth | critical | 0 | 0 | 20 | 0 |
 | product_clarity | none | 100 | 1 | 15 | 15 |
 | brand_fit | none | 100 | 1 | 10 | 10 |
-| cta_clarity | high | 60 | 0.60 | 15 | 9 |
-| creative_effectiveness | none | 100 | 1 | 5 | 5 |
+| cta_clarity | high | 60 | 0.60 | 10 | 6 |
+| creative_effectiveness | none | 100 | 1 | 10 | 10 |
 | audience_channel_fit | none | 100 | 1 | 15 | 15 |
-| | | | | **100** | **70** |
+| | | | | **100** | **72** |
 
-**Ad Readiness % = 70** → Needs Revision (no gate).
+**Ad Readiness % = 72** → Needs Revision (no gate).
 
-Storyline & Brief: `(20×80 + 5×100 + 15×100) / 40 = 90`.  
+Storyline & Brief: `(20×80 + 10×100 + 15×100) / 45 ≈ 91.1`.  
 Brand Alignment: `brand_fit = 100`.  
 Fix order: product_truth → cta_clarity → brief_adherence (each may carry its own confidence badge).
 

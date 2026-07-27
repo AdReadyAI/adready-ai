@@ -41,4 +41,4 @@ With local Supabase running:
 supabase functions serve score-engine --env-file supabase/.env.local
 ```
 
-Use Rubric v0.3 metric ids (including `audience_channel_fit`; no `audience_fit` / `channel_readiness`). Mini-example expects `ad_readiness_pct` ≈ 70, `Needs Revision`.
+Use Rubric v0.3 metric ids (including `audience_channel_fit`; no `audience_fit` / `channel_readiness`). Mini-example expects `ad_readiness_pct` ≈ 72, `Needs Revision`.

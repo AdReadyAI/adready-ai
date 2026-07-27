@@ -27,17 +27,17 @@ gating_rules:
 
 scored_high_critical_is_gating: false
 
-# Plan A (locked): audience_channel_fit 15; cta_clarity 10→15
+# Plan A (locked): audience_channel_fit 15; creative_effectiveness 5→10
 # Rationale: merged question still covers channel/placement/audience → keep higher weight;
-#            CTA at 10 under-moved overall/ship on severe fails → +5 to 15.
+#            creative was underweighted at 5 → +5 to 10. CTA stays at 10.
 weights_plan_a:
   brief_adherence: 20
   product_truth: 20
   product_clarity: 15
   audience_channel_fit: 15
   brand_fit: 10
-  cta_clarity: 15
-  creative_effectiveness: 5
+  cta_clarity: 10
+  creative_effectiveness: 10
   production_readiness: 0
   policy_compliance: 0
 
