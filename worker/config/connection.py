@@ -1,10 +1,6 @@
 import psycopg2
 import requests
 # from openai import OpenAI
-from config.settings import OPENROUTER_API_KEY ,DATABASE_URL , OPENROUTER_BASE_URL , logger , ASSEMBLYAI_API_KEY
-
-import requests
-from openai import OpenAI
 from config.settings import (
     OPENROUTER_API_KEY,
     DATABASE_URL,

@@ -7,15 +7,12 @@ requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.5.1",
     "assemblyai>=0.64.31",
-
-    "numpy>=2.5.1",
-
     "openai>=2.45.0",
-    "opencv-python>=5.0.0.93",
     "opencv-python-headless>=5.0.0.93",
     "psycopg2-binary>=2.9.12",
     "pydantic>=2.13.4",
     "requests>=2.32.5",
+    "scenedetect-headless>=0.7,<0.8",
 ]
 
 [dependency-groups]

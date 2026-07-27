@@ -35,8 +35,8 @@ AUDIO_SAMPLE_RATE = 16000
 
 
 
-SCENE_CUT_THRESHOLD = 0.30
-SCENE_CONTENT_SCALE = 800000.0 #100 was very small"
+SCENE_CUT_THRESHOLD = 27.0  
+SCENE_CONTENT_SCALE = 100.0    # Still not sure about the exact value wasn't able to find anything on line
 SCENE_MIN_SHOT_FRAMES = 12
 SCENE_ADAPTIVE_WINDOW = 3
 

@@ -225,9 +225,15 @@ def test_run_produces_manifest_from_keeping_probe(tmp_path, monkeypatch):
 
 
 # ---- probe stubs contract ----
+# Probes that have a real implementation and are covered by their own tests.
+_IMPLEMENTED_PROBES = {"scene"}
+
+
 def test_probe_stubs_are_noop(tmp_path):
     ctx = _sampler(tmp_path)._build_context(0, _frame())
     for cls in get_probe_classes():
+        if cls.name in _IMPLEMENTED_PROBES:
+            continue
         probe = cls()
         assert probe.process(ctx) is None
         result = probe.finalize()
