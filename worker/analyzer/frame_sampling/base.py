@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import TYPE_CHECKING, ClassVar
 
@@ -55,8 +55,8 @@ class ProbeSetup:
 
     video_metadata: VideoMetadata
     work_dir: str
-    product_imgs_folder_path: str = ""
-    logo_imgs_folder_path: str = ""
+    product_image_paths: list[str] = field(default_factory=list)
+    logo_paths: list[str] = field(default_factory=list)
 
 
 class Probe(ABC):

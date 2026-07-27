@@ -25,10 +25,10 @@ const MOCK_CAMPAIGNS = [
 type CampaignFormProps = {
   videos: UploadedVideo[];
   images: UploadedImage[];
-  requestId: string;
+  batchId: string;
 };
 
-export default function CampaignForm({ videos, images, requestId }: CampaignFormProps) {
+export default function CampaignForm({ videos, images, batchId }: CampaignFormProps) {
   const navigate = useNavigate();
   const [mode, setMode] = useState<CampaignMode>("create");
   const [productUrl, setProductUrl] = useState("");
@@ -71,19 +71,24 @@ export default function CampaignForm({ videos, images, requestId }: CampaignForm
     setSubmitError(null);
     setSubmitting(true);
 
-    const { data: request, error } = await supabase
+    // One `requests` row per video, not one row holding all N paths — the
+    // pipeline's video_processing table is UNIQUE(request_id, task_name), so
+    // each video needs its own request_id. batch_id ties the group back
+    // together for the loading/results UI.
+    const { data: requests, error } = await supabase
       .from("requests")
-      .insert({
-        request_id: requestId,
-        video_storage_paths: videoPaths,
-        product_image_paths: productImagePaths,
-        logo_paths: logoPaths,
-        user_brief: creativeBrief,
-        product_url: productUrl,
-        campaign_goal: campaignGoal,
-      })
-      .select()
-      .single();
+      .insert(
+        videoPaths.map((videoPath) => ({
+          batch_id: batchId,
+          video_storage_paths: [videoPath],
+          product_image_paths: productImagePaths,
+          logo_paths: logoPaths,
+          user_brief: creativeBrief,
+          product_url: productUrl,
+          campaign_goal: campaignGoal,
+        }))
+      )
+      .select();
 
     setSubmitting(false);
 
@@ -92,12 +97,17 @@ export default function CampaignForm({ videos, images, requestId }: CampaignForm
       return;
     }
 
-    // Enqueuing a job per video (fan-out) lands here next. The worker's
-    // JobPayload still wants a single product_imgs_folder_path, not the
-    // array we now have in product_image_paths — that mismatch needs resolving
-    // before enqueue_job can be wired up.
+    // enqueue_job() isn't called from here — a DB trigger
+    // (trg_enqueue_job_on_request_insert) fires it automatically for each
+    // row inserted above.
     navigate("/result", {
-      state: { requestId: request.request_id, videoPaths, productUrl, campaignGoal, creativeBrief },
+      state: {
+        batchId,
+        requestIds: requests.map((r) => r.request_id),
+        productUrl,
+        campaignGoal,
+        creativeBrief,
+      },
     });
   }
 

@@ -32,8 +32,8 @@ class FrameSampler:
         video_path: str,
         metadata: VideoMetadata,
         work_dir: str,
-        product_imgs_folder_path: str = "",
-        logo_imgs_folder_path: str = "",
+        product_image_paths: list[str] | None = None,
+        logo_paths: list[str] | None = None,
     ):
         self.video_path = video_path
         self.metadata = metadata
@@ -45,8 +45,8 @@ class FrameSampler:
         setup = ProbeSetup(
             video_metadata=metadata,
             work_dir=work_dir,
-            product_imgs_folder_path=product_imgs_folder_path,
-            logo_imgs_folder_path=logo_imgs_folder_path,
+            product_image_paths=product_image_paths or [],
+            logo_paths=logo_paths or [],
         )
         for probe in self.probes:
             probe.configure(setup)

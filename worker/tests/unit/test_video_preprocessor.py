@@ -21,8 +21,8 @@ def _payload(video_path="dir/vid.mp4"):
         request_id="r1",
         bucket="videos",
         video_path=video_path,
-        product_imgs_folder_path="p",
-        logo_imgs_folder_path="l",
+        product_image_paths=["p"],
+        logo_paths=["l"],
     )
 
 
@@ -272,8 +272,8 @@ def test_sample_frames_delegates_to_frame_sampler(tmp_path, monkeypatch):
         "v.mp4",
         meta,
         str(tmp_path),
-        product_imgs_folder_path="p",
-        logo_imgs_folder_path="l",
+        product_image_paths=["p"],
+        logo_paths=["l"],
     )
 
 

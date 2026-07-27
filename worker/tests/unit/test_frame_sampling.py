@@ -379,10 +379,10 @@ def test_probe_configure_default_is_noop():
     assert _MinimalProbe().configure(setup) is None
 
 
-def test_probe_setup_folder_paths_default_empty():
+def test_probe_setup_image_paths_default_empty():
     setup = ProbeSetup(video_metadata=_metadata(), work_dir="/tmp")
-    assert setup.product_imgs_folder_path == ""
-    assert setup.logo_imgs_folder_path == ""
+    assert setup.product_image_paths == []
+    assert setup.logo_paths == []
 
 
 def test_sampler_configures_probes_with_job_inputs(tmp_path, monkeypatch):
@@ -406,14 +406,14 @@ def test_sampler_configures_probes_with_job_inputs(tmp_path, monkeypatch):
         "v.mp4",
         _metadata(),
         str(tmp_path),
-        product_imgs_folder_path="prod",
-        logo_imgs_folder_path="logo",
+        product_image_paths=["prod"],
+        logo_paths=["logo"],
     )
     probe = sampler.probes[0]
     assert probe.setup.video_metadata is sampler.metadata
     assert probe.setup.work_dir == str(tmp_path)
-    assert probe.setup.product_imgs_folder_path == "prod"
-    assert probe.setup.logo_imgs_folder_path == "logo"
+    assert probe.setup.product_image_paths == ["prod"]
+    assert probe.setup.logo_paths == ["logo"]
 
 
 # ---- name-collision guard ----
