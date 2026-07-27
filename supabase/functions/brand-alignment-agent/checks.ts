@@ -160,6 +160,8 @@ export function buildBrandResult(
     metric_id: "brand_fit",
     agent: "brand_alignment",
     metric_name: "Brand Fit",
+    question:
+      "Does the ad's logo, visual identity, and voice align with the supplied brand guidance?",
     result,
     severity: result === "cannot_assess" ? "cannot_assess" : severity,
     confidence: logo.confidence === "low" || qualitative.confidence === "low"

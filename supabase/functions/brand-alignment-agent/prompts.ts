@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { chatWithMetadata } from "../shared/llm.ts";
+import { chat } from "../shared/llm.ts";
 import type { AgentContext, ConfidenceLevel } from "../shared/schemas.ts";
 import { makeCheck, toEvidence } from "./checks.ts";
 import type { CheckAssessment } from "./checks.ts";
@@ -130,7 +130,7 @@ export async function evaluateQualitativeChecks(
   };
 
   try {
-    const completion = await chatWithMetadata([
+    const content = await chat([
       {
         role: "system",
         content:
@@ -148,11 +148,10 @@ export async function evaluateQualitativeChecks(
       JSON.stringify({
         event: "brand_alignment.llm_completed",
         configured_model: Deno.env.get("OPENROUTER_MODEL"),
-        selected_model: completion.model,
       }),
     );
     const assessment = LLMAssessmentSchema.parse(
-      extractJson(completion.content),
+      extractJson(content),
     );
     const toAssessment = (
       check_id: "color_palette_off" | "brand_voice_drift",

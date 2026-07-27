@@ -18,13 +18,12 @@ export async function runBrandAlignment(
 ): Promise<MetricResult> {
   const context = await loadBrandContext(
     request.request_id,
-    request.video_id,
     options.userId,
   );
   const logo = evaluateLogoChecks(context);
   const qualitative = await evaluateQualitativeChecks(context);
   const result = MetricResultSchema.parse(buildBrandResult(logo, qualitative));
 
-  await persistBrandResult(context.request_id, context.video_id, result);
+  await persistBrandResult(context.request_id, result);
   return result;
 }
