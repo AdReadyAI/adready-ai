@@ -1,10 +1,9 @@
 import { assertEquals } from "@std/assert";
 import {
-  buildToolSchema,
+  buildOutputSchema,
   LLM_SUB_CHECK_IDS,
   METRIC_ID,
   SUB_CHECK_NAMES,
-  TOOL_NAME,
 } from "../../../functions/product-representation-agent/metrics.ts";
 
 Deno.test("METRIC_ID is product_clarity", () => {
@@ -26,16 +25,10 @@ Deno.test("SUB_CHECK_NAMES covers both LLM and deterministic sub-checks", () => 
   }
 });
 
-Deno.test("buildToolSchema names the forced function and excludes insufficient_visibility from sub_checks enum", () => {
-  const schema = buildToolSchema();
-  assertEquals(schema.function.name, TOOL_NAME);
-  const params = schema.function.parameters as {
-    properties: {
-      sub_checks: { items: { properties: { check_id: { enum: string[] } } } };
-    };
-  };
-  const allowedCheckIds =
-    params.properties.sub_checks.items.properties.check_id.enum;
+Deno.test("buildOutputSchema excludes insufficient_visibility from sub_checks enum", () => {
+  const schema = buildOutputSchema();
+  const allowedCheckIds = schema.properties.sub_checks.items.properties.check_id
+    .enum as string[];
   assertEquals(allowedCheckIds.includes("insufficient_visibility"), false);
   assertEquals(allowedCheckIds.length, 4);
 });

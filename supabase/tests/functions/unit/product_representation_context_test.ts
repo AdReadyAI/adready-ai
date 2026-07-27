@@ -1,18 +1,14 @@
+/**
+ * context.ts unit tests.
+ *
+ * loadAgentContext is now a real DB loader against the migrations-backed
+ * tables. Exercising it requires a running local Supabase with seed data, so
+ * these checks live under the integration suite / local harness rather than
+ * asserting a 501 stub.
+ */
 import { assertEquals } from "@std/assert";
 import { loadAgentContext } from "../../../functions/product-representation-agent/context.ts";
 
-// The DB-backed loader is a boundary until the backing tables land. It should
-// throw a 501 Response, which createEdgeHandler returns verbatim to the caller.
-Deno.test("loadAgentContext throws a 501 Response until DB loading is implemented", async () => {
-  let thrown: unknown;
-  try {
-    await loadAgentContext("11111111-1111-1111-1111-111111111111");
-  } catch (e) {
-    thrown = e;
-  }
-  assertEquals(thrown instanceof Response, true);
-  const res = thrown as Response;
-  assertEquals(res.status, 501);
-  const body = await res.json();
-  assertEquals(body.error.code, "NOT_IMPLEMENTED");
+Deno.test("loadAgentContext is exported as an async function", () => {
+  assertEquals(typeof loadAgentContext, "function");
 });

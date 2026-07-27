@@ -1,11 +1,10 @@
 import { assertEquals } from "@std/assert";
 import {
   ALL_SUB_CHECK_IDS,
-  buildToolSchema,
+  buildOutputSchema,
   METRIC_CONFIGS,
   METRIC_IDS,
   SUB_CHECK_NAMES,
-  TOOL_NAME,
 } from "../../../functions/brief-alignment-agent/metrics.ts";
 
 Deno.test("METRIC_CONFIGS covers audience_fit and brief_adherence in order", () => {
@@ -26,11 +25,11 @@ Deno.test("ALL_SUB_CHECK_IDS has a name for every sub-check", () => {
   }
 });
 
-Deno.test("buildToolSchema names the forced function and requires findings", () => {
-  const schema = buildToolSchema();
-  assertEquals(schema.function.name, TOOL_NAME);
+Deno.test("buildOutputSchema requires findings for both metrics", () => {
+  const schema = buildOutputSchema();
+  assertEquals(schema.required, ["findings"]);
   assertEquals(
-    (schema.function.parameters as { required: string[] }).required,
-    ["findings"],
+    (schema.properties.findings as { minItems: number }).minItems,
+    2,
   );
 });

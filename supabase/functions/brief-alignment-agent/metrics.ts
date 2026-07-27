@@ -1,9 +1,8 @@
 /**
- * metrics.ts — Static metric/sub-check metadata and OpenAI-style tool schema
- * for the Brief Alignment Agent. Nothing here comes from the model at runtime;
- * this is the fixed shape the agent grades against.
+ * metrics.ts — Static metric/sub-check metadata and the JSON output schema
+ * the Brief Alignment Agent asks the model to return.
  *
- * The enum value lists are sourced from the shared Zod schemas so the tool
+ * The enum value lists are sourced from the shared Zod schemas so the prompt
  * schema and validation stay in lockstep with the shared MetricResult contract.
  */
 
@@ -73,68 +72,62 @@ export const CORRECTION_TYPES =
     .options;
 export const EVIDENCE_TYPES = EvidenceRefSchema.shape.type.options;
 
-export const TOOL_NAME = "submit_brief_alignment_findings";
-
-export function buildToolSchema() {
+/**
+ * JSON Schema describing the object the model must return as its entire reply.
+ * Embedded in the prompt; the shared chat() helper has no tool-call support.
+ */
+export function buildOutputSchema() {
   return {
-    type: "function" as const,
-    function: {
-      name: TOOL_NAME,
-      description:
-        "Submit graded findings for every Brief Alignment metric (audience_fit, brief_adherence). Always include both, even if the result is cannot_assess.",
-      parameters: {
-        type: "object",
-        required: ["findings"],
-        properties: {
-          findings: {
-            type: "array",
-            minItems: METRIC_CONFIGS.length,
-            maxItems: METRIC_CONFIGS.length,
-            items: {
-              type: "object",
-              required: [
-                "metric_id",
-                "result",
-                "severity",
-                "confidence",
-                "evidence",
-                "sub_checks",
-              ],
-              properties: {
-                metric_id: { type: "string", enum: METRIC_IDS },
-                result: { type: "string", enum: RESULT_VALUES },
-                severity: { type: "string", enum: SEVERITY_LEVELS },
-                confidence: { type: "string", enum: CONFIDENCE_LEVELS },
-                evidence: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    required: ["type", "text", "timestamp"],
-                    properties: {
-                      type: { type: "string", enum: EVIDENCE_TYPES },
-                      text: { type: "string" },
-                      timestamp: { type: "string" },
-                    },
-                  },
+    type: "object",
+    required: ["findings"],
+    properties: {
+      findings: {
+        type: "array",
+        minItems: METRIC_CONFIGS.length,
+        maxItems: METRIC_CONFIGS.length,
+        items: {
+          type: "object",
+          required: [
+            "metric_id",
+            "result",
+            "severity",
+            "confidence",
+            "evidence",
+            "sub_checks",
+          ],
+          properties: {
+            metric_id: { type: "string", enum: METRIC_IDS },
+            result: { type: "string", enum: RESULT_VALUES },
+            severity: { type: "string", enum: SEVERITY_LEVELS },
+            confidence: { type: "string", enum: CONFIDENCE_LEVELS },
+            evidence: {
+              type: "array",
+              items: {
+                type: "object",
+                required: ["type", "text", "timestamp"],
+                properties: {
+                  type: { type: "string", enum: EVIDENCE_TYPES },
+                  text: { type: "string" },
+                  timestamp: { type: "string" },
                 },
-                explanation: { type: "string" },
-                suggested_correction: { type: "string" },
-                correction_type: { type: "string", enum: CORRECTION_TYPES },
-                sub_checks: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    required: ["check_id", "result", "severity"],
-                    properties: {
-                      check_id: { type: "string", enum: ALL_SUB_CHECK_IDS },
-                      result: {
-                        type: "string",
-                        enum: SUB_CHECK_RESULT_VALUES,
-                      },
-                      severity: { type: "string", enum: SEVERITY_LEVELS },
-                      explanation: { type: "string" },
-                    },
+              },
+            },
+            explanation: { type: "string" },
+            suggested_correction: { type: "string" },
+            correction_type: { type: "string", enum: CORRECTION_TYPES },
+            sub_checks: {
+              type: "array",
+              items: {
+                type: "object",
+                required: ["check_id", "result", "severity"],
+                properties: {
+                  check_id: { type: "string", enum: ALL_SUB_CHECK_IDS },
+                  result: {
+                    type: "string",
+                    enum: SUB_CHECK_RESULT_VALUES,
                   },
+                  severity: { type: "string", enum: SEVERITY_LEVELS },
+                  explanation: { type: "string" },
                 },
               },
             },

@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
 import {
-  type ChatClient,
+  type ChatFn,
   runBriefAlignmentAgent,
 } from "../../../functions/brief-alignment-agent/agent.ts";
 import {
@@ -40,33 +40,11 @@ function makeContext(overrides: Record<string, unknown> = {}): AgentContext {
   });
 }
 
-function makeMockClient(toolArguments: string): ChatClient {
-  return {
-    chat: {
-      completions: {
-        create: (_params: Record<string, unknown>) =>
-          Promise.resolve({
-            choices: [
-              {
-                message: {
-                  tool_calls: [
-                    {
-                      function: {
-                        name: "submit_brief_alignment_findings",
-                        arguments: toolArguments,
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
-          }),
-      },
-    },
-  };
+function makeMockChat(payload: unknown): ChatFn {
+  return (_messages) => Promise.resolve(JSON.stringify(payload));
 }
 
-Deno.test("runBriefAlignmentAgent maps a well-formed tool call to two MetricResults", async () => {
+Deno.test("runBriefAlignmentAgent maps a well-formed JSON reply to two MetricResults", async () => {
   const findings = {
     findings: [
       {
@@ -119,8 +97,10 @@ Deno.test("runBriefAlignmentAgent maps a well-formed tool call to two MetricResu
       },
     ],
   };
-  const client = makeMockClient(JSON.stringify(findings));
-  const results = await runBriefAlignmentAgent(makeContext(), client);
+  const results = await runBriefAlignmentAgent(
+    makeContext(),
+    makeMockChat(findings),
+  );
 
   assertEquals(results.length, 2);
   assertEquals(results[0].metric_id, "audience_fit");
@@ -158,8 +138,10 @@ Deno.test("runBriefAlignmentAgent drops unknown sub_check ids", async () => {
       },
     ],
   };
-  const client = makeMockClient(JSON.stringify(findings));
-  const results = await runBriefAlignmentAgent(makeContext(), client);
+  const results = await runBriefAlignmentAgent(
+    makeContext(),
+    makeMockChat(findings),
+  );
 
   assertEquals(results[0].sub_checks?.length, 1);
   assertEquals(results[0].sub_checks?.[0].check_id, "demographic_mismatch");
@@ -186,8 +168,10 @@ Deno.test("runBriefAlignmentAgent forces confidence to low when evidence is empt
       },
     ],
   };
-  const client = makeMockClient(JSON.stringify(findings));
-  const results = await runBriefAlignmentAgent(makeContext(), client);
+  const results = await runBriefAlignmentAgent(
+    makeContext(),
+    makeMockChat(findings),
+  );
 
   assertEquals(results[0].confidence, "low");
 });
@@ -205,24 +189,20 @@ Deno.test("runBriefAlignmentAgent defaults a missing metric finding to cannot_as
       },
     ],
   };
-  const client = makeMockClient(JSON.stringify(findings));
-  const results = await runBriefAlignmentAgent(makeContext(), client);
+  const results = await runBriefAlignmentAgent(
+    makeContext(),
+    makeMockChat(findings),
+  );
 
   assertEquals(results[1].metric_id, "brief_adherence");
   assertEquals(results[1].result, "cannot_assess");
 });
 
-Deno.test("runBriefAlignmentAgent throws when the model returns no tool call", async () => {
-  const client: ChatClient = {
-    chat: {
-      completions: {
-        create: () => Promise.resolve({ choices: [{ message: {} }] }),
-      },
-    },
-  };
+Deno.test("runBriefAlignmentAgent throws when the model returns invalid JSON", async () => {
+  const chatFn: ChatFn = () => Promise.resolve("not json at all");
   let threw = false;
   try {
-    await runBriefAlignmentAgent(makeContext(), client);
+    await runBriefAlignmentAgent(makeContext(), chatFn);
   } catch {
     threw = true;
   }

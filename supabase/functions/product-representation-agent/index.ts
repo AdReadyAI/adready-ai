@@ -14,26 +14,21 @@
  *
  * DB CONTEXT:
  *   - Orchestration invokes the agent with a request_id (AgentRunRequestSchema).
- *   - The agent loads its AgentContext (product frames, logo frames, visual
- *     frames, transcript, OCR, product context, and video metadata) from Supabase
- *     by request_id.
- *   - See context.ts for the DB loader boundary (pending the backing tables).
+ *   - The agent loads its AgentContext from Supabase by request_id (see context.ts).
+ *   - LLM calls go through shared/llm.ts (OPENROUTER_MODEL from env — no hardcoded model).
  */
 
 import { createEdgeHandler, ok } from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
 import { loadAgentContext } from "./context.ts";
-import { getOpenRouterClient, SONNET } from "./llm.ts";
-import { type ChatClient, runProductRepresentationAgent } from "./agent.ts";
+import { runProductRepresentationAgent } from "./agent.ts";
 
 createEdgeHandler(
   "product-representation-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
     const context = await loadAgentContext(ctx.body.request_id);
-    const client = getOpenRouterClient() as unknown as ChatClient;
-    const model = Deno.env.get("OPENROUTER_MODEL") ?? SONNET;
-    const results = await runProductRepresentationAgent(context, client, model);
+    const results = await runProductRepresentationAgent(context);
     return ok(results);
   },
 );

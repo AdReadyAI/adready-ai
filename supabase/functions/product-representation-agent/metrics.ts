@@ -1,13 +1,12 @@
 /**
- * metrics.ts — Static metric/sub-check metadata and OpenAI-style tool schema
- * for the Product Representation Agent. Nothing here comes from the model at
- * runtime; this is the fixed shape the agent grades against.
+ * metrics.ts — Static metric/sub-check metadata and the JSON output schema
+ * the Product Representation Agent asks the model to return.
  *
- * insufficient_visibility is intentionally excluded from the tool schema: it's
+ * insufficient_visibility is intentionally excluded from the schema: it's
  * computed deterministically in agent.ts from product-frame timing/coverage,
  * not graded by the model.
  *
- * The enum value lists are sourced from the shared Zod schemas so the tool
+ * The enum value lists are sourced from the shared Zod schemas so the prompt
  * schema and validation stay in lockstep with the shared MetricResult contract.
  */
 
@@ -60,58 +59,50 @@ export const CORRECTION_TYPES =
     .options;
 export const EVIDENCE_TYPES = EvidenceRefSchema.shape.type.options;
 
-export const TOOL_NAME = "submit_product_representation_findings";
-
-export function buildToolSchema() {
+/**
+ * JSON Schema describing the object the model must return as its entire reply.
+ * Embedded in the prompt; the shared chat() helper has no tool-call support.
+ * insufficient_visibility is excluded — it is computed separately.
+ */
+export function buildOutputSchema() {
   return {
-    type: "function" as const,
-    function: {
-      name: TOOL_NAME,
-      description:
-        "Submit the graded product_clarity finding for this ad, covering " +
-        "product_not_shown, product_obscured, product_appearance_wrong, " +
-        "and product_name_unspoken. Do not include insufficient_visibility " +
-        "— that sub-check is computed separately from product-frame timing.",
-      parameters: {
-        type: "object",
-        required: [
-          "result",
-          "severity",
-          "confidence",
-          "evidence",
-          "sub_checks",
-        ],
-        properties: {
-          result: { type: "string", enum: RESULT_VALUES },
-          severity: { type: "string", enum: SEVERITY_LEVELS },
-          confidence: { type: "string", enum: CONFIDENCE_LEVELS },
-          evidence: {
-            type: "array",
-            items: {
-              type: "object",
-              required: ["type", "text", "timestamp"],
-              properties: {
-                type: { type: "string", enum: EVIDENCE_TYPES },
-                text: { type: "string" },
-                timestamp: { type: "string" },
-              },
-            },
+    type: "object",
+    required: [
+      "result",
+      "severity",
+      "confidence",
+      "evidence",
+      "sub_checks",
+    ],
+    properties: {
+      result: { type: "string", enum: RESULT_VALUES },
+      severity: { type: "string", enum: SEVERITY_LEVELS },
+      confidence: { type: "string", enum: CONFIDENCE_LEVELS },
+      evidence: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["type", "text", "timestamp"],
+          properties: {
+            type: { type: "string", enum: EVIDENCE_TYPES },
+            text: { type: "string" },
+            timestamp: { type: "string" },
           },
-          explanation: { type: "string" },
-          suggested_correction: { type: "string" },
-          correction_type: { type: "string", enum: CORRECTION_TYPES },
-          sub_checks: {
-            type: "array",
-            items: {
-              type: "object",
-              required: ["check_id", "result", "severity"],
-              properties: {
-                check_id: { type: "string", enum: LLM_SUB_CHECK_IDS },
-                result: { type: "string", enum: SUB_CHECK_RESULT_VALUES },
-                severity: { type: "string", enum: SEVERITY_LEVELS },
-                explanation: { type: "string" },
-              },
-            },
+        },
+      },
+      explanation: { type: "string" },
+      suggested_correction: { type: "string" },
+      correction_type: { type: "string", enum: CORRECTION_TYPES },
+      sub_checks: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["check_id", "result", "severity"],
+          properties: {
+            check_id: { type: "string", enum: LLM_SUB_CHECK_IDS },
+            result: { type: "string", enum: SUB_CHECK_RESULT_VALUES },
+            severity: { type: "string", enum: SEVERITY_LEVELS },
+            explanation: { type: "string" },
           },
         },
       },

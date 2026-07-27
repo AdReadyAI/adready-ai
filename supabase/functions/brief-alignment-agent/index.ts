@@ -15,25 +15,21 @@
  *
  * DB CONTEXT:
  *   - Orchestration invokes the agent with a request_id (AgentRunRequestSchema).
- *   - The agent loads its AgentContext (parsed creative brief, campaign goal,
- *     transcript, OCR, and visual frames) from Supabase by request_id.
- *   - See context.ts for the DB loader boundary (pending the backing tables).
+ *   - The agent loads its AgentContext from Supabase by request_id (see context.ts).
+ *   - LLM calls go through shared/llm.ts (OPENROUTER_MODEL from env — no hardcoded model).
  */
 
 import { createEdgeHandler, ok } from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
 import { loadAgentContext } from "./context.ts";
-import { getOpenRouterClient, SONNET } from "./llm.ts";
-import { type ChatClient, runBriefAlignmentAgent } from "./agent.ts";
+import { runBriefAlignmentAgent } from "./agent.ts";
 
 createEdgeHandler(
   "brief-alignment-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
     const context = await loadAgentContext(ctx.body.request_id);
-    const client = getOpenRouterClient() as unknown as ChatClient;
-    const model = Deno.env.get("OPENROUTER_MODEL") ?? SONNET;
-    const results = await runBriefAlignmentAgent(context, client, model);
+    const results = await runBriefAlignmentAgent(context);
     return ok(results);
   },
 );

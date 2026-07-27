@@ -1,8 +1,12 @@
 /**
  * agent.ts — Orchestration for the Brief Alignment Agent: prompt assembly,
- * the OpenRouter tool-forced call, and guardrails on the returned findings.
+ * the shared chat() call, and guardrails on the returned findings.
+ *
+ * Model selection is owned by shared/llm.ts via OPENROUTER_MODEL — this agent
+ * never hardcodes a model id.
  */
 
+import { chat, type ChatMessage } from "../shared/llm.ts";
 import type {
   AgentContext,
   ConfidenceLevel,
@@ -11,9 +15,8 @@ import type {
   SeverityLevel,
   SubCheckResult,
 } from "../shared/schemas.ts";
-import { SONNET } from "./llm.ts";
 import {
-  buildToolSchema,
+  buildOutputSchema,
   CONFIDENCE_LEVELS,
   CORRECTION_TYPES,
   EVIDENCE_TYPES,
@@ -24,25 +27,11 @@ import {
   SUB_CHECK_NAMES,
   SUB_CHECK_RESULT_VALUES,
   type SubCheckId,
-  TOOL_NAME,
 } from "./metrics.ts";
 import { buildUserContent } from "./evidence.ts";
 
-export type ChatClient = {
-  chat: {
-    completions: {
-      create: (params: Record<string, unknown>) => Promise<{
-        choices: Array<{
-          message: {
-            tool_calls?: Array<{
-              function: { name: string; arguments: string };
-            }>;
-          };
-        }>;
-      }>;
-    };
-  };
-};
+/** Injectable chat function for unit tests; defaults to shared chat(). */
+export type ChatFn = (messages: ChatMessage[]) => Promise<string>;
 
 const SYSTEM_PROMPT =
   `You are the Brief Alignment agent in an ad-review pipeline. You grade a ` +
@@ -53,8 +42,8 @@ const SYSTEM_PROMPT =
   `line, a visual-frame description, or a brief line), and self-report ` +
   `confidence (low, medium, high). If you cannot cite specific evidence for a ` +
   `finding, your confidence for it must be low. Use cannot_assess when the ` +
-  `brief gives nothing to check a metric against. Call the ${TOOL_NAME} tool ` +
-  `with your findings for every metric listed; do not respond with plain text.`;
+  `brief gives nothing to check a metric against. Respond with a single JSON ` +
+  `object that matches the provided schema — no markdown fences, no prose.`;
 
 type RawFinding = {
   metric_id?: unknown;
@@ -67,6 +56,22 @@ type RawFinding = {
   correction_type?: unknown;
   sub_checks?: unknown;
 };
+
+function parseJsonContent(content: string): unknown {
+  const trimmed = content.trim();
+  const fence = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const raw = fence ? fence[1].trim() : trimmed;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(raw.slice(start, end + 1));
+    }
+    throw new Error("model returned invalid JSON");
+  }
+}
 
 function sanitizeEvidence(raw: unknown): EvidenceRef[] {
   if (!Array.isArray(raw)) return [];
@@ -192,30 +197,27 @@ function buildMetricResult(
 
 export async function runBriefAlignmentAgent(
   context: AgentContext,
-  client: ChatClient,
-  model: string = SONNET,
+  chatFn: ChatFn = chat,
 ): Promise<MetricResult[]> {
-  const response = await client.chat.completions.create({
-    model,
-    temperature: 0,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: buildUserContent(context) },
-    ],
-    tools: [buildToolSchema()],
-    tool_choice: { type: "function", function: { name: TOOL_NAME } },
-  });
-
-  const toolCall = response.choices[0]?.message.tool_calls?.[0];
-  if (!toolCall || toolCall.function.name !== TOOL_NAME) {
-    throw new Error("model did not return the expected tool call");
-  }
+  const schema = buildOutputSchema();
+  const content = await chatFn([
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: [
+        buildUserContent(context),
+        "",
+        "Return ONLY a JSON object matching this schema:",
+        JSON.stringify(schema),
+      ].join("\n"),
+    },
+  ]);
 
   let parsed: { findings?: unknown };
   try {
-    parsed = JSON.parse(toolCall.function.arguments) as { findings?: unknown };
+    parsed = parseJsonContent(content) as { findings?: unknown };
   } catch {
-    throw new Error("model returned invalid JSON in tool call arguments");
+    throw new Error("model returned invalid JSON");
   }
 
   const findings = Array.isArray(parsed.findings)

@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
 import {
   APPEARANCE_DEADLINE_MS,
-  type ChatClient,
+  type ChatFn,
   computeInsufficientVisibilitySubCheck,
   MIN_COVERAGE_RATIO,
   runProductRepresentationAgent,
@@ -42,33 +42,12 @@ function makeContext(overrides: Record<string, unknown> = {}): AgentContext {
   });
 }
 
-function makeMockClient(toolArguments: string): ChatClient {
-  return {
-    chat: {
-      completions: {
-        create: (_params: Record<string, unknown>) =>
-          Promise.resolve({
-            choices: [
-              {
-                message: {
-                  tool_calls: [
-                    {
-                      function: {
-                        name: "submit_product_representation_findings",
-                        arguments: toolArguments,
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
-          }),
-      },
-    },
-  };
+function makeMockChat(payload: string | unknown): ChatFn {
+  const body = typeof payload === "string" ? payload : JSON.stringify(payload);
+  return (_messages) => Promise.resolve(body);
 }
 
-const PASSING_LLM_FINDING = JSON.stringify({
+const PASSING_LLM_FINDING = {
   result: "true",
   severity: "none",
   confidence: "high",
@@ -88,7 +67,7 @@ const PASSING_LLM_FINDING = JSON.stringify({
     },
     { check_id: "product_name_unspoken", result: "passed", severity: "none" },
   ],
-});
+};
 
 Deno.test("computeInsufficientVisibilitySubCheck passes when product appears early and covers enough frames", () => {
   const context = makeContext({
@@ -175,8 +154,10 @@ Deno.test("runProductRepresentationAgent merges the LLM findings with the determ
       },
     ],
   });
-  const client = makeMockClient(PASSING_LLM_FINDING);
-  const results = await runProductRepresentationAgent(context, client);
+  const results = await runProductRepresentationAgent(
+    context,
+    makeMockChat(PASSING_LLM_FINDING),
+  );
 
   assertEquals(results.length, 1);
   assertEquals(results[0].metric_id, "product_clarity");
@@ -202,8 +183,10 @@ Deno.test("runProductRepresentationAgent escalates severity when the determinist
       },
     ],
   });
-  const client = makeMockClient(PASSING_LLM_FINDING);
-  const results = await runProductRepresentationAgent(context, client);
+  const results = await runProductRepresentationAgent(
+    context,
+    makeMockChat(PASSING_LLM_FINDING),
+  );
 
   assertEquals(results[0].result, "false");
   assertEquals(results[0].severity !== "none", true);
@@ -211,8 +194,9 @@ Deno.test("runProductRepresentationAgent escalates severity when the determinist
 
 Deno.test("runProductRepresentationAgent drops unknown sub_check ids from the LLM output", async () => {
   const context = makeContext();
-  const client = makeMockClient(
-    JSON.stringify({
+  const results = await runProductRepresentationAgent(
+    context,
+    makeMockChat({
       result: "true",
       severity: "none",
       confidence: "high",
@@ -223,7 +207,6 @@ Deno.test("runProductRepresentationAgent drops unknown sub_check ids from the LL
       ],
     }),
   );
-  const results = await runProductRepresentationAgent(context, client);
   const llmSubChecks = results[0].sub_checks?.filter((sc) =>
     sc.check_id !== "insufficient_visibility"
   );
@@ -233,8 +216,9 @@ Deno.test("runProductRepresentationAgent drops unknown sub_check ids from the LL
 
 Deno.test("runProductRepresentationAgent forces confidence to low when evidence is empty", async () => {
   const context = makeContext();
-  const client = makeMockClient(
-    JSON.stringify({
+  const results = await runProductRepresentationAgent(
+    context,
+    makeMockChat({
       result: "false",
       severity: "high",
       confidence: "high",
@@ -242,22 +226,15 @@ Deno.test("runProductRepresentationAgent forces confidence to low when evidence 
       sub_checks: [],
     }),
   );
-  const results = await runProductRepresentationAgent(context, client);
   assertEquals(results[0].confidence, "low");
 });
 
-Deno.test("runProductRepresentationAgent throws when the model returns no tool call", async () => {
+Deno.test("runProductRepresentationAgent throws when the model returns invalid JSON", async () => {
   const context = makeContext();
-  const client: ChatClient = {
-    chat: {
-      completions: {
-        create: () => Promise.resolve({ choices: [{ message: {} }] }),
-      },
-    },
-  };
+  const chatFn: ChatFn = () => Promise.resolve("not json at all");
   let threw = false;
   try {
-    await runProductRepresentationAgent(context, client);
+    await runProductRepresentationAgent(context, chatFn);
   } catch {
     threw = true;
   }
