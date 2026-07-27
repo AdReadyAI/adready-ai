@@ -56,7 +56,7 @@ out at submit time instead of sending one row with an array of videos:
   column's `default gen_random_uuid()` (`supabase/migrations/007_create_requests_table.sql`)
   — nothing sets it explicitly.
 - Every row in the batch shares the same `batch_id`
-  (`supabase/migrations/011_add_batch_id.sql`, column order:
+  (`supabase/migrations/022_add_batch_id.sql`, column order:
   `request_id, batch_id, user_id, ...`), which is how the loading/results UI
   will group them back together (query `requests WHERE batch_id = ...`)
   instead of relying on React Router navigation state, which doesn't survive
@@ -69,7 +69,7 @@ submission = however many videos they uploaded together.
 
 Real: auth (email/password + Google), upload to Storage, `requests` row
 creation (fanned out per video, per above), and enqueueing — a DB trigger
-(`supabase/migrations/012_enqueue_on_request_insert.sql`,
+(`supabase/migrations/023_enqueue_on_request_insert.sql`,
 `trg_enqueue_job_on_request_insert`) fires `enqueue_job()` automatically for
 every `requests` row inserted, building the `JobPayload` from that row and
 sending it to `pgmq`. Runs inside the same transaction as the insert, so a
@@ -100,6 +100,10 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-07-27** — Renamed this branch's `011_add_batch_id.sql`/
+  `012_enqueue_on_request_insert.sql` to `022_*`/`023_*` — `main` had
+  independently claimed `011`–`021` for its own tables while this branch
+  was unmerged, so the numbers collided.
 - **2026-07-22** — `supabase/migrations/012_enqueue_on_request_insert.sql`
   adds a DB trigger that calls `enqueue_job()` automatically on every
   `requests` insert. This was the last Phase 1 blocker (see the pipeline

@@ -1,6 +1,6 @@
 -- Nothing currently calls enqueue_job() when a `requests` row lands, so a
 -- submitted request just sits there and the worker is never notified. One
--- `requests` row is one video (see 011_add_batch_id.sql's fan-out model),
+-- `requests` row is one video (see 022_add_batch_id.sql's fan-out model),
 -- which maps directly onto one JobPayload / one enqueue_job() call, so this
 -- fires automatically on insert instead of requiring the app to call it.
 --
