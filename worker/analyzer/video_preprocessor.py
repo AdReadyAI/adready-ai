@@ -186,8 +186,8 @@ class VideoPreprocessor:
             video_path,
             metadata,
             self.work_dir,
-            product_imgs_folder_path=self.job_payload.product_imgs_folder_path,
-            logo_imgs_folder_path=self.job_payload.logo_imgs_folder_path,
+            product_image_paths=self.job_payload.product_image_paths,
+            logo_paths=self.job_payload.logo_paths,
         )
         frames = sampler.run()
         self._probe_results = sampler.probe_results
