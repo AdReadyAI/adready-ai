@@ -20,7 +20,7 @@ const LLMCheckSchema = z.object({
     type: z.enum(["transcript", "ocr", "visual", "brief"]),
     text: z.string(),
     timestamp_ms: z.number().int().nonnegative().optional(),
-  })).max(3),
+  })),
 });
 
 const LLMAssessmentSchema = z.object({
