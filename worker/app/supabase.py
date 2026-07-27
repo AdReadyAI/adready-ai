@@ -31,6 +31,9 @@ class Supabase:
         for name, error in errors.items():
             self._upsert_processing(name, "error", None, error)
 
+    def mark_processing(self, task_name: str) -> None:
+        self._upsert_processing(task_name, "processing", None)
+
     def completed_analyzers(self) -> set[str]:
         self.cur.execute(
             "SELECT task_name FROM video_processing "

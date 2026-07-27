@@ -109,6 +109,21 @@ def test_transaction_restores_previous_autocommit_when_already_false():
 
 
 # ---------------------------------------------------------------------------
+# mark_processing()
+# ---------------------------------------------------------------------------
+def test_mark_processing_upserts_processing_status():
+    cur = FakeCursor(fetchone_queue=[("proc-1",)])
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.mark_processing("transcription")
+
+    sql, params = cur.executed[0]
+    assert "INSERT INTO video_processing" in sql
+    assert "ON CONFLICT (request_id, task_name)" in sql
+    assert params == (REQUEST_ID, "transcription", "processing", None, None)
+
+
+# ---------------------------------------------------------------------------
 # completed_analyzers()
 # ---------------------------------------------------------------------------
 def test_completed_analyzers_returns_successful_task_names():

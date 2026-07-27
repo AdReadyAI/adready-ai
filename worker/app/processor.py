@@ -46,6 +46,9 @@ def _run_analysis(db: Supabase, analyzer: VideoAnalyzer) -> tuple[dict[str, Task
     done = db.completed_analyzers()
     tasks = {n: fn for n, fn in analyzer.analysis_tasks().items() if n not in done}
 
+    for name in tasks:
+        db.mark_processing(name)
+
     results, errors = {}, {}
     with ThreadPoolExecutor(max_workers=max(len(tasks), 1)) as executor:
         futures = {executor.submit(_with_retry, fn): name for name, fn in tasks.items()}
