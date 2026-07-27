@@ -1,25 +1,16 @@
-import os
-
-import httpx
-
-
-os.environ["DATABASE_URL"] = "mock_db"
-os.environ["OPENROUTER_API_KEY"] = "mock_key"
-
 import unittest
 from unittest.mock import MagicMock, patch
+
 import assemblyai as aai
+import httpx
+import pytest
 
 from analyzer.video_analyzer import VideoAnalyzer
 from analyzer.types import Artifacts
 # from analyzer.output_models import TranscriptSegment
 from app.errors import PermanentError, TransientError
 
-
-# @unittest.skip(
-#     "transcribe() is currently a stub on the saveProcessingOutput branch; "
-#     "see test_supabase.py / test_output_models.py for the new persistence logic."
-# )
+pytestmark = pytest.mark.unit
 
 class TestVideoAnalyzer(unittest.TestCase):
     def setUp(self):
