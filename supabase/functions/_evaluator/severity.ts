@@ -6,7 +6,7 @@
  * out-of-range value (including `cannot_assess`) as ranking below "none".
  */
 
-import type { SeverityLevel } from "../schemas.ts";
+import type { SeverityLevel } from "../shared/schemas.ts";
 
 /** Worst-wins ordering, low index = lower business risk. */
 export const SEVERITY_ORDER: readonly SeverityLevel[] = [

@@ -1,6 +1,6 @@
 /**
- * Unit tests for the config scaffolding (shared/config/*) and the config gate
- * (shared/evaluator/subcheck.ts).
+ * Unit tests for the config scaffolding (_evaluator/config.ts) and the config
+ * gate (_evaluator/subcheck.ts).
  *
  * The contract these lock in: every unresolved dependency defaults to null
  * (unpopulated), and a sub-check gated on it degrades to `cannot_assess` — never
@@ -14,15 +14,15 @@ import {
   failed,
   gateOnConfig,
   passed,
-} from "../../../functions/shared/evaluator/subcheck.ts";
+} from "../../../functions/_evaluator/subcheck.ts";
 import {
   getArcExpectation,
   getCtaTiming,
   getCtaVisibilityThresholds,
   getGoalBenchmark,
   getPlatformPhrasing,
-} from "../../../functions/shared/evaluator/config/index.ts";
-import { getPlatformSpec } from "../../../functions/shared/config/index.ts";
+} from "../../../functions/_evaluator/config.ts";
+import { getPlatformSpec } from "../../../functions/_evaluator/config.ts";
 
 /**
  * Each unresolved dependency: a human name, its default accessor (must be null),

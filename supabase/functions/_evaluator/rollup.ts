@@ -24,7 +24,7 @@
  * which-one-fired detail survive the rollup for the Score Engine to re-derive.
  */
 
-import type { MetricResult, SeverityLevel, SubCheckResult } from "../schemas.ts";
+import type { MetricResult, SeverityLevel, SubCheckResult } from "../shared/schemas.ts";
 import { severityRank } from "./severity.ts";
 
 /** The subset of a metric_result that the rollup decides. */

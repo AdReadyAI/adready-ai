@@ -10,7 +10,7 @@
  * first drafts, expected to be tuned once Evaluation Science supplies numbers.
  */
 
-import type { ChatMessage } from "../shared/evaluator/llm_client.ts";
+import type { ChatMessage } from "../shared/llm.ts";
 import type { AgentContext } from "../shared/schemas.ts";
 import type { ArcLabeling } from "./response_schemas.ts";
 

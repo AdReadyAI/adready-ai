@@ -21,13 +21,13 @@ import {
   failed,
   gateOnConfig,
   passed,
-} from "../shared/evaluator/subcheck.ts";
-import { maxSeverity } from "../shared/evaluator/severity.ts";
+} from "../_evaluator/subcheck.ts";
+import { maxSeverity } from "../_evaluator/severity.ts";
 import type {
   CtaTiming,
   CtaVisibilityThresholds,
   PlatformPhrasing,
-} from "../shared/evaluator/config/index.ts";
+} from "../_evaluator/config.ts";
 import type { AcquiredCta } from "./response_schemas.ts";
 
 const BURIED = { id: "cta_buried", name: "CTA Position Check" };

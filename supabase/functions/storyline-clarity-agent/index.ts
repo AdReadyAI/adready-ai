@@ -115,8 +115,8 @@
 
 import { createEdgeHandler, ok } from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
-import { defaultLlmClient } from "../shared/evaluator/llm_client.ts";
-import { loadAgentContext } from "../shared/context.ts";
+import { defaultLlmClient } from "../_evaluator/llm_client.ts";
+import { loadAgentContext } from "../_evaluator/load_context.ts";
 import { runStorylineAgent } from "./agent.ts";
 
 // createEdgeHandler wraps CORS, auth, and AgentRunRequest validation. The agent

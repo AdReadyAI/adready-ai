@@ -13,8 +13,10 @@ import {
   ctaMistimed,
   ctaPlatformMismatch,
 } from "../../../functions/cta-effectiveness-agent/checks.ts";
-import type { CtaTiming } from "../../../functions/shared/evaluator/config/cta_timing.ts";
-import type { CtaVisibilityThresholds } from "../../../functions/shared/evaluator/config/cta_visibility.ts";
+import type {
+  CtaTiming,
+  CtaVisibilityThresholds,
+} from "../../../functions/_evaluator/config.ts";
 import type { OCRSegment } from "../../../functions/shared/schemas.ts";
 import type { AcquiredCta } from "../../../functions/cta-effectiveness-agent/response_schemas.ts";
 

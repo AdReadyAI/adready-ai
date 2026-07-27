@@ -1,5 +1,5 @@
 /**
- * llm_client.ts — Injectable LLM seam.
+ * llm_client.ts — Injectable LLM seam for the two-call evaluator.
  *
  * `shared/llm.ts` exposes a bare `chat()` module function bound to OpenRouter.
  * That is not testable in isolation: an agent that calls it directly cannot be
@@ -9,7 +9,7 @@
  * calls made. Production wiring passes `defaultLlmClient`.
  */
 
-import { chat, type ChatMessage } from "../llm.ts";
+import { chat, type ChatMessage } from "../shared/llm.ts";
 
 export type { ChatMessage };
 
@@ -18,7 +18,7 @@ export interface LlmClient {
   chat(messages: ChatMessage[]): Promise<string>;
 }
 
-/** The real client: delegates to the OpenRouter-backed `chat()` in llm.ts. */
+/** The real client: delegates to the OpenRouter-backed `chat()` in shared/llm.ts. */
 export const defaultLlmClient: LlmClient = {
   chat: (messages) => chat(messages),
 };

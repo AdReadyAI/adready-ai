@@ -1,10 +1,12 @@
 /**
- * context.ts — Shared, DB-backed AgentContext loader.
+ * load_context.ts — Per-agent DB-backed AgentContext loader (NOT the orchestrator).
  *
- * Orchestration invokes each agent with a request_id; the agent loads its own
- * working AgentContext from Supabase by joining the request-scoped context
- * tables. Every evaluator agent needs the same full AgentContext, so the load is
- * shared here rather than duplicated per agent.
+ * The orchestrator (a separate, not-yet-built Edge Function) decides which
+ * agents run and invokes each with only a request_id. This is what an agent
+ * then calls to load its own working AgentContext from Supabase, joining the
+ * request-scoped context tables. It is stateless and read-only — it coordinates
+ * nothing. Shared by the storyline-clarity and cta-effectiveness agents so the
+ * load isn't duplicated between them.
  *
  * Everything is keyed by request_id: the request row (campaign_goal), the parsed
  * creative brief (which also carries destination_platform), video_metadata, the
@@ -16,9 +18,9 @@
  * (e.g. the eval harness against a seeded DB).
  */
 
-import { createSupabaseServiceClient } from "./index.ts";
-import { AgentContextSchema } from "./schemas.ts";
-import type { AgentContext } from "./schemas.ts";
+import { createSupabaseServiceClient } from "../shared/index.ts";
+import { AgentContextSchema } from "../shared/schemas.ts";
+import type { AgentContext } from "../shared/schemas.ts";
 
 function required<T>(value: T | null | undefined, name: string): T {
   if (value === null || value === undefined) {
