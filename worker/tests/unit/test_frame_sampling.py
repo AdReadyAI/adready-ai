@@ -107,9 +107,18 @@ def test_probe_result_is_subclassable_carrier():
 
 
 # ---- AdaptiveSampler ----
-def test_adaptive_sampler_degrades_to_no_keyframes_without_scene_signal(tmp_path):
-    store = FrameStore(str(tmp_path))
+def _adaptive(fps=30.0):
+    """Construct and configure an AdaptiveSampler (configure() is required)."""
     sampler = AdaptiveSampler()
+    setup = MagicMock()
+    setup.video_metadata.fps = fps
+    sampler.configure(setup)
+    return sampler
+
+
+def test_adaptive_sampler_seeds_first_frame(tmp_path):
+    store = FrameStore(str(tmp_path))
+    sampler = _adaptive()
 
     for index in range(3):
         ctx = _ctx(index, index / 30, _frame())
@@ -118,13 +127,14 @@ def test_adaptive_sampler_degrades_to_no_keyframes_without_scene_signal(tmp_path
 
     result = sampler.finalize()
 
-    assert store.manifest() == []
-    assert result == AdaptiveSamplerResult(keyframe_count=0, keyframe_indices=())
+    # Even with no change signal, the opening frame is always kept.
+    assert [frame.timestamp for frame in store.manifest()] == [pytest.approx(0.0)]
+    assert result == AdaptiveSamplerResult(keyframe_count=1, keyframe_indices=(0,))
 
 
 def test_adaptive_sampler_keeps_shot_starts_and_resets_budget(tmp_path):
     store = FrameStore(str(tmp_path))
-    sampler = AdaptiveSampler()
+    sampler = _adaptive()
     frames = [
         (0, 0.3, False),
         (1, 0.3, True),
@@ -140,13 +150,18 @@ def test_adaptive_sampler_keeps_shot_starts_and_resets_budget(tmp_path):
 
     result = sampler.finalize()
 
-    assert [frame.timestamp for frame in store.manifest()] == [pytest.approx(1 / 30)]
-    assert result.keyframe_indices == (1,)
+    # Seed (0) plus the shot boundary (1); budget at frame 2 hasn't crossed.
+    assert [frame.timestamp for frame in store.manifest()] == [
+        pytest.approx(0.0),
+        pytest.approx(1 / 30),
+    ]
+    assert result.keyframe_indices == (0, 1)
 
 
 def test_adaptive_sampler_keeps_when_change_budget_reaches_threshold(tmp_path):
     store = FrameStore(str(tmp_path))
-    sampler = AdaptiveSampler()
+    sampler = _adaptive()
+    sampler._min_gap = 1  # isolate the change-budget trigger from the cooldown
 
     for index, content_val in enumerate([0.2, 0.2, 0.1, 0.4, 0.1]):
         ctx = _ctx(index, index / 30, _frame())
@@ -157,13 +172,62 @@ def test_adaptive_sampler_keeps_when_change_budget_reaches_threshold(tmp_path):
     result = sampler.finalize()
     manifest = store.manifest()
 
+    # Seed (0), then the budget crosses 0.5 at frame 3 (0.2+0.2+0.1+0.4).
     assert [frame.timestamp for frame in manifest] == [
-        pytest.approx(2 / 30),
-        pytest.approx(4 / 30),
+        pytest.approx(0.0),
+        pytest.approx(3 / 30),
     ]
     assert all(frame.tags == ("keyframe",) for frame in manifest)
     assert result.keyframe_count == 2
-    assert result.keyframe_indices == (2, 4)
+
+
+def test_adaptive_sampler_min_gap_suppresses_bursts(tmp_path):
+    store = FrameStore(str(tmp_path))
+    sampler = _adaptive()
+    sampler._min_gap = 3  # cooldown: no keyframes closer than 3 frames apart
+
+    for index in range(7):
+        ctx = _ctx(index, index / 30, _frame())
+        ctx.store = store
+        ctx.content_val = 1.0  # over threshold every frame
+        sampler.process(ctx)
+
+    result = sampler.finalize()
+
+    # Without the cooldown this would keep every frame; instead it spaces by 3.
+    assert result.keyframe_indices == (0, 3, 6)
+
+
+def test_adaptive_sampler_max_gap_forces_keyframe_on_static(tmp_path):
+    store = FrameStore(str(tmp_path))
+    sampler = _adaptive()
+    sampler._max_gap = 4  # ceiling: force a keyframe at least every 4 frames
+
+    for index in range(9):
+        ctx = _ctx(index, index / 30, _frame())
+        ctx.store = store
+        ctx.content_val = 0.0  # fully static: budget never grows
+        sampler.process(ctx)
+
+    result = sampler.finalize()
+
+    # Seed (0), then forced every 4 frames despite zero change.
+    assert result.keyframe_indices == (0, 4, 8)
+
+
+def test_adaptive_sampler_configure_derives_gaps_from_fps():
+    sampler = AdaptiveSampler()
+    setup = MagicMock()
+
+    setup.video_metadata.fps = 30.0
+    sampler.configure(setup)
+    assert sampler._min_gap == 6    # round(0.2 s * 30 fps)
+    assert sampler._max_gap == 60   # round(2.0 s * 30 fps)
+
+    setup.video_metadata.fps = 60.0
+    sampler.configure(setup)
+    assert sampler._min_gap == 12   # gaps scale with fps -> constant real-time spacing
+    assert sampler._max_gap == 120
 
 
 def test_frame_selection_holds_no_pixels():
@@ -284,9 +348,15 @@ def test_run_produces_manifest_from_keeping_probe(tmp_path, monkeypatch):
 
 
 # ---- probe stubs contract ----
+# Probes with a real implementation, covered by their own tests.
+_IMPLEMENTED_PROBES = {"scene", "adaptive"}
+
+
 def test_probe_stubs_are_noop(tmp_path):
     ctx = _sampler(tmp_path)._build_context(0, _frame())
     for cls in get_probe_classes():
+        if cls.name in _IMPLEMENTED_PROBES:
+            continue
         probe = cls()
         assert probe.process(ctx) is None
         result = probe.finalize()
