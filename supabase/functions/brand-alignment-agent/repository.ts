@@ -1,4 +1,4 @@
-import { createSupabaseServiceClient } from "../shared/index.ts";
+import { createSupabaseServiceClient } from "../shared/clients.ts";
 import { AgentContextSchema } from "../shared/schemas.ts";
 import type { AgentContext, MetricResult } from "../shared/schemas.ts";
 
