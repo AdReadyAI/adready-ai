@@ -1,14 +1,19 @@
 /**
- * checks.ts — CTA deterministic sub-checks (no model call) + goal-conditional
- * severity table for cta_absent.
+ * checks.ts — CTA sub-check helpers + deterministic sub-checks (no model call) +
+ * the goal-conditional severity table for cta_absent.
  *
- * Pure functions of (inputs, config). CTAs come from Call 1 acquisition (derived
- * from transcript/OCR), each carrying numeric start_ms/end_ms, so the positional
- * checks (cta_buried, cta_mistimed) are deterministic arithmetic over those
- * timestamps. cta_low_visibility is SIZE-only (region_size + font_size_px) —
- * contrast_ratio is not in the AgentContext and these agents never inspect
- * pixels. Each config-dependent check gates to cannot_assess until its
- * threshold/table is populated.
+ * The top of this file holds the small, self-contained helpers this agent uses
+ * to build and grade sub-checks: the severity ordering, the SubCheckResult
+ * builders, and `gateOnConfig`. They are kept here (rather than in a shared
+ * framework) so the agent folder is self-contained like the other agents.
+ *
+ * The deterministic checks are pure functions of (inputs, config). CTAs come
+ * from Call 1 acquisition (derived from transcript/OCR), each carrying numeric
+ * start_ms/end_ms, so the positional checks (cta_buried, cta_mistimed) are
+ * deterministic arithmetic over those timestamps. cta_low_visibility is
+ * SIZE-only (region_size + font_size_px) — contrast_ratio is not in the
+ * AgentContext and these agents never inspect pixels. Each config-dependent
+ * check gates to cannot_assess until its threshold/table is populated.
  */
 
 import type {
@@ -16,19 +21,99 @@ import type {
   SeverityLevel,
   SubCheckResult,
 } from "../shared/schemas.ts";
-import {
-  cannotAssess,
-  failed,
-  gateOnConfig,
-  passed,
-} from "../_evaluator/subcheck.ts";
-import { maxSeverity } from "../_evaluator/severity.ts";
 import type {
   CtaTiming,
   CtaVisibilityThresholds,
   PlatformPhrasing,
-} from "../_evaluator/config.ts";
+} from "./config.ts";
 import type { AcquiredCta } from "./response_schemas.ts";
+
+// ── Severity ordering ───────────────────────────────────────────────────────
+// `cannot_assess` is deliberately outside this ordering: it is a result state,
+// not a risk level. Helpers treat any out-of-range value (including
+// cannot_assess) as ranking below "none".
+
+/** Worst-wins ordering, low index = lower business risk. */
+export const SEVERITY_ORDER: readonly SeverityLevel[] = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "critical",
+];
+
+export function severityRank(severity: SeverityLevel): number {
+  return SEVERITY_ORDER.indexOf(severity);
+}
+
+/** The higher-risk of two severities (worst-wins). */
+export function maxSeverity(a: SeverityLevel, b: SeverityLevel): SeverityLevel {
+  return severityRank(b) > severityRank(a) ? b : a;
+}
+
+/**
+ * Clamp a severity down to a maximum allowed for a given check. Used to validate
+ * an LLM-returned severity against the range its sub-check is allowed to carry.
+ * Values at or below `max`, and any non-ranked value, are returned unchanged.
+ */
+export function clampSeverity(
+  severity: SeverityLevel,
+  max: SeverityLevel,
+): SeverityLevel {
+  if (severityRank(severity) < 0) return severity; // e.g. cannot_assess: leave as-is
+  return severityRank(severity) > severityRank(max) ? max : severity;
+}
+
+// ── SubCheckResult builders + config gate ────────────────────────────────────
+
+export function passed(checkId: string, name: string): SubCheckResult {
+  return { check_id: checkId, name, result: "passed", severity: "none" };
+}
+
+export function failed(
+  checkId: string,
+  name: string,
+  severity: SeverityLevel,
+  explanation: string,
+): SubCheckResult {
+  return { check_id: checkId, name, result: "failed", severity, explanation };
+}
+
+export function cannotAssess(
+  checkId: string,
+  name: string,
+  reason: string,
+): SubCheckResult {
+  return {
+    check_id: checkId,
+    name,
+    result: "cannot_assess",
+    severity: "cannot_assess",
+    explanation: reason,
+  };
+}
+
+/**
+ * Run a deterministic check only when its config dependency is populated.
+ * When `config` is null/undefined (the unresolved default), the check degrades
+ * to `cannot_assess` with `missingReason`; otherwise `evaluate` runs with the
+ * resolved config. This is the single choke point that guarantees "no silent
+ * guess when a dependency the team does not own is still missing."
+ */
+export function gateOnConfig<T>(
+  config: T | null | undefined,
+  checkId: string,
+  name: string,
+  missingReason: string,
+  evaluate: (config: T) => SubCheckResult,
+): SubCheckResult {
+  if (config === null || config === undefined) {
+    return cannotAssess(checkId, name, missingReason);
+  }
+  return evaluate(config);
+}
+
+// ── Deterministic sub-checks ─────────────────────────────────────────────────
 
 const BURIED = { id: "cta_buried", name: "CTA Position Check" };
 const MISTIMED = { id: "cta_mistimed", name: "CTA Timing Check" };

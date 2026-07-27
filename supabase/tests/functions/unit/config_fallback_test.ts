@@ -1,6 +1,6 @@
 /**
- * Unit tests for the config scaffolding (_evaluator/config.ts) and the config
- * gate (_evaluator/subcheck.ts).
+ * Unit tests for the per-agent config scaffolding (each agent's config.ts) and
+ * the config gate (gateOnConfig in each agent's checks.ts).
  *
  * The contract these lock in: every unresolved dependency defaults to null
  * (unpopulated), and a sub-check gated on it degrades to `cannot_assess` — never
@@ -14,15 +14,17 @@ import {
   failed,
   gateOnConfig,
   passed,
-} from "../../../functions/_evaluator/subcheck.ts";
+} from "../../../functions/cta-effectiveness-agent/checks.ts";
 import {
   getArcExpectation,
+  getPlatformSpec,
+} from "../../../functions/storyline-clarity-agent/config.ts";
+import {
   getCtaTiming,
   getCtaVisibilityThresholds,
   getGoalBenchmark,
   getPlatformPhrasing,
-} from "../../../functions/_evaluator/config.ts";
-import { getPlatformSpec } from "../../../functions/_evaluator/config.ts";
+} from "../../../functions/cta-effectiveness-agent/config.ts";
 
 /**
  * Each unresolved dependency: a human name, its default accessor (must be null),

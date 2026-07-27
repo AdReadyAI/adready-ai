@@ -4,32 +4,35 @@
  * Owns one metric: cta_clarity, rolled up from nine sub-checks — four
  * deterministic (cta_buried, cta_mistimed, cta_low_visibility,
  * cta_platform_mismatch) and five LLM (cta_absent, cta_language_weak,
- * cta_goal_mismatch, cta_no_urgency, cta_destination_unclear). Flow: Call 1
- * acquires the canonical CTA list (so absence is never inferred from an empty
- * detected_ctas[]), the deterministic checks run in code, Call 2 judges the LLM
- * checks against the resolved goal benchmark, and everything rolls up into ONE
- * metric_result. Special handling: cta_absent's severity is goal-conditional,
- * and cta_no_urgency only applies to conversion goals. CTAs are derived from
- * transcript/OCR in Call 1 (there is no detected_ctas primitive), each carrying
- * numeric start_ms/end_ms that the deterministic positional checks operate on.
+ * cta_goal_mismatch, cta_no_urgency, cta_destination_unclear). Flow: exactly two
+ * LLM calls — Call 1 acquires the canonical CTA list (so absence is never
+ * inferred from an empty detected_ctas[]), then Call 2 judges the LLM checks
+ * against the resolved goal benchmark; the deterministic checks run in code, and
+ * everything rolls up into ONE metric_result. Special handling: cta_absent's
+ * severity is goal-conditional, and cta_no_urgency only applies to conversion
+ * goals. CTAs are derived from transcript/OCR in Call 1 (there is no
+ * detected_ctas primitive), each carrying numeric start_ms/end_ms that the
+ * deterministic positional checks operate on.
  */
 
+import { chat } from "../shared/llm.ts";
 import type {
   AgentContext,
   MetricResult,
+  SeverityLevel,
   SubCheckResult,
 } from "../shared/schemas.ts";
-import type { LlmClient } from "../_evaluator/llm_client.ts";
-import { runTwoCall, type TwoCallFlow } from "../_evaluator/two_call.ts";
-import { safeParseJson } from "../_evaluator/llm_json.ts";
-import { assembleMetric, type MetricLevelFields } from "../_evaluator/metric.ts";
-import { cannotAssess, failed, passed } from "../_evaluator/subcheck.ts";
 import {
-  coerceCorrectionType,
-  coerceEvidence,
-  fromLlmSubCheck,
-  indexSubChecks,
-} from "../_evaluator/llm_eval.ts";
+  cannotAssess,
+  CTA_ABSENT_SEVERITY,
+  ctaBuried,
+  ctaLowVisibility,
+  ctaMistimed,
+  ctaPlatformMismatch,
+  failed,
+  passed,
+  severityRank,
+} from "./checks.ts";
 import {
   type CtaTiming,
   type CtaVisibilityThresholds,
@@ -38,21 +41,19 @@ import {
   getGoalBenchmark,
   getPlatformPhrasing,
   type PlatformPhrasing,
-} from "../_evaluator/config.ts";
+} from "./config.ts";
 import {
+  coerceCorrectionType,
+  coerceEvidence,
   type CtaAcquisition,
   CtaAcquisitionSchema,
   type CtaEvaluation,
   CtaEvaluationSchema,
+  fromLlmSubCheck,
+  indexSubChecks,
+  safeParseJson,
 } from "./response_schemas.ts";
 import { acquisitionPrompt, evaluationPrompt } from "./prompts.ts";
-import {
-  CTA_ABSENT_SEVERITY,
-  ctaBuried,
-  ctaLowVisibility,
-  ctaMistimed,
-  ctaPlatformMismatch,
-} from "./checks.ts";
 
 const CTA = {
   metric_id: "cta_clarity" as const,
@@ -85,31 +86,71 @@ export function resolveCtaConfig(ctx: AgentContext): CtaConfig {
   };
 }
 
-function ctaFlow(): TwoCallFlow<
-  AgentContext,
-  CtaAcquisition | null,
-  CtaEvaluation | null
-> {
+/** Metric-level fields attached to a MetricResult on top of its rolled-up verdict. */
+export type MetricLevelFields = {
+  confidence?: MetricResult["confidence"];
+  evidence?: MetricResult["evidence"];
+  explanation?: string;
+  suggested_correction?: string;
+  correction_type?: MetricResult["correction_type"];
+};
+
+/**
+ * Worst-wins rollup: the metric fails if any sub-check failed (severity = the
+ * highest among the failures); passes if at least one sub-check is assessable
+ * and none failed; cannot_assess only when every sub-check is cannot_assess (or
+ * there are none). Judged on the assessable sub-checks alone.
+ */
+export function rollup(
+  subChecks: readonly SubCheckResult[],
+): { result: MetricResult["result"]; severity: SeverityLevel } {
+  const failedChecks = subChecks.filter((c) => c.result === "failed");
+  if (failedChecks.length > 0) {
+    const severity = failedChecks.reduce<SeverityLevel>(
+      (worst, c) =>
+        severityRank(c.severity) > severityRank(worst) ? c.severity : worst,
+      "none",
+    );
+    return { result: "false", severity };
+  }
+  if (subChecks.some((c) => c.result === "passed")) {
+    return { result: "true", severity: "none" };
+  }
+  return { result: "cannot_assess", severity: "cannot_assess" };
+}
+
+/** Assemble a MetricResult from its sub-checks (rolled up) + metric-level fields. */
+function assembleMetric(spec: {
+  sub_checks: SubCheckResult[];
+  fields?: MetricLevelFields;
+}): MetricResult {
+  const { result, severity } = rollup(spec.sub_checks);
   return {
-    derivationPrompt: (ctx) => acquisitionPrompt(ctx),
-    parseDerivation: (raw) => safeParseJson(raw, CtaAcquisitionSchema),
-    evaluationPrompt: (ctx, acquisition) =>
-      evaluationPrompt(ctx, acquisition, getGoalBenchmark(ctx.campaign_goal)),
-    parseEvaluation: (raw) => safeParseJson(raw, CtaEvaluationSchema),
+    metric_id: CTA.metric_id,
+    agent: AGENT,
+    metric_name: CTA.metric_name,
+    question: CTA.question,
+    result,
+    severity,
+    ...spec.fields,
+    sub_checks: spec.sub_checks,
   };
 }
 
 export async function runCtaAgent(
   ctx: AgentContext,
-  llm: LlmClient,
   config: CtaConfig = resolveCtaConfig(ctx),
 ): Promise<MetricResult[]> {
+  // Exactly two LLM calls: Call 1 acquires the CTA list, Call 2 evaluates it.
   let acquisition: CtaAcquisition | null = null;
   let evaluation: CtaEvaluation | null = null;
   try {
-    const out = await runTwoCall(llm, ctaFlow(), ctx);
-    acquisition = out.derivation;
-    evaluation = out.evaluation;
+    const acqRaw = await chat(acquisitionPrompt(ctx));
+    acquisition = safeParseJson(acqRaw, CtaAcquisitionSchema);
+    const evalRaw = await chat(
+      evaluationPrompt(ctx, acquisition, getGoalBenchmark(ctx.campaign_goal)),
+    );
+    evaluation = safeParseJson(evalRaw, CtaEvaluationSchema);
   } catch {
     // Total LLM failure: everything degrades to cannot_assess below.
   }
@@ -117,7 +158,7 @@ export async function runCtaAgent(
   return [buildCtaClarity(ctx, config, acquisition, evaluation)];
 }
 
-function buildCtaClarity(
+export function buildCtaClarity(
   ctx: AgentContext,
   config: CtaConfig,
   acquisition: CtaAcquisition | null,
@@ -224,14 +265,7 @@ function buildCtaClarity(
       : undefined,
   };
 
-  return assembleMetric({
-    metric_id: CTA.metric_id,
-    agent: AGENT,
-    metric_name: CTA.metric_name,
-    question: CTA.question,
-    sub_checks: subChecks,
-    fields,
-  });
+  return assembleMetric({ sub_checks: subChecks, fields });
 }
 
 /**

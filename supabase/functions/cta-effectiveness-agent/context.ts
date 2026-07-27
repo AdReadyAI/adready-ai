@@ -1,12 +1,10 @@
 /**
- * load_context.ts — Per-agent DB-backed AgentContext loader (NOT the orchestrator).
+ * context.ts — DB-backed AgentContext loader for the cta-effectiveness agent.
  *
  * The orchestrator (a separate, not-yet-built Edge Function) decides which
- * agents run and invokes each with only a request_id. This is what an agent
+ * agents run and invokes each with only a request_id. This is what the agent
  * then calls to load its own working AgentContext from Supabase, joining the
- * request-scoped context tables. It is stateless and read-only — it coordinates
- * nothing. Shared by the storyline-clarity and cta-effectiveness agents so the
- * load isn't duplicated between them.
+ * request-scoped context tables. It is stateless and read-only.
  *
  * Everything is keyed by request_id: the request row (campaign_goal), the parsed
  * creative brief (which also carries destination_platform), video_metadata, the
@@ -35,7 +33,7 @@ export type LoadContextOptions = { userId?: string };
  * Load the AgentContext for one request. All context rows are keyed by
  * request_id.
  */
-export async function loadAgentContext(
+export async function loadCtaContext(
   requestId: string,
   opts: LoadContextOptions = {},
 ): Promise<AgentContext> {

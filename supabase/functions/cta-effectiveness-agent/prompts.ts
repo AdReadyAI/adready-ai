@@ -10,7 +10,7 @@
 
 import type { ChatMessage } from "../shared/llm.ts";
 import type { AgentContext } from "../shared/schemas.ts";
-import type { GoalBenchmark } from "../_evaluator/config.ts";
+import type { GoalBenchmark } from "./config.ts";
 import type { CtaAcquisition } from "./response_schemas.ts";
 
 function acquisitionInput(ctx: AgentContext): string {

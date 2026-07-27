@@ -16,7 +16,7 @@ import {
 import type {
   CtaTiming,
   CtaVisibilityThresholds,
-} from "../../../functions/_evaluator/config.ts";
+} from "../../../functions/cta-effectiveness-agent/config.ts";
 import type { OCRSegment } from "../../../functions/shared/schemas.ts";
 import type { AcquiredCta } from "../../../functions/cta-effectiveness-agent/response_schemas.ts";
 

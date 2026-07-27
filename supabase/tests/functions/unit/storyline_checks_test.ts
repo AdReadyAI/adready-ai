@@ -8,7 +8,7 @@
 
 import { assertEquals } from "@std/assert";
 import { formatNoncompliant } from "../../../functions/storyline-clarity-agent/checks.ts";
-import type { PlatformSpec } from "../../../functions/_evaluator/config.ts";
+import type { PlatformSpec } from "../../../functions/storyline-clarity-agent/config.ts";
 import type { VideoMetadata } from "../../../functions/shared/schemas.ts";
 
 const SPEC: PlatformSpec = {

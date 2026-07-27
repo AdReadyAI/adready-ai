@@ -1,9 +1,10 @@
 /**
- * Agent-level tests for the Storyline Clarity Agent (agent.ts) with a scripted
- * LLM. Covers: exactly two calls, the LLM + deterministic merge, severity
- * clamping, rollup into two metric_results, malformed-JSON degradation (Call 1
- * and Call 2), total LLM failure, and sparse-context graceful degradation. No
- * network.
+ * Agent-level tests for the Storyline Clarity Agent (agent.ts). The agent calls
+ * `chat()` directly, so the LLM is stubbed hermetically via `withChat` (a scripted
+ * globalThis.fetch — no network). Covers: exactly two calls, the LLM +
+ * deterministic merge, severity clamping, rollup into two metric_results,
+ * malformed-JSON degradation (Call 1 and Call 2), total LLM failure, and
+ * sparse-context graceful degradation.
  */
 
 import { assertEquals } from "@std/assert";
@@ -13,7 +14,7 @@ import {
 } from "../../../functions/storyline-clarity-agent/agent.ts";
 import { MetricResultSchema } from "../../../functions/shared/schemas.ts";
 import type { MetricResult } from "../../../functions/shared/schemas.ts";
-import { scriptedLlm } from "../support/mock_llm.ts";
+import { withChat, withChatFailure } from "../support/stub_chat.ts";
 import { makeAgentContext } from "../support/fixtures.ts";
 
 const POPULATED: StorylineConfig = {
@@ -70,44 +71,39 @@ function byResult(results: MetricResult[], id: string): string {
   return results.find((r) => r.metric_id === id)!.result;
 }
 
-Deno.test("returns exactly two metric_results, both schema-valid", async () => {
-  const llm = scriptedLlm([ARC_OK, ALL_PASS]);
-  const results = await runStorylineAgent(makeAgentContext(), llm, POPULATED);
-  assertEquals(results.length, 2);
-  assertEquals(
-    results.map((r) => r.metric_id).sort(),
-    ["channel_readiness", "creative_effectiveness"],
-  );
-  for (const r of results) {
-    assertEquals(MetricResultSchema.safeParse(r).success, true);
-  }
-});
+Deno.test("returns exactly two metric_results, both schema-valid, in two calls", () =>
+  withChat([ARC_OK, ALL_PASS], async (stub) => {
+    const results = await runStorylineAgent(makeAgentContext(), POPULATED);
+    assertEquals(results.length, 2);
+    assertEquals(
+      results.map((r) => r.metric_id).sort(),
+      ["channel_readiness", "creative_effectiveness"],
+    );
+    for (const r of results) {
+      assertEquals(MetricResultSchema.safeParse(r).success, true);
+    }
+    assertEquals(stub.callCount, 2);
+  }));
 
-Deno.test("makes exactly two LLM calls", async () => {
-  const llm = scriptedLlm([ARC_OK, ALL_PASS]);
-  await runStorylineAgent(makeAgentContext(), llm, POPULATED);
-  assertEquals(llm.callCount, 2);
-});
+Deno.test("happy path with populated config: both metrics pass", () =>
+  withChat([ARC_OK, ALL_PASS], async () => {
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    const channel = byId.get("channel_readiness")!;
+    assertEquals(channel.result, "true");
+    assertEquals(channel.severity, "none");
+    // channel_readiness rolls up the deterministic format check + the LLM placement check.
+    assertEquals(channel.sub_checks!.map((s) => s.check_id).sort(), [
+      "format_noncompliant",
+      "placement_mismatch",
+    ]);
+    assertEquals(byId.get("creative_effectiveness")!.result, "true");
+    assertEquals(byId.get("creative_effectiveness")!.severity, "none");
+  }));
 
-Deno.test("happy path with populated config: both metrics pass", async () => {
-  const llm = scriptedLlm([ARC_OK, ALL_PASS]);
-  const byId = metricsById(
-    await runStorylineAgent(makeAgentContext(), llm, POPULATED),
-  );
-  const channel = byId.get("channel_readiness")!;
-  assertEquals(channel.result, "true");
-  assertEquals(channel.severity, "none");
-  // channel_readiness rolls up the deterministic format check + the LLM placement check.
-  assertEquals(channel.sub_checks!.map((s) => s.check_id).sort(), [
-    "format_noncompliant",
-    "placement_mismatch",
-  ]);
-  assertEquals(byId.get("creative_effectiveness")!.result, "true");
-  assertEquals(byId.get("creative_effectiveness")!.severity, "none");
-});
-
-Deno.test("placement_mismatch failure rolls up into channel_readiness (format passes)", async () => {
-  const llm = scriptedLlm([
+Deno.test("placement_mismatch failure rolls up into channel_readiness (format passes)", () =>
+  withChat([
     ARC_OK,
     evalJson([
       { check_id: "hook_missing", result: "passed", severity: "none" },
@@ -122,25 +118,25 @@ Deno.test("placement_mismatch failure rolls up into channel_readiness (format pa
         explanation: "Long-form talking-head pacing is wrong for TikTok.",
       },
     ]),
-  ]);
-  // Format is spec-compliant (nominal fixture), so only placement fails.
-  const byId = metricsById(
-    await runStorylineAgent(makeAgentContext(), llm, POPULATED),
-  );
-  const channel = byId.get("channel_readiness")!;
-  assertEquals(channel.result, "false");
-  assertEquals(channel.severity, "high");
-  assertEquals(
-    channel.sub_checks!.find((s) => s.check_id === "placement_mismatch")!
-      .severity,
-    "high",
-  );
-  // creative_effectiveness is unaffected by the channel-only failure.
-  assertEquals(byId.get("creative_effectiveness")!.result, "true");
-});
+  ], async () => {
+    // Format is spec-compliant (nominal fixture), so only placement fails.
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    const channel = byId.get("channel_readiness")!;
+    assertEquals(channel.result, "false");
+    assertEquals(channel.severity, "high");
+    assertEquals(
+      channel.sub_checks!.find((s) => s.check_id === "placement_mismatch")!
+        .severity,
+      "high",
+    );
+    // creative_effectiveness is unaffected by the channel-only failure.
+    assertEquals(byId.get("creative_effectiveness")!.result, "true");
+  }));
 
-Deno.test("placement_mismatch severity is clamped to high", async () => {
-  const llm = scriptedLlm([
+Deno.test("placement_mismatch severity is clamped to high", () =>
+  withChat([
     ARC_OK,
     evalJson([
       { check_id: "hook_missing", result: "passed", severity: "none" },
@@ -156,21 +152,21 @@ Deno.test("placement_mismatch severity is clamped to high", async () => {
         explanation: "wrong platform",
       },
     ]),
-  ]);
-  const byId = metricsById(
-    await runStorylineAgent(makeAgentContext(), llm, POPULATED),
-  );
-  const channel = byId.get("channel_readiness")!;
-  assertEquals(
-    channel.sub_checks!.find((s) => s.check_id === "placement_mismatch")!
-      .severity,
-    "high", // clamped down from critical
-  );
-  assertEquals(channel.severity, "high");
-});
+  ], async () => {
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    const channel = byId.get("channel_readiness")!;
+    assertEquals(
+      channel.sub_checks!.find((s) => s.check_id === "placement_mismatch")!
+        .severity,
+      "high", // clamped down from critical
+    );
+    assertEquals(channel.severity, "high");
+  }));
 
-Deno.test("merge: deterministic format failure + LLM gap failure roll up per metric", async () => {
-  const llm = scriptedLlm([
+Deno.test("merge: deterministic format failure + LLM gap failure roll up per metric", () =>
+  withChat([
     ARC_OK,
     evalJson([
       { check_id: "hook_missing", result: "passed", severity: "none" },
@@ -184,25 +180,25 @@ Deno.test("merge: deterministic format failure + LLM gap failure roll up per met
       { check_id: "story_incomplete", result: "passed", severity: "none" },
       { check_id: "pacing_misallocation", result: "passed", severity: "none" },
     ]),
-  ]);
-  const ctx = makeAgentContext({
-    video_metadata: {
-      duration_ms: 10000,
-      aspect_ratio: "16:9", // wrong for 9:16 spec → high
-      resolution: "1920x1080",
-      dropped_frame_markers: [],
-      corruption_detected: false,
-    },
-  });
-  const byId = metricsById(await runStorylineAgent(ctx, llm, POPULATED));
-  assertEquals(byId.get("channel_readiness")!.result, "false");
-  assertEquals(byId.get("channel_readiness")!.severity, "high");
-  assertEquals(byId.get("creative_effectiveness")!.result, "false");
-  assertEquals(byId.get("creative_effectiveness")!.severity, "high");
-});
+  ], async () => {
+    const ctx = makeAgentContext({
+      video_metadata: {
+        duration_ms: 10000,
+        aspect_ratio: "16:9", // wrong for 9:16 spec → high
+        resolution: "1920x1080",
+        dropped_frame_markers: [],
+        corruption_detected: false,
+      },
+    });
+    const byId = metricsById(await runStorylineAgent(ctx, POPULATED));
+    assertEquals(byId.get("channel_readiness")!.result, "false");
+    assertEquals(byId.get("channel_readiness")!.severity, "high");
+    assertEquals(byId.get("creative_effectiveness")!.result, "false");
+    assertEquals(byId.get("creative_effectiveness")!.severity, "high");
+  }));
 
-Deno.test("severity clamp: an over-range LLM severity is capped to the sub-check's max", async () => {
-  const llm = scriptedLlm([
+Deno.test("severity clamp: an over-range LLM severity is capped to the sub-check's max", () =>
+  withChat([
     ARC_OK,
     evalJson([
       { check_id: "hook_missing", result: "passed", severity: "none" },
@@ -217,20 +213,20 @@ Deno.test("severity clamp: an over-range LLM severity is capped to the sub-check
       { check_id: "story_incomplete", result: "passed", severity: "none" },
       { check_id: "pacing_misallocation", result: "passed", severity: "none" },
     ]),
-  ]);
-  const byId = metricsById(
-    await runStorylineAgent(makeAgentContext(), llm, POPULATED),
-  );
-  const creative = byId.get("creative_effectiveness")!;
-  const value = creative.sub_checks!.find((s) =>
-    s.check_id === "value_prop_unclear"
-  )!;
-  assertEquals(value.severity, "medium"); // clamped down from critical
-  assertEquals(creative.severity, "medium");
-});
+  ], async () => {
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    const creative = byId.get("creative_effectiveness")!;
+    const value = creative.sub_checks!.find((s) =>
+      s.check_id === "value_prop_unclear"
+    )!;
+    assertEquals(value.severity, "medium"); // clamped down from critical
+    assertEquals(creative.severity, "medium");
+  }));
 
-Deno.test("pacing_misallocation is LLM-judged: a Call-2 pacing failure rolls up", async () => {
-  const llm = scriptedLlm([
+Deno.test("pacing_misallocation is LLM-judged: a Call-2 pacing failure rolls up", () =>
+  withChat([
     ARC_OK,
     evalJson([
       { check_id: "hook_missing", result: "passed", severity: "none" },
@@ -244,85 +240,82 @@ Deno.test("pacing_misallocation is LLM-judged: a Call-2 pacing failure rolls up"
         explanation: "Detour frames dominate.",
       },
     ]),
-  ]);
-  const byId = metricsById(
-    await runStorylineAgent(makeAgentContext(), llm, POPULATED),
-  );
-  const creative = byId.get("creative_effectiveness")!;
-  assertEquals(
-    creative.sub_checks!.find((s) => s.check_id === "pacing_misallocation")!
-      .severity,
-    "medium",
-  );
-  assertEquals(creative.result, "false");
-  assertEquals(creative.severity, "medium");
-});
+  ], async () => {
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    const creative = byId.get("creative_effectiveness")!;
+    assertEquals(
+      creative.sub_checks!.find((s) => s.check_id === "pacing_misallocation")!
+        .severity,
+      "medium",
+    );
+    assertEquals(creative.result, "false");
+    assertEquals(creative.severity, "medium");
+  }));
 
-Deno.test("malformed Call 2 JSON: LLM sub-checks degrade to cannot_assess, no throw", async () => {
-  const llm = scriptedLlm([ARC_OK, "sorry, I cannot comply"]);
-  const byId = metricsById(
-    await runStorylineAgent(makeAgentContext(), llm, POPULATED),
-  );
-  const creative = byId.get("creative_effectiveness")!;
-  const hook = creative.sub_checks!.find((s) => s.check_id === "hook_missing")!;
-  assertEquals(hook.result, "cannot_assess");
-  assertEquals(creative.confidence, "low");
-  assertEquals(llm.callCount, 2);
-});
+Deno.test("malformed Call 2 JSON: LLM sub-checks degrade to cannot_assess, no throw", () =>
+  withChat([ARC_OK, "sorry, I cannot comply"], async (stub) => {
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    const creative = byId.get("creative_effectiveness")!;
+    const hook = creative.sub_checks!.find((s) =>
+      s.check_id === "hook_missing"
+    )!;
+    assertEquals(hook.result, "cannot_assess");
+    assertEquals(creative.confidence, "low");
+    assertEquals(stub.callCount, 2);
+  }));
 
-Deno.test("malformed Call 1 JSON: arc lost, but Call 2 still runs and drives creative", async () => {
-  const llm = scriptedLlm(["not-json-arc", ALL_PASS]);
-  const byId = metricsById(
-    await runStorylineAgent(makeAgentContext(), llm, POPULATED),
-  );
-  const creative = byId.get("creative_effectiveness")!;
-  // pacing is LLM-judged (not arc-gated), so Call 2's verdicts stand.
-  assertEquals(
-    creative.sub_checks!.find((s) => s.check_id === "pacing_misallocation")!
-      .result,
-    "passed",
-  );
-  assertEquals(
-    creative.sub_checks!.find((s) => s.check_id === "hook_missing")!.result,
-    "passed",
-  );
-  assertEquals(llm.callCount, 2);
-});
+Deno.test("malformed Call 1 JSON: arc lost, but Call 2 still runs and drives creative", () =>
+  withChat(["not-json-arc", ALL_PASS], async (stub) => {
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    const creative = byId.get("creative_effectiveness")!;
+    // pacing is LLM-judged (not arc-gated), so Call 2's verdicts stand.
+    assertEquals(
+      creative.sub_checks!.find((s) => s.check_id === "pacing_misallocation")!
+        .result,
+      "passed",
+    );
+    assertEquals(
+      creative.sub_checks!.find((s) => s.check_id === "hook_missing")!.result,
+      "passed",
+    );
+    assertEquals(stub.callCount, 2);
+  }));
 
-Deno.test("total LLM failure: deterministic channel still stands, creative → cannot_assess", async () => {
-  const throwing = { chat: () => Promise.reject(new Error("network down")) };
-  const byId = metricsById(
-    await runStorylineAgent(makeAgentContext(), throwing, POPULATED),
-  );
-  // format check is deterministic and independent of the LLM → still passes.
-  assertEquals(byId.get("channel_readiness")!.result, "true");
-  assertEquals(byId.get("creative_effectiveness")!.result, "cannot_assess");
-});
+Deno.test("total LLM failure: deterministic channel still stands, creative → cannot_assess", () =>
+  withChatFailure(async () => {
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    // format check is deterministic and independent of the LLM → still passes.
+    assertEquals(byId.get("channel_readiness")!.result, "true");
+    assertEquals(byId.get("creative_effectiveness")!.result, "cannot_assess");
+  }));
 
-Deno.test("default (unpopulated) config: channel judged on the LLM placement check", async () => {
-  const llm = scriptedLlm([ARC_OK, ALL_PASS]);
-  // No config arg → resolves from the (null) global config surface.
-  const byId = metricsById(await runStorylineAgent(makeAgentContext(), llm));
-  const channel = byId.get("channel_readiness")!;
-  // format_noncompliant gates off (null spec) → cannot_assess, but the LLM
-  // placement_mismatch check is not config-gated and passes, so the metric stands.
-  assertEquals(
-    channel.sub_checks!.find((s) => s.check_id === "format_noncompliant")!
-      .result,
-    "cannot_assess",
-  );
-  assertEquals(channel.result, "true");
-  // hook/narrative/value/pacing passed; story cannot_assess → judged on the passes.
-  assertEquals(byId.get("creative_effectiveness")!.result, "true");
-});
+Deno.test("default (unpopulated) config: channel judged on the LLM placement check", () =>
+  withChat([ARC_OK, ALL_PASS], async () => {
+    // No config arg → resolves from the (null) global config surface.
+    const byId = metricsById(await runStorylineAgent(makeAgentContext()));
+    const channel = byId.get("channel_readiness")!;
+    // format_noncompliant gates off (null spec) → cannot_assess, but the LLM
+    // placement_mismatch check is not config-gated and passes, so the metric stands.
+    assertEquals(
+      channel.sub_checks!.find((s) => s.check_id === "format_noncompliant")!
+        .result,
+      "cannot_assess",
+    );
+    assertEquals(channel.result, "true");
+    // hook/narrative/value/pacing passed; story cannot_assess → judged on the passes.
+    assertEquals(byId.get("creative_effectiveness")!.result, "true");
+  }));
 
-Deno.test("sparse context + all-cannot_assess LLM: two rows, graceful, no throw", async () => {
-  const sparse = makeAgentContext({
-    transcript_segments: [],
-    visual_frames: [],
-    ocr_segments: [],
-  });
-  const llm = scriptedLlm([
+Deno.test("sparse context + all-cannot_assess LLM: two rows, graceful, no throw", () =>
+  withChat([
     JSON.stringify({
       arc: [],
       unfilled_roles: [],
@@ -356,11 +349,16 @@ Deno.test("sparse context + all-cannot_assess LLM: two rows, graceful, no throw"
         severity: "cannot_assess",
       },
     ], { confidence: "low" }),
-  ]);
-  // Default (unpopulated) config: the deterministic check gates off and the LLM
-  // abstains, so nothing is assessable — graceful cannot_assess, no fake pass.
-  const results = await runStorylineAgent(sparse, llm);
-  assertEquals(results.length, 2);
-  assertEquals(byResult(results, "channel_readiness"), "cannot_assess");
-  assertEquals(byResult(results, "creative_effectiveness"), "cannot_assess");
-});
+  ], async () => {
+    const sparse = makeAgentContext({
+      transcript_segments: [],
+      visual_frames: [],
+      ocr_segments: [],
+    });
+    // Default (unpopulated) config: the deterministic check gates off and the LLM
+    // abstains, so nothing is assessable — graceful cannot_assess, no fake pass.
+    const results = await runStorylineAgent(sparse);
+    assertEquals(results.length, 2);
+    assertEquals(byResult(results, "channel_readiness"), "cannot_assess");
+    assertEquals(byResult(results, "creative_effectiveness"), "cannot_assess");
+  }));

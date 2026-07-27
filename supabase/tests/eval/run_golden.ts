@@ -2,11 +2,10 @@
  * run_golden.ts — Real-LLM eval harness for the Storyline + CTA agents.
  *
  * Runs BOTH agents against a golden AgentContext using the REAL OpenRouter-backed
- * LLM client (not a mock), and prints the metric_results for inspection. This is
- * a dev/eval script, not a test: it lives under functions/_eval (the `_` prefix
- * keeps Supabase from deploying it and the test tasks from running it), and it
- * makes real network/API calls, so it is deliberately outside the hermetic CI
- * suite.
+ * `chat()` client (not a mock), and prints the metric_results for inspection.
+ * This is a dev/eval script, not a test: it lives under tests/eval, is not run by
+ * the `test:unit`/`test:integration` tasks, and it makes real network/API calls,
+ * so it is deliberately outside the hermetic CI suite.
  *
  * Setup (env vars, never committed):
  *   OPENROUTER_API_KEY=sk-...        # your OpenRouter key
@@ -15,26 +14,28 @@
  * Run (file mode — feed a golden JSON directly):
  *   deno run --allow-env --allow-net --allow-read \
  *     --config supabase/deno.json \
- *     supabase/functions/_eval/run_golden.ts [path/to/golden.json]
+ *     supabase/tests/eval/run_golden.ts [path/to/golden.json]
  *
  * Run (DB mode — load the AgentContext from a local Supabase):
  *   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... (from `supabase status`)
  *   deno run --allow-env --allow-net --allow-read \
  *     --config supabase/deno.json \
- *     supabase/functions/_eval/run_golden.ts --db <request_id>
+ *     supabase/tests/eval/run_golden.ts --db <request_id>
  *
- * Default golden file: functions/_eval/golden/mango_moon.json
+ * Default golden file: tests/eval/golden/mango_moon.json
  *
  * Note: agent config thresholds/tables are unpopulated (null), so the deterministic
  * checks report cannot_assess; this run exercises the LLM-derived sub-checks.
  */
 
-import { AgentContextSchema } from "../shared/schemas.ts";
-import type { AgentContext, MetricResult } from "../shared/schemas.ts";
-import { defaultLlmClient } from "../_evaluator/llm_client.ts";
-import { loadAgentContext } from "../_evaluator/load_context.ts";
-import { runStorylineAgent } from "../storyline-clarity-agent/agent.ts";
-import { runCtaAgent } from "../cta-effectiveness-agent/agent.ts";
+import { AgentContextSchema } from "../../functions/shared/schemas.ts";
+import type {
+  AgentContext,
+  MetricResult,
+} from "../../functions/shared/schemas.ts";
+import { loadStorylineContext } from "../../functions/storyline-clarity-agent/context.ts";
+import { runStorylineAgent } from "../../functions/storyline-clarity-agent/agent.ts";
+import { runCtaAgent } from "../../functions/cta-effectiveness-agent/agent.ts";
 
 const DEFAULT_GOLDEN =
   new URL("./golden/mango_moon.json", import.meta.url).pathname;
@@ -74,7 +75,8 @@ async function loadContext(): Promise<AgentContext> {
       Deno.exit(1);
     }
     console.log(`Source: DB  request_id=${requestId}`);
-    return await loadAgentContext(requestId);
+    // The two per-agent context loaders are identical full-context loads.
+    return await loadStorylineContext(requestId);
   }
 
   const path = Deno.args[0] ?? DEFAULT_GOLDEN;
@@ -100,8 +102,8 @@ async function main(): Promise<void> {
   const started = performance.now();
   // Real LLM calls happen here — both agents, each making exactly two calls.
   const [storyline, cta] = await Promise.all([
-    runStorylineAgent(context, defaultLlmClient),
-    runCtaAgent(context, defaultLlmClient),
+    runStorylineAgent(context),
+    runCtaAgent(context),
   ]);
   const elapsed = ((performance.now() - started) / 1000).toFixed(1);
 

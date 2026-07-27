@@ -110,22 +110,21 @@
 
 import { createEdgeHandler, ok } from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
-import { defaultLlmClient } from "../_evaluator/llm_client.ts";
-import { loadAgentContext } from "../_evaluator/load_context.ts";
+import { loadCtaContext } from "./context.ts";
 import { runCtaAgent } from "./agent.ts";
 
 // createEdgeHandler wraps CORS, auth, and AgentRunRequest validation. The agent
-// loads its AgentContext from the DB by request_id (loadAgentContext is a stub
-// until the context tables land), then always returns its single cta_clarity
-// metric_result, degrading to cannot_assess rather than throwing.
+// loads its AgentContext from the DB by request_id, then always returns its
+// single cta_clarity metric_result, degrading to cannot_assess rather than
+// throwing.
 createEdgeHandler(
   "cta-effectiveness-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
-    const context = await loadAgentContext(ctx.body.request_id, {
+    const context = await loadCtaContext(ctx.body.request_id, {
       userId: ctx.user.id,
     });
-    const results = await runCtaAgent(context, defaultLlmClient);
+    const results = await runCtaAgent(context);
     return ok(results);
   },
 );
