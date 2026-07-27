@@ -10,5 +10,5 @@ class JobPayload(BaseModel):
     request_id: StrictStr
     bucket: StrictStr
     video_path: StrictStr
-    product_imgs_folder_path: list[str]
-    logo_imgs_folder_path: list[str]
+    product_imgs_folder_path: str
+    logo_imgs_folder_path: str
