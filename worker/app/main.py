@@ -3,10 +3,9 @@ import signal
 import select
 import psycopg2
 
-from config.settings import logger, QUEUE_NAME, CHANNEL_NAME, VISIBILITY_TIMEOUT, POLL_TIMEOUT, MAX_RETRIES, WARM_MODELS
+from config.settings import logger, QUEUE_NAME, CHANNEL_NAME, VISIBILITY_TIMEOUT, POLL_TIMEOUT, MAX_RETRIES
 from config.connection import connect
 from app.worker_queue import drain_queue, set_running
-from config.models import get_east, get_mobileclip
 
 
 def shutdown(signum, frame):
@@ -24,12 +23,6 @@ def main():
     logger.info("  Channel:  %s", CHANNEL_NAME)
     logger.info("  Timeout:  %ss", VISIBILITY_TIMEOUT)
     logger.info("  Retries:  %s", MAX_RETRIES)
-
-    if WARM_MODELS:
-        get_mobileclip()
-        get_east()
-        logger.info("Local models Loaded...")
-
 
     conn = connect()
     cur = conn.cursor()

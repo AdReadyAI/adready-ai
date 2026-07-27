@@ -1,14 +1,6 @@
 import psycopg2
-import requests
 # from openai import OpenAI
-from config.settings import (
-    OPENROUTER_API_KEY,
-    DATABASE_URL,
-    OPENROUTER_BASE_URL,
-    ASSEMBLYAI_API_KEY,
-    SUPABASE_SERVICE_ROLE_KEY,
-    logger,
-)
+from config.settings import OPENROUTER_API_KEY ,DATABASE_URL , OPENROUTER_BASE_URL , logger , ASSEMBLYAI_API_KEY
 from functools import lru_cache  
 import assemblyai as aai
 
@@ -17,27 +9,7 @@ def connect():
     conn.autocommit = True
     return conn
 
-@lru_cache(maxsize=1)
-def get_storage_session() -> requests.Session:
 
-    logger.info("Creating Supabase Storage session...")
-
-    session = requests.Session()
-    session.headers.update({
-        "apikey": SUPABASE_SERVICE_ROLE_KEY,
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-    })
-    return session
-
-
-@lru_cache(maxsize=1)
-def get_aai_transcriber()-> aai.Transcriber:
-    if not ASSEMBLYAI_API_KEY:
-        raise ValueError("ASSEMBLYAI_API_KEY is not set. Please check your environment variables.")
-        
-    logger.info("Initializing AssemblyAI Transcriber...")
-    aai.settings.api_key = ASSEMBLYAI_API_KEY
-    return aai.Transcriber()
 
 # @lru_cache(maxsize=1)
 # def get_openrouter_client(): 
@@ -48,3 +20,14 @@ def get_aai_transcriber()-> aai.Transcriber:
 #         base_url=OPENROUTER_BASE_URL,
 #         api_key=OPENROUTER_API_KEY,
 #     )
+
+
+
+@lru_cache(maxsize=1)
+def get_aai_transcriber()-> aai.Transcriber:
+    if not ASSEMBLYAI_API_KEY:
+        raise ValueError("ASSEMBLYAI_API_KEY is not set. Please check your environment variables.")
+        
+    logger.info("Initializing AssemblyAI Transcriber...")
+    aai.settings.api_key = ASSEMBLYAI_API_KEY
+    return aai.Transcriber()

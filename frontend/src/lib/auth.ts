@@ -1,12 +1,11 @@
-import { setAuthSessionPersistence, supabase } from "./supabaseClient";
+import { supabase } from "./supabaseClient";
 
 export async function signUp(email: string, password: string) {
   const { data, error } = await supabase.auth.signUp({ email, password });
   return { data, error };
 }
 
-export async function signIn(email: string, password: string, rememberMe: boolean) {
-  setAuthSessionPersistence(rememberMe);
+export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   return { data, error };
 }
@@ -16,22 +15,10 @@ export async function signOut() {
   return { error };
 }
 
-export async function resetPassword(email: string) {
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/auth/update-password`,
-  });
-  return { data, error };
-}
-
-export async function updatePassword(password: string) {
-  const { data, error } = await supabase.auth.updateUser({ password });
-  return { data, error };
-}
-
 export async function signInWithGoogle() {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: `${window.location.origin}/auth/callback` },
+    options: { redirectTo: window.location.origin },
   });
   return { data, error };
 }
