@@ -1,8 +1,14 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, StrictStr
 
 class JobPayload(BaseModel):
-    request_id: str
-    bucket: str
-    video_path: str
-    product_image_paths: list[str]
-    logo_paths: list[str]
+    model_config = ConfigDict(
+        extra="forbid",
+        strict=True,
+        frozen=True,
+    )
+
+    request_id: StrictStr
+    bucket: StrictStr
+    video_path: StrictStr
+    product_imgs_folder_path: list[str]
+    logo_imgs_folder_path: list[str]
