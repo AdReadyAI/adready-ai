@@ -40,3 +40,18 @@ SCENE_CONTENT_SCALE = 100.0    # Still not sure about the exact value wasn't abl
 SCENE_MIN_SHOT_FRAMES = 12
 SCENE_ADAPTIVE_WINDOW = 3
 
+
+
+
+
+
+# Frame-sampling model weights
+WARM_MODELS = os.getenv("WARM_MODELS", "true").lower() in ("1", "true", "yes")
+
+EAST_MODEL_PATH = os.getenv(
+    "EAST_MODEL_PATH", "/app/assets/models/frozen_east_text_detection.pb"
+)
+MOBILECLIP_WEIGHTS_PATH = os.getenv(
+    "MOBILECLIP_WEIGHTS_PATH", "/app/assets/models/mobileclip_s0.pt"
+)
+MOBILECLIP_MODEL_NAME = os.getenv("MOBILECLIP_MODEL_NAME", "MobileCLIP-S0")
