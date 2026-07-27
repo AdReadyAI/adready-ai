@@ -133,6 +133,9 @@ export function buildBrandResult(
   const assessable = sub_checks.filter((item) =>
     item.result !== "cannot_assess"
   );
+  const unavailable = sub_checks.filter((item) =>
+    item.result === "cannot_assess"
+  );
   const severity = failed.reduce<SeverityLevel>(
     (current, item) =>
       SEVERITY_RANK[item.severity] > SEVERITY_RANK[current]
@@ -169,11 +172,13 @@ export function buildBrandResult(
       : logo.confidence === "medium" || qualitative.confidence === "medium"
       ? "medium"
       : "high",
-    evidence: [...logo.evidence, ...qualitative.evidence].slice(0, 6),
+    evidence: [...logo.evidence, ...qualitative.evidence],
     explanation: result === "cannot_assess"
       ? "Brand fit could not be fully assessed because required brand guidance or qualitative evaluation was unavailable."
       : result === "true"
-      ? "The available logo, palette, and voice evidence aligns with the supplied brand guidance."
+      ? unavailable.length > 0
+        ? "The available brand evidence aligns with the supplied guidance, but some checks could not be assessed."
+        : "The available logo, palette, and voice evidence aligns with the supplied brand guidance."
       : failed.map((item) => item.explanation).filter(Boolean).join(" "),
     suggested_correction,
     correction_type: suggested_correction
