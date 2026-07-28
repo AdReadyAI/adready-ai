@@ -17,7 +17,7 @@ export function ok<T>(data: T): Response {
 export function err(
   code: string,
   message: string,
-  status: number = 200,
+  status: number = 500,
 ): Response {
   return new Response(
     JSON.stringify({ ok: false, error: { code, message } }),
