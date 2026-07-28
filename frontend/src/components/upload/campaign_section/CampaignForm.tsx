@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { getErrorMessage } from "../../../lib/errorMessage";
 import { supabase } from "../../../lib/supabaseClient";
 import type { UploadedVideo, UploadedImage } from "../../../pages/UploadPage";
+import type { AdvancedBriefFields } from "../../../types/brief";
+import { EMPTY_ADVANCED_BRIEF_FIELDS } from "../../../types/brief";
+import AdvancedFieldsSection from "./AdvancedFieldsSection";
 
 type CampaignMode = "create" | "existing";
 
@@ -35,6 +38,7 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
   const [campaignGoal, setCampaignGoal] = useState("");
   const [creativeBrief, setCreativeBrief] = useState("");
   const [selectedCampaign, setSelectedCampaign] = useState("");
+  const [advancedFields, setAdvancedFields] = useState<AdvancedBriefFields>(EMPTY_ADVANCED_BRIEF_FIELDS);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -100,6 +104,10 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
     // enqueue_job() isn't called from here — a DB trigger
     // (trg_enqueue_job_on_request_insert) fires it automatically for each
     // row inserted above.
+    //
+    // advancedFields isn't written to `parsed_creative_briefs` yet — this is
+    // only the input UI for now, carried forward here until that insert is
+    // wired up.
     navigate("/result", {
       state: {
         batchId,
@@ -107,6 +115,7 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
         productUrl,
         campaignGoal,
         creativeBrief,
+        advancedFields,
       },
     });
   }
@@ -186,6 +195,8 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
               className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 placeholder-[#9B9A97] focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent resize-none"
             />
           </div>
+
+          <AdvancedFieldsSection value={advancedFields} onChange={setAdvancedFields} />
         </div>
       ) : (
         <div>
