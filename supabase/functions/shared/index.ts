@@ -1,25 +1,12 @@
-import { createClient } from "@supabase/supabase-js";
-
-export function createSupabaseClient(req: Request) {
-  return createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-    {
-      global: {
-        headers: { Authorization: req.headers.get("Authorization")! },
-      },
-    },
-  );
-}
-
-export function createSupabaseServiceClient() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-  );
-}
-
+/** Shared Edge Function utilities compatibility barrel. */
+export * from "./clients.ts";
 export * from "./auth.ts";
 export * from "./cors.ts";
 export * from "./response.ts";
 export * from "./handler.ts";
+export * from "./checks.ts";
+export * from "./context.ts";
+export * from "./persist.ts";
+export * from "./validation.ts";
+export * from "./schemas.ts";
+export * from "./llm.ts";
