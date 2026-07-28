@@ -1,12 +1,14 @@
 CREATE TABLE IF NOT EXISTS issuetable (
-    request_id UUID Primary Key,
+    request_id UUID PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,
+    batch_id UUID REFERENCES requests(batch_id) ON DELETE CASCADE,
     metric_id TEXT NOT NULL,
     title TEXT,
     detail TEXT,
-    --severity TEXT CHECK (severity IN ('none', 'low', 'medium', 'high', 'critical')), 
-    -- since we didnt specify the severity levels on the agent_result_sub_checks , i wanted to keep it coherent with that table, 
-    --so i commented the check constraint for now. we can add it later if needed     
-    severity TEXT ,
+    --severity TEXT CHECK (severity IN ('none', 'low', 'medium', 'high', 'critical')),
+    -- since we didn't specify the severity levels on the agent_result_sub_checks,
+    -- I wanted to keep it coherent with that table,
+    -- so I commented the check constraint for now. We can add it later if needed.
+    severity TEXT,
     confidence TEXT DEFAULT 'unknown',
     repair_suggestion TEXT,
     video_timestamp TEXT,
