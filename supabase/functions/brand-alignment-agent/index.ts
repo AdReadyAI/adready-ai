@@ -1,5 +1,4 @@
-import { createEdgeHandler } from "../shared/handler.ts";
-import { err, ok } from "../shared/response.ts";
+import { createEdgeHandler, err, ok } from "../shared/index.ts";
 import { BrandAgentRequestSchema, runBrandAlignment } from "./agent.ts";
 
 createEdgeHandler(

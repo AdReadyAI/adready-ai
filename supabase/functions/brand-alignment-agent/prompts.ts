@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { chat } from "../shared/llm.ts";
-import type { AgentContext, ConfidenceLevel } from "../shared/schemas.ts";
+import { chat } from "../shared/index.ts";
+import type { AgentContext, ConfidenceLevel } from "../shared/index.ts";
 import { makeCheck, toEvidence } from "./checks.ts";
 import type { CheckAssessment } from "./checks.ts";
 

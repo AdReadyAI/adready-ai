@@ -5,7 +5,15 @@ import type {
   MetricResult,
   SeverityLevel,
   SubCheckResult,
-} from "../shared/schemas.ts";
+} from "../shared/index.ts";
+import {
+  cannotAssess,
+  evidence,
+  failed,
+  passed,
+  rollupChecks,
+  timestampFromMs,
+} from "../shared/index.ts";
 
 export type CheckAssessment = {
   checks: SubCheckResult[];
@@ -13,21 +21,8 @@ export type CheckAssessment = {
   confidence: ConfidenceLevel;
 };
 
-const SEVERITY_RANK: Record<SeverityLevel, number> = {
-  none: 0,
-  cannot_assess: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-  critical: 4,
-};
-
 export function formatTimestamp(milliseconds?: number): string {
-  if (milliseconds === undefined) return "";
-  const seconds = Math.floor(milliseconds / 1000);
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${
-    String(seconds % 60).padStart(2, "0")
-  }`;
+  return timestampFromMs(milliseconds);
 }
 
 export function toEvidence(
@@ -35,7 +30,7 @@ export function toEvidence(
   text: string,
   timestamp_ms?: number,
 ): EvidenceRef {
-  return { type, text, timestamp: formatTimestamp(timestamp_ms) };
+  return evidence(type, text, timestamp_ms);
 }
 
 export function makeCheck(
@@ -45,7 +40,15 @@ export function makeCheck(
   severity: SeverityLevel,
   explanation?: string,
 ): SubCheckResult {
-  return { check_id, name, result, severity, explanation };
+  if (result === "passed") return passed(check_id, name);
+  if (result === "cannot_assess") {
+    return cannotAssess(check_id, name, explanation);
+  }
+
+  const failureSeverity = severity === "none" || severity === "cannot_assess"
+    ? "medium"
+    : severity;
+  return failed(check_id, name, failureSeverity, explanation);
 }
 
 /** Deterministic logo presence and reference-match checks. */
@@ -130,24 +133,10 @@ export function buildBrandResult(
 ): MetricResult {
   const sub_checks = [...logo.checks, ...qualitative.checks];
   const failed = sub_checks.filter((item) => item.result === "failed");
-  const assessable = sub_checks.filter((item) =>
-    item.result !== "cannot_assess"
-  );
   const unavailable = sub_checks.filter((item) =>
     item.result === "cannot_assess"
   );
-  const severity = failed.reduce<SeverityLevel>(
-    (current, item) =>
-      SEVERITY_RANK[item.severity] > SEVERITY_RANK[current]
-        ? item.severity
-        : current,
-    "none",
-  );
-  const result = assessable.length === 0
-    ? "cannot_assess"
-    : failed.length > 0
-    ? "false"
-    : "true";
+  const { result, severity } = rollupChecks(sub_checks);
   const failedIds = new Set(failed.map((item) => item.check_id));
   const suggested_correction = failedIds.has("logo_absent")
     ? "Add the approved logo in the placement required by the brand guidelines."
@@ -166,7 +155,7 @@ export function buildBrandResult(
     question:
       "Does the ad's logo, visual identity, and voice align with the supplied brand guidance?",
     result,
-    severity: result === "cannot_assess" ? "cannot_assess" : severity,
+    severity,
     confidence: logo.confidence === "low" || qualitative.confidence === "low"
       ? "low"
       : logo.confidence === "medium" || qualitative.confidence === "medium"
