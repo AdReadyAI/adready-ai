@@ -1,7 +1,5 @@
 CREATE TABLE IF NOT EXISTS issuetable (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    request_id UUID NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
-    batch_id UUID REFERENCES requests(batch_id) ON DELETE CASCADE,
+    request_id UUID Primary Key,
     metric_id TEXT NOT NULL,
     title TEXT,
     detail TEXT,
