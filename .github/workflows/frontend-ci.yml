@@ -78,6 +78,12 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    # This smoke test only exercises client-side routing, never a real Supabase
+    # call, so placeholder values are enough to satisfy supabaseClient's
+    # startup check and let the app boot.
+    env:
+      VITE_SUPABASE_URL: http://127.0.0.1:54321
+      VITE_SUPABASE_ANON_KEY: playwright-ci-placeholder-anon-key
 
     steps:
       - name: Check out repository
