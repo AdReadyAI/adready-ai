@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS issuetable (
-    request_id UUID PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,
-    batch_id UUID REFERENCES requests(batch_id) ON DELETE CASCADE,
+    request_id UUID PRIMARY KEY REFERENCES requests(request_id) ON DELETE CASCADE,
+    batch_id UUID,
     metric_id TEXT NOT NULL,
     title TEXT,
     detail TEXT,
