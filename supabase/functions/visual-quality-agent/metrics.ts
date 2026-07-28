@@ -1,330 +1,682 @@
-/**
- * visual-quality-agent/metrics.ts — Production readiness synthesis.
- *
- * Converts the six internal production-quality checks into the final
- * public MetricResult for the production_readiness metric.
- *
- * This module is deterministic and is the source of truth for:
- * - overall pass/fail/cannot_assess result,
- * - overall severity,
- * - confidence,
- * - evidence selection,
- * - explanation,
- * - suggested correction,
- * - correction type,
- * - and sub-check output.
- *
- * The LLM does not determine the final production-readiness score.
- * The highest-severity failed check determines the overall severity.
- */
-
 import type {
   AgentContext,
   EvidenceRef,
   MetricResult,
-  SubCheckResult,
 } from "../shared/schemas.ts";
 
-import type { ProductionReadinessChecks, SeverityScore } from "./types.ts";
+import type {
+  VisualAuditFinding,
+} from "./visual-audit.ts";
 
-import { confidenceBucket, severityFromScore, worstSeverity } from "./utils.ts";
+type SeverityScore =
+  0 | 1 | 2 | 3 | 4;
 
+type ProductionCheckResult =
+  | "passed"
+  | "failed"
+  | "cannot_assess";
+
+type ProductionReadinessCheck = {
+  check_id:
+    | "video_corruption"
+    | "dropped_frames"
+    | "ai_artifacts"
+    | "poor_framing_lighting"
+    | "jarring_transitions"
+    | "illegible_text";
+
+  name: string;
+
+  result:
+    ProductionCheckResult;
+
+  severityScore:
+    SeverityScore;
+
+  confidence_score:
+    number;
+
+  explanation?:
+    string;
+
+  evidence?:
+    EvidenceRef;
+};
+
+type ProductionReadinessChecks = {
+  video_corruption:
+    ProductionReadinessCheck;
+
+  dropped_frames:
+    ProductionReadinessCheck;
+
+  ai_artifacts:
+    ProductionReadinessCheck;
+
+  poor_framing_lighting:
+    ProductionReadinessCheck;
+
+  jarring_transitions:
+    ProductionReadinessCheck;
+
+  illegible_text:
+    ProductionReadinessCheck;
+};
+
+/**
+ * Evaluates all six production-readiness checks
+ * and synthesizes the final MetricResult.
+ */
 export function evaluateProductionReadiness(
   context: AgentContext,
-  checks: ProductionReadinessChecks,
+  visualFindings: VisualAuditFinding[],
 ): MetricResult {
-  const allChecks = Object.values(checks);
+  const checks =
+    evaluateProductionChecks(
+      context,
+      visualFindings,
+    );
 
-  const failedChecks = allChecks.filter(
-    (check) => check.result === "failed",
-  );
+  const allChecks =
+    Object.values(checks);
 
-  const cannotAssessChecks = allChecks.filter(
-    (check) => check.result === "cannot_assess",
-  );
+  const failedChecks =
+    allChecks.filter(
+      (check) =>
+        check.result ===
+        "failed",
+    );
 
-  const overallSeverityScore = worstSeverity(
-    failedChecks.map(
-      (check) => check.severityScore,
-    ),
-  );
+  const cannotAssessChecks =
+    allChecks.filter(
+      (check) =>
+        check.result ===
+        "cannot_assess",
+    );
 
-  const result = determineOverallResult(
-    allChecks,
-    failedChecks,
-    cannotAssessChecks,
-  );
+  const result:
+    MetricResult["result"] =
+    failedChecks.length > 0
+      ? "false"
+      : cannotAssessChecks.length > 0
+      ? "cannot_assess"
+      : "true";
 
-  const confidenceScore = calculateOverallConfidence(
-    allChecks,
-    failedChecks,
-    cannotAssessChecks,
-  );
+  const highestSeverity =
+    failedChecks.reduce(
+      (
+        highest,
+        check,
+      ) =>
+        Math.max(
+          highest,
+          check.severityScore,
+        ),
+      0,
+    );
 
-  const evidence = collectEvidence(
-    failedChecks,
-    overallSeverityScore,
-  );
+  const severity:
+    MetricResult["severity"] =
+    result ===
+      "cannot_assess"
+      ? "cannot_assess"
+      : result === "true"
+      ? "none"
+      : severityFromScore(
+          highestSeverity,
+        );
 
-  const subChecks: SubCheckResult[] = allChecks.map((check) => ({
-    check_id: check.check_id,
-    name: check.name,
-    result: check.result,
-    severity: severityFromScore(
-      check.severityScore,
-    ),
-    ...(check.explanation
-      ? {
-        explanation: check.explanation,
-      }
-      : {}),
-  }));
+  const confidenceValues =
+    allChecks
+      .filter(
+        (check) =>
+          check.result !==
+          "cannot_assess",
+      )
+      .map(
+        (check) =>
+          check.confidence_score,
+      );
 
-  const correction = buildCorrection(
-    failedChecks,
-    overallSeverityScore,
-  );
+  const averageConfidence =
+    confidenceValues.length > 0
+      ? confidenceValues.reduce(
+        (
+          sum,
+          confidence,
+        ) =>
+          sum + confidence,
+        0,
+      ) /
+        confidenceValues.length
+      : 0;
+
+  const confidence =
+    result ===
+      "cannot_assess"
+      ? averageConfidence >= 0.8
+        ? "high"
+        : averageConfidence >= 0.5
+        ? "medium"
+        : "low"
+      : averageConfidence >= 0.8
+      ? "high"
+      : averageConfidence >= 0.5
+      ? "medium"
+      : "low";
+
+  const evidence =
+    allChecks
+      .filter(
+        (check) =>
+          check.evidence !==
+          undefined,
+      )
+      .map(
+        (check) =>
+          check.evidence!,
+      );
 
   return {
-    metric_id: "production_readiness",
-    agent: "visual_quality",
-    metric_name: "Production / Asset Readiness",
+    metric_id:
+      "production_readiness",
+
+    agent:
+      "visual_quality",
+
+    metric_name:
+      "Production Readiness",
+
     question:
-      "Is the video technically complete enough to be reviewed or launched?",
+      "Is the video technically and visually ready for production?",
+
     result,
-    severity: result === "cannot_assess" ? "cannot_assess" : severityFromScore(
-      overallSeverityScore,
-    ),
-    confidence: confidenceBucket(confidenceScore),
 
-    ...(evidence.length > 0 ? { evidence } : {}),
+    severity,
 
-    explanation: buildExplanation(
-      context,
-      failedChecks,
-      cannotAssessChecks,
-      overallSeverityScore,
-    ),
+    confidence,
 
-    suggested_correction: correction.text,
+    evidence:
+      evidence.length > 0
+        ? evidence
+        : undefined,
 
-    correction_type: correction.type,
+    explanation:
+      buildExplanation(
+        result,
+        failedChecks,
+        cannotAssessChecks,
+      ),
 
-    sub_checks: subChecks,
+    suggested_correction:
+      failedChecks.length > 0
+        ? "Review and correct the failed production-readiness checks before launch."
+        : undefined,
+
+    correction_type:
+      failedChecks.length > 0
+        ? "technical_fix"
+        : undefined,
+
+    sub_checks:
+      allChecks.map(
+        (check) => ({
+          check_id:
+            check.check_id,
+
+          name:
+            check.name,
+
+          result:
+            check.result,
+
+          severity:
+            check.result ===
+              "cannot_assess"
+              ? "cannot_assess"
+              : severityFromScore(
+                check.severityScore,
+              ),
+
+          explanation:
+            check.explanation,
+        }),
+      ),
   };
 }
 
-function determineOverallResult(
-  allChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-  failedChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-  cannotAssessChecks:
-    ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-): "true" | "false" | "cannot_assess" {
-  if (failedChecks.length > 0) {
-    return "false";
+function evaluateProductionChecks(
+  context: AgentContext,
+  visualFindings: VisualAuditFinding[],
+): ProductionReadinessChecks {
+  const findingsById =
+    new Map(
+      visualFindings.map(
+        (finding) => [
+          finding.check_id,
+          finding,
+        ],
+      ),
+    );
+
+  const aiArtifacts =
+    findingsById.get(
+      "ai_artifacts",
+    );
+
+  const poorFramingLighting =
+    findingsById.get(
+      "poor_framing_lighting",
+    );
+
+  const jarringTransitions =
+    findingsById.get(
+      "jarring_transitions",
+    );
+
+  if (
+    !aiArtifacts ||
+    !poorFramingLighting ||
+    !jarringTransitions
+  ) {
+    throw new Error(
+      "Visual audit did not return all required visual checks.",
+    );
   }
 
-  if (cannotAssessChecks.length > 0) {
-    return "cannot_assess";
-  }
+  return {
+    video_corruption:
+      evaluateVideoCorruption(
+        context,
+      ),
 
-  if (allChecks.length === 0) {
-    return "cannot_assess";
-  }
+    dropped_frames:
+      evaluateDroppedFrames(
+        context,
+      ),
 
-  return "true";
+    ai_artifacts:
+      findingToCheck(
+        aiArtifacts,
+        "AI Artifacts Audit",
+      ),
+
+    poor_framing_lighting:
+      findingToCheck(
+        poorFramingLighting,
+        "Framing and Lighting Check",
+      ),
+
+    jarring_transitions:
+      findingToCheck(
+        jarringTransitions,
+        "Transition Continuity Check",
+      ),
+
+    illegible_text:
+      evaluateTextLegibility(
+        context,
+      ),
+  };
 }
 
-function calculateOverallConfidence(
-  allChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-  failedChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-  cannotAssessChecks:
-    ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-): number {
-  if (allChecks.length === 0) {
-    return 0;
+function evaluateVideoCorruption(
+  context: AgentContext,
+): ProductionReadinessCheck {
+  const corruptionDetected =
+    context.video_metadata
+      .corruption_detected;
+
+  if (
+    corruptionDetected ===
+    undefined
+  ) {
+    return {
+      check_id:
+        "video_corruption",
+
+      name:
+        "Video corruption",
+
+      result:
+        "cannot_assess",
+
+      severityScore:
+        0,
+
+      confidence_score:
+        0,
+
+      explanation:
+        "Video corruption status cannot be determined because the metadata does not contain a corruption detection result.",
+    };
   }
 
   if (
-    cannotAssessChecks.length ===
-      allChecks.length
+    corruptionDetected
   ) {
-    return 0;
+    return {
+      check_id:
+        "video_corruption",
+
+      name:
+        "Video corruption",
+
+      result:
+        "failed",
+
+      severityScore:
+        4,
+
+      confidence_score:
+        1,
+
+      explanation:
+        "Video corruption was detected in the video metadata.",
+    };
   }
 
-  const relevantChecks = failedChecks.length > 0
-    ? failedChecks
-    : allChecks.filter(
-      (check) =>
-        check.result !==
-          "cannot_assess",
-    );
+  return {
+    check_id:
+      "video_corruption",
 
-  if (relevantChecks.length === 0) {
-    return 0;
-  }
+    name:
+      "Video corruption",
 
-  const average = relevantChecks.reduce(
-    (sum, check) => sum + check.confidence_score,
-    0,
-  ) / relevantChecks.length;
+    result:
+      "passed",
 
-  const completeness = (allChecks.length -
-    cannotAssessChecks.length) /
-    allChecks.length;
+    severityScore:
+      0,
 
-  return Math.min(
-    1,
-    average * completeness,
-  );
+    confidence_score:
+      1,
+
+    explanation:
+      "No video corruption was detected.",
+  };
 }
 
-function collectEvidence(
-  failedChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-  overallSeverityScore: SeverityScore,
-): EvidenceRef[] {
-  if (failedChecks.length === 0) {
-    return [];
+function evaluateDroppedFrames(
+  context: AgentContext,
+): ProductionReadinessCheck {
+  const count =
+    context.video_metadata
+      .dropped_frame_markers
+      .length;
+
+  if (count === 0) {
+    return {
+      check_id:
+        "dropped_frames",
+
+      name:
+        "Dropped frames",
+
+      result:
+        "passed",
+
+      severityScore:
+        0,
+
+      confidence_score:
+        1,
+
+      explanation:
+        "No dropped frames were detected.",
+    };
   }
 
-  const highestSeverityChecks = failedChecks.filter(
-    (check) =>
-      check.severityScore ===
-        overallSeverityScore,
-  );
+  const severity:
+    SeverityScore =
+    count >= 10
+      ? 3
+      : count >= 5
+      ? 2
+      : 1;
 
-  const sourceChecks = highestSeverityChecks.length > 0
-    ? highestSeverityChecks
-    : failedChecks;
+  return {
+    check_id:
+      "dropped_frames",
 
-  return sourceChecks
-    .filter((check) => check.evidence)
-    .map(
-      (check) => check.evidence!,
-    )
-    .slice(0, 5);
+    name:
+      "Dropped frames",
+
+    result:
+      "failed",
+
+    severityScore:
+      severity,
+
+    confidence_score:
+      1,
+
+    explanation:
+      `${count} dropped frame marker(s) were detected.`,
+  };
+}
+
+function findingToCheck(
+  finding: VisualAuditFinding,
+  name: string,
+): ProductionReadinessCheck {
+  const severity =
+    finding.severity;
+
+  const evidence:
+    EvidenceRef | undefined =
+    finding.evidence_text.trim()
+      ? {
+        type:
+          "visual",
+
+        text:
+          finding.evidence_text,
+
+        timestamp:
+          timestampToString(
+            finding.evidence_timestamp_ms,
+          ),
+      }
+      : undefined;
+
+  return {
+    check_id:
+      finding.check_id,
+
+    name,
+
+    result:
+      severity === 0
+        ? "passed"
+        : "failed",
+
+    severityScore:
+      severity,
+
+    confidence_score:
+      finding.confidence_score,
+
+    explanation:
+      finding.explanation,
+
+    evidence,
+  };
+}
+
+function evaluateTextLegibility(
+  context: AgentContext,
+): ProductionReadinessCheck {
+  if (
+    context.ocr_segments.length ===
+    0
+  ) {
+    return {
+      check_id:
+        "illegible_text",
+
+      name:
+        "Illegible text",
+
+      result:
+        "cannot_assess",
+
+      severityScore:
+        0,
+
+      confidence_score:
+        0,
+
+      explanation:
+        "Text legibility cannot be determined because no OCR segments are available.",
+    };
+  }
+
+  const potentiallyIllegible =
+    context.ocr_segments.some(
+      (segment) => {
+        if (
+          segment.font_size_px !==
+          undefined
+        ) {
+          return (
+            segment.font_size_px <
+            12
+          );
+        }
+
+        if (
+          segment.region_size !==
+          undefined
+        ) {
+          return (
+            segment.region_size <
+            0.01
+          );
+        }
+
+        return false;
+      },
+    );
+
+  if (
+    potentiallyIllegible
+  ) {
+    return {
+      check_id:
+        "illegible_text",
+
+      name:
+        "Illegible text",
+
+      result:
+        "failed",
+
+      severityScore:
+        2,
+
+      confidence_score:
+        0.7,
+
+      explanation:
+        "Some on-screen text may be too small or occupy too little screen area to be reliably legible.",
+    };
+  }
+
+  return {
+    check_id:
+      "illegible_text",
+
+    name:
+      "Illegible text",
+
+    result:
+      "passed",
+
+    severityScore:
+      0,
+
+    confidence_score:
+      0.7,
+
+    explanation:
+      "No potentially illegible text was detected from the available OCR metadata.",
+  };
+}
+
+function severityFromScore(
+  score: number,
+): MetricResult["severity"] {
+  if (score >= 4) {
+    return "critical";
+  }
+
+  if (score === 3) {
+    return "high";
+  }
+
+  if (score === 2) {
+    return "medium";
+  }
+
+  if (score === 1) {
+    return "low";
+  }
+
+  return "none";
+}
+
+function timestampToString(
+  timestampMs: number | null,
+): string {
+  if (
+    timestampMs ===
+    null
+  ) {
+    return "";
+  }
+
+  const totalSeconds =
+    Math.floor(
+      timestampMs / 1000,
+    );
+
+  const minutes =
+    Math.floor(
+      totalSeconds / 60,
+    );
+
+  const seconds =
+    totalSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${
+    String(seconds).padStart(2, "0")
+  }`;
 }
 
 function buildExplanation(
-  _context: AgentContext,
-  failedChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-  cannotAssessChecks:
-    ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-  overallSeverityScore: SeverityScore,
+  result: MetricResult["result"],
+  failedChecks: ProductionReadinessCheck[],
+  cannotAssessChecks: ProductionReadinessCheck[],
 ): string {
   if (
-    failedChecks.length === 0 &&
-    cannotAssessChecks.length === 0
+    result === "true"
   ) {
-    return "No material production-quality issues were detected across the evaluated technical, visual, transition, framing, lighting, and text-quality checks.";
+    return "All production-readiness checks passed.";
   }
 
   if (
-    failedChecks.length === 0 &&
-    cannotAssessChecks.length > 0
+    result === "cannot_assess"
   ) {
-    const names = cannotAssessChecks
-      .map((check) => check.name)
-      .join(", ");
+    if (
+      cannotAssessChecks.length ===
+      1
+    ) {
+      return `Production readiness could not be fully assessed because "${cannotAssessChecks[0].name}" could not be assessed.`;
+    }
 
-    return `The video passed all checks that could be assessed, but production readiness could not be fully determined because the following checks could not be assessed: ${names}.`;
+    return `Production readiness could not be fully assessed because ${cannotAssessChecks.length} check(s) could not be assessed.`;
   }
 
-  const issues = failedChecks
-    .map(
-      (check) => check.explanation,
-    )
-    .filter(Boolean);
-
-  const severity = severityFromScore(
-    overallSeverityScore,
-  );
-
-  return `Production readiness is ${severity} due to the following detected issue${
-    issues.length === 1 ? "" : "s"
-  }: ${issues.join(" ")}`;
-}
-
-function buildCorrection(
-  failedChecks: ProductionReadinessChecks[keyof ProductionReadinessChecks][],
-  overallSeverityScore: SeverityScore,
-): {
-  text: string;
-  type:
-    | "rewrite"
-    | "edit_recommendation"
-    | "technical_fix"
-    | "none";
-} {
-  if (failedChecks.length === 0) {
-    return {
-      text: "No correction is required.",
-      type: "none",
-    };
-  }
-
-  const ids = new Set(
-    failedChecks.map(
-      (check) => check.check_id,
-    ),
-  );
-
-  if (ids.has("video_corruption")) {
-    return {
-      text:
-        "Replace or repair the corrupted video asset and verify that the final file plays through to completion.",
-      type: "technical_fix",
-    };
-  }
-
-  if (ids.has("dropped_frames")) {
-    return {
-      text:
-        "Re-export or re-encode the video using a stable frame rate and verify playback for stuttering or dropped frames.",
-      type: "technical_fix",
-    };
-  }
-
-  if (ids.has("ai_artifacts")) {
-    return {
-      text:
-        "Regenerate or replace the affected visual sections and verify the corrected frames for morphing, distortion, ghosting, or other AI artifacts.",
-      type: "edit_recommendation",
-    };
-  }
-
-  if (
-    ids.has("jarring_transitions")
-  ) {
-    return {
-      text:
-        "Refine the affected scene transition by replacing problematic cuts, flash frames, or inconsistent color treatment.",
-      type: "edit_recommendation",
-    };
-  }
-
-  if (
-    ids.has("poor_framing_lighting")
-  ) {
-    return {
-      text:
-        "Adjust framing, exposure, lighting, or cropping so the primary subject remains clearly visible and consistently presented.",
-      type: "edit_recommendation",
-    };
-  }
-
-  if (ids.has("illegible_text")) {
-    return {
-      text:
-        "Increase text size, contrast, display duration, or safe-area placement so on-screen text remains readable throughout its appearance.",
-      type: "edit_recommendation",
-    };
-  }
-
-  return {
-    text: overallSeverityScore >= 3
-      ? "Correct the major production-quality issues before launch."
-      : "Review and correct the identified production-quality issues before final export.",
-    type: "edit_recommendation",
-  };
+  return `${failedChecks.length} production-readiness check(s) failed.`;
 }

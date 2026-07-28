@@ -1,5 +1,5 @@
 /**
- * visual-quality-agent/prompts/visual-audit.ts — Visual audit LLM prompts.
+ * prompts.ts — Visual audit LLM prompts.
  *
  * Defines the system instructions and user prompt builder used by the
  * LLM-assisted visual quality audit.
