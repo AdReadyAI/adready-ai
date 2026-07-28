@@ -1,52 +1,69 @@
-/**
- * visual-quality-agent/agent.ts — Visual Quality Agent orchestration.
- *
- * Loads the agent context, runs visual analysis, converts all findings into
- * the six production-readiness checks, and synthesizes the final metric.
- *
- * Dependencies are injectable so the agent can be unit tested without
- * database access, environment variables, OpenRouter, or an LLM.
- */
+import {
+  AgentRunRequestSchema,
+  MetricResultSchema,
+} from "../shared/schemas.ts";
 
-import { MetricResultSchema } from "../shared/schemas.ts";
-import type { MetricResult } from "../shared/schemas.ts";
+import type {
+  AgentRunRequest,
+  MetricResult,
+} from "../shared/schemas.ts";
 
-import { evaluateProductionReadiness } from "./metrics.ts";
+import {
+  loadVisualQualityContext,
+  persistVisualQualityResult,
+} from "./repository.ts";
 
-import { getAgentContext } from "./tools/context.ts";
-
-import { auditVisualQuality } from "./tools/visual-audit.ts";
-
-import { evaluateProductionChecks } from "./tools/production-checks.ts";
-
-import type { VisualQualityDependencies } from "./types.ts";
-
-export const visualQualityDependencies: VisualQualityDependencies = {
-  getAgentContext,
+import {
   auditVisualQuality,
-  evaluateProductionChecks,
+} from "./visual-audit.ts";
+
+import {
   evaluateProductionReadiness,
+} from "./metrics.ts";
+
+export const VisualQualityAgentRequestSchema =
+  AgentRunRequestSchema;
+
+export type VisualQualityAgentRequest =
+  AgentRunRequest;
+
+export type VisualQualityAgentRunOptions = {
+  userId?: string;
 };
 
+/**
+ * Runs the Visual Quality Agent pipeline.
+ *
+ * 1. Loads the request context from the database.
+ * 2. Runs the LLM-assisted visual audit.
+ * 3. Evaluates all six production-readiness checks.
+ * 4. Builds the final production_readiness metric.
+ * 5. Persists the result and sub-checks.
+ */
 export async function runVisualQualityAgent(
-  requestId: string,
-  deps: VisualQualityDependencies = visualQualityDependencies,
-): Promise<MetricResult[]> {
-  const context = await deps.getAgentContext(requestId);
-
-  const visualFindings = await deps.auditVisualQuality(context);
-
-  const checks = deps.evaluateProductionChecks(
-    context,
-    visualFindings,
+  request: VisualQualityAgentRequest,
+  options: VisualQualityAgentRunOptions = {},
+): Promise<MetricResult> {
+  const context = await loadVisualQualityContext(
+    request.request_id,
+    options.userId,
   );
 
-  const result = deps.evaluateProductionReadiness(
+  const visualFindings = await auditVisualQuality(
     context,
-    checks,
   );
 
-  return MetricResultSchema.array().parse([
+  const result = MetricResultSchema.parse(
+    evaluateProductionReadiness(
+      context,
+      visualFindings,
+    ),
+  );
+
+  await persistVisualQualityResult(
+    context.request_id,
     result,
-  ]);
+  );
+
+  return result;
 }

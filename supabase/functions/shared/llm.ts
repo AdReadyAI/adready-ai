@@ -45,19 +45,12 @@ export function stripCodeFences(reply: string): string {
 /**
  * Sends messages to the configured model via OpenRouter and returns the reply.
  */
-export async function chat(
-  messages: ChatMessage[],
-  model?: string,
-): Promise<string> {
+export async function chat(messages: ChatMessage[]): Promise<string> {
   const apiKey = Deno.env.get("OPENROUTER_API_KEY");
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
 
-  const resolvedModel = model ?? Deno.env.get("OPENROUTER_MODEL");
-  if (!resolvedModel) {
-    throw new Error(
-      "No model configured: pass a model argument to chat(), or set OPENROUTER_MODEL.",
-    );
-  }
+  const model = Deno.env.get("OPENROUTER_MODEL");
+  if (!model) throw new Error("OPENROUTER_MODEL is not set");
 
   const res = await fetch(openRouterBaseUrl(), {
     method: "POST",
@@ -65,7 +58,7 @@ export async function chat(
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model: resolvedModel, messages }),
+    body: JSON.stringify({ model, messages }),
   });
 
   if (!res.ok) {

@@ -110,16 +110,35 @@
  *   Stage 4: Synthesis & Scoring - Map findings to production_readiness result.
  */
 
-import { createEdgeHandler, ok } from "../shared/index.ts";
-import { AgentRunRequestSchema } from "../shared/schemas.ts";
-import { runVisualQualityAgent } from "./agent.ts";
+import { createEdgeHandler, err, ok } from "../shared/index.ts";
+import {
+  AgentRunRequestSchema,
+} from "../shared/schemas.ts";
+
+import {
+  runVisualQualityAgent,
+} from "./agent.ts";
 
 createEdgeHandler(
   "visual-quality-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
-    const { request_id } = ctx.body;
+    try {
+      return ok([
+        await runVisualQualityAgent(ctx.body, {
+          userId: ctx.user.id,
+        }),
+      ]);
+    } catch (error) {
+      console.error("VISUAL_QUALITY_FAILED:", error);
 
-    return ok(await runVisualQualityAgent(request_id));
+      return err(
+        "VISUAL_QUALITY_FAILED",
+        error instanceof Error
+          ? error.message
+          : "Unexpected visual quality failure",
+        500,
+      );
+    }
   },
 );
