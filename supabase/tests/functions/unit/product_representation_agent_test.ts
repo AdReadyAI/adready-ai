@@ -10,6 +10,7 @@ import {
   type AgentContext,
   AgentContextSchema,
 } from "../../../functions/shared/schemas.ts";
+import { validateMetricResults } from "../../../functions/shared/validation.ts";
 
 function visualFrames(n: number): Record<string, unknown>[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -239,4 +240,92 @@ Deno.test("runProductRepresentationAgent throws when the model returns invalid J
     threw = true;
   }
   assertEquals(threw, true);
+});
+
+Deno.test("runProductRepresentationAgent normalizes cannot_assess sub-checks so severity is cannot_assess", async () => {
+  const results = await runProductRepresentationAgent(
+    makeContext(),
+    makeMockChat({
+      result: "true",
+      severity: "none",
+      confidence: "high",
+      evidence: [{ type: "product_page", text: "n/a", timestamp: "" }],
+      sub_checks: [
+        {
+          check_id: "product_appearance_wrong",
+          result: "cannot_assess",
+          severity: "none",
+        },
+      ],
+    }),
+  );
+  const sc = results[0].sub_checks?.find((c) =>
+    c.check_id === "product_appearance_wrong"
+  );
+  assertEquals(sc?.result, "cannot_assess");
+  assertEquals(sc?.severity, "cannot_assess");
+});
+
+Deno.test("runProductRepresentationAgent adds explanation + correction when the deterministic coverage check fails", async () => {
+  const context = makeContext({
+    visual_frames: visualFrames(10),
+    product_frames: [
+      {
+        frame_id: "pf1",
+        timestamp_ms: 500,
+        confidence_score: 0.9,
+        prominence: "foreground_static",
+      },
+    ],
+  });
+  const results = await runProductRepresentationAgent(
+    context,
+    makeMockChat({
+      result: "true",
+      severity: "none",
+      confidence: "high",
+      evidence: [{ type: "product_page", text: "clear", timestamp: "" }],
+      explanation: "No representation issues.",
+      correction_type: "none",
+      sub_checks: [],
+    }),
+  );
+  assertEquals(results[0].result, "false");
+  assertEquals(results[0].severity !== "none", true);
+  assertEquals(results[0].correction_type !== "none", true);
+  assertEquals((results[0].suggested_correction ?? "").length > 0, true);
+});
+
+Deno.test("runProductRepresentationAgent output satisfies shared validateMetricResults", async () => {
+  // Adversarial input: a passed sub-check reported with a non-none severity,
+  // plus a late/thin coverage context that forces a failing verdict. The
+  // agent's normalization must make the output pass the shared invariants.
+  const context = makeContext({
+    visual_frames: visualFrames(10),
+    product_frames: [
+      {
+        frame_id: "pf1",
+        timestamp_ms: 7500,
+        confidence_score: 0.9,
+        prominence: "foreground_static",
+      },
+    ],
+  });
+  const results = await runProductRepresentationAgent(
+    context,
+    makeMockChat({
+      result: "true",
+      severity: "none",
+      confidence: "high",
+      evidence: [{ type: "product_page", text: "x", timestamp: "" }],
+      explanation: "No issues.",
+      correction_type: "none",
+      sub_checks: [
+        { check_id: "product_obscured", result: "passed", severity: "high" },
+      ],
+    }),
+  );
+  // Throws if any result/severity/sub-check invariant is violated.
+  const validated = validateMetricResults(results);
+  assertEquals(validated.length, 1);
 });

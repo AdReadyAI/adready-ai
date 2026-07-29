@@ -91,32 +91,81 @@ function sanitizeEvidence(raw: unknown): EvidenceRef[] {
   return out;
 }
 
+/** Reverse map of display name -> check_id, for recovering mislabeled checks. */
+function buildNameToId(
+  names: Record<string, string>,
+  ids: readonly string[],
+): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const id of ids) {
+    const n = names[id];
+    if (n) m.set(n.toLowerCase(), id);
+  }
+  return m;
+}
+
+/**
+ * Recover a known check_id from a sub-check the model may have mislabeled.
+ * Accepts the canonical `check_id` as well as common variants (`check`, `id`,
+ * or the display `name`), matching either a known id or a known display name.
+ * Returns null only when nothing maps to a configured check — so a real finding
+ * that arrives under `check` instead of `check_id` is kept, not silently dropped.
+ */
+function resolveCheckId(
+  rec: Record<string, unknown>,
+  allowed: Set<string>,
+  nameToId: Map<string, string>,
+): string | null {
+  for (const key of ["check_id", "check", "id", "name"]) {
+    const v = rec[key];
+    if (typeof v !== "string") continue;
+    if (allowed.has(v)) return v;
+    const byName = nameToId.get(v.toLowerCase());
+    if (byName) return byName;
+  }
+  return null;
+}
+
 function sanitizeSubChecks(
   raw: unknown,
   allowedIds: readonly SubCheckId[],
 ): SubCheckResult[] {
   if (!Array.isArray(raw)) return [];
   const allowed = new Set<string>(allowedIds);
+  const nameToId = buildNameToId(SUB_CHECK_NAMES, allowedIds);
   const validResults = new Set<string>(SUB_CHECK_RESULT_VALUES);
   const validSeverities = new Set<string>(SEVERITY_LEVELS);
   const out: SubCheckResult[] = [];
   for (const s of raw) {
     if (typeof s !== "object" || s === null) continue;
     const rec = s as Record<string, unknown>;
-    if (typeof rec.check_id !== "string" || !allowed.has(rec.check_id)) {
-      continue;
-    }
+    const checkId = resolveCheckId(rec, allowed, nameToId);
+    if (!checkId) continue;
     if (typeof rec.result !== "string" || !validResults.has(rec.result)) {
       continue;
     }
     if (
       typeof rec.severity !== "string" || !validSeverities.has(rec.severity)
     ) continue;
+    // Normalize the result/severity pair so it satisfies the shared semantic
+    // invariants (validation.ts): passed -> none, failed -> a real severity,
+    // cannot_assess -> cannot_assess on both fields.
+    let result = rec.result as SubCheckResult["result"];
+    let severity = rec.severity as SeverityLevel;
+    if (result === "cannot_assess" || severity === "cannot_assess") {
+      result = "cannot_assess";
+      severity = "cannot_assess";
+    } else if (result === "passed") {
+      severity = "none";
+    } else if (severity === "none") {
+      // A failed sub-check must carry a non-none severity.
+      severity = "low";
+    }
     out.push({
-      check_id: rec.check_id,
-      name: SUB_CHECK_NAMES[rec.check_id as SubCheckId] ?? rec.check_id,
-      result: rec.result as SubCheckResult["result"],
-      severity: rec.severity as SeverityLevel,
+      check_id: checkId,
+      name: SUB_CHECK_NAMES[checkId as SubCheckId] ?? checkId,
+      result,
+      severity,
       explanation: typeof rec.explanation === "string"
         ? rec.explanation
         : undefined,
@@ -125,23 +174,61 @@ function sanitizeSubChecks(
   return out;
 }
 
+const SEVERITY_RANK: Record<SeverityLevel, number> = {
+  none: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4,
+  cannot_assess: -1,
+};
+
+function worseSeverity(a: SeverityLevel, b: SeverityLevel): SeverityLevel {
+  return SEVERITY_RANK[b] > SEVERITY_RANK[a] ? b : a;
+}
+
+/** A metric carries a real correction when a fix type or fix text is present. */
+function hasCorrection(
+  correctionType: MetricResult["correction_type"],
+  suggestedCorrection: string | undefined,
+): boolean {
+  if (correctionType && correctionType !== "none") return true;
+  const s = suggestedCorrection?.trim().toLowerCase();
+  return !!s && s !== "none";
+}
+
 /**
  * Reconcile an internally contradictory result/severity pair from the model.
- * A metric only "passes" (`true`) when nothing is wrong: severity `none` and no
- * failed sub-check. Any real problem (a failed sub-check or severity above
- * `none`) forces `false`. This repairs cases like `result: "false"` reported
- * with `severity: "none"` and all sub-checks passing. `cannot_assess` on either
- * field is always left untouched.
+ * A metric only "passes" (`true`) when nothing is wrong: severity `none`, no
+ * failed sub-check, and no correction. Any real problem forces `false` AND a
+ * non-`none` severity — the two must move together, so a failing verdict (or one
+ * that asks for a correction) can never report `severity: "none"`. When severity
+ * is missing it is derived from the worst failed sub-check (falling back to
+ * `low`). `cannot_assess` on either field is always left untouched.
  */
-function reconcileResult(
+function reconcile(
   result: MetricResult["result"],
   severity: SeverityLevel,
   subChecks: SubCheckResult[],
-): MetricResult["result"] {
-  if (result === "cannot_assess" || severity === "cannot_assess") return result;
-  const problem = severity !== "none" ||
-    subChecks.some((s) => s.result === "failed");
-  return problem ? "false" : "true";
+  correctionType: MetricResult["correction_type"],
+  suggestedCorrection: string | undefined,
+): { result: MetricResult["result"]; severity: SeverityLevel } {
+  if (result === "cannot_assess" || severity === "cannot_assess") {
+    return { result: "cannot_assess", severity: "cannot_assess" };
+  }
+  const failed = subChecks.filter((s) => s.result === "failed");
+  const problem = severity !== "none" || failed.length > 0 ||
+    hasCorrection(correctionType, suggestedCorrection);
+  if (!problem) return { result: "true", severity: "none" };
+  let sev: SeverityLevel = severity;
+  if (sev === "none") {
+    sev = failed.reduce<SeverityLevel>(
+      (worst, s) => worseSeverity(worst, s.severity),
+      "none",
+    );
+    if (sev === "none" || sev === "cannot_assess") sev = "low";
+  }
+  return { result: "false", severity: sev };
 }
 
 function buildMetricResult(
@@ -168,12 +255,26 @@ function buildMetricResult(
   }
 
   const subChecks = sanitizeSubChecks(raw?.sub_checks, config.sub_check_ids);
-  const reconciledResult = reconcileResult(result, severity, subChecks);
 
   const correctionType = typeof raw?.correction_type === "string" &&
       (CORRECTION_TYPES as readonly string[]).includes(raw.correction_type)
     ? (raw.correction_type as MetricResult["correction_type"])
     : "none";
+  const suggestedCorrection = typeof raw?.suggested_correction === "string"
+    ? raw.suggested_correction
+    : undefined;
+
+  const { result: reconciledResult, severity: reconciledSeverity } = reconcile(
+    result,
+    severity,
+    subChecks,
+    correctionType,
+    suggestedCorrection,
+  );
+
+  // A metric that cannot be assessed cannot carry a correction — you can't fix
+  // what there was nothing to evaluate.
+  const noAssess = reconciledResult === "cannot_assess";
 
   return {
     metric_id: config.metric_id,
@@ -181,16 +282,14 @@ function buildMetricResult(
     metric_name: config.metric_name,
     question: config.question,
     result: reconciledResult,
-    severity,
+    severity: reconciledSeverity,
     confidence,
     evidence,
     explanation: typeof raw?.explanation === "string"
       ? raw.explanation
       : undefined,
-    suggested_correction: typeof raw?.suggested_correction === "string"
-      ? raw.suggested_correction
-      : undefined,
-    correction_type: correctionType,
+    suggested_correction: noAssess ? undefined : suggestedCorrection,
+    correction_type: noAssess ? "none" : correctionType,
     sub_checks: subChecks,
   };
 }

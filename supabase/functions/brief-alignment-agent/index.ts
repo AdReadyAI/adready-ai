@@ -20,20 +20,23 @@
  *   - Results are persisted to agent_results (+ evidence, sub_checks) via persist.ts.
  */
 
-import { createEdgeHandler, ok } from "../shared/index.ts";
+import {
+  createEdgeHandler,
+  loadAgentContext,
+  ok,
+  persistMetricResults,
+} from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
-import { loadAgentContext } from "./context.ts";
 import { runBriefAlignmentAgent } from "./agent.ts";
-import { persistAgentResults } from "./persist.ts";
 
 createEdgeHandler(
   "brief-alignment-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
     const requestId = ctx.body.request_id;
-    const context = await loadAgentContext(requestId);
+    const context = await loadAgentContext(requestId, { userId: ctx.user.id });
     const results = await runBriefAlignmentAgent(context);
-    await persistAgentResults(requestId, results);
+    await persistMetricResults(requestId, results);
     return ok(results);
   },
 );

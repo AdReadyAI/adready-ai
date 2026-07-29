@@ -7,6 +7,7 @@ import {
   type AgentContext,
   AgentContextSchema,
 } from "../../../functions/shared/schemas.ts";
+import { validateMetricResults } from "../../../functions/shared/validation.ts";
 
 function makeContext(overrides: Record<string, unknown> = {}): AgentContext {
   return AgentContextSchema.parse({
@@ -207,4 +208,189 @@ Deno.test("runBriefAlignmentAgent throws when the model returns invalid JSON", a
     threw = true;
   }
   assertEquals(threw, true);
+});
+
+Deno.test("runBriefAlignmentAgent recovers a sub-check labeled `check` instead of `check_id`", async () => {
+  const findings = {
+    findings: [
+      {
+        metric_id: "audience_fit",
+        result: "false",
+        severity: "medium",
+        confidence: "high",
+        evidence: [{ type: "brief", text: "ok", timestamp: "" }],
+        sub_checks: [
+          {
+            check: "demographic_mismatch",
+            result: "failed",
+            severity: "medium",
+          },
+        ],
+      },
+      {
+        metric_id: "brief_adherence",
+        result: "true",
+        severity: "none",
+        confidence: "high",
+        evidence: [{ type: "brief", text: "ok", timestamp: "" }],
+        sub_checks: [],
+      },
+    ],
+  };
+  const results = await runBriefAlignmentAgent(
+    makeContext(),
+    makeMockChat(findings),
+  );
+  assertEquals(results[0].sub_checks?.length, 1);
+  assertEquals(results[0].sub_checks?.[0].check_id, "demographic_mismatch");
+});
+
+Deno.test("runBriefAlignmentAgent forces false + non-none severity when a correction is requested", async () => {
+  const findings = {
+    findings: [
+      {
+        metric_id: "audience_fit",
+        result: "true",
+        severity: "none",
+        confidence: "high",
+        evidence: [{ type: "brief", text: "ok", timestamp: "" }],
+        sub_checks: [],
+      },
+      {
+        metric_id: "brief_adherence",
+        result: "true",
+        severity: "none",
+        confidence: "high",
+        evidence: [{ type: "brief", text: "logo unconfirmed", timestamp: "" }],
+        suggested_correction:
+          "Confirm the logo appears in the final 3 seconds.",
+        correction_type: "technical_fix",
+        sub_checks: [
+          { check_id: "objective_missed", result: "passed", severity: "none" },
+          {
+            check_id: "required_message_missing",
+            result: "passed",
+            severity: "none",
+          },
+        ],
+      },
+    ],
+  };
+  const results = await runBriefAlignmentAgent(
+    makeContext(),
+    makeMockChat(findings),
+  );
+  const adherence = results.find((r) => r.metric_id === "brief_adherence");
+  assertEquals(adherence?.result, "false");
+  assertEquals(adherence?.severity !== "none", true);
+});
+
+Deno.test("runBriefAlignmentAgent bumps top-level severity when a sub-check fails but severity is none", async () => {
+  const findings = {
+    findings: [
+      {
+        metric_id: "audience_fit",
+        result: "true",
+        severity: "none",
+        confidence: "high",
+        evidence: [{ type: "brief", text: "ok", timestamp: "" }],
+        sub_checks: [
+          {
+            check_id: "demographic_mismatch",
+            result: "failed",
+            severity: "high",
+          },
+        ],
+      },
+      {
+        metric_id: "brief_adherence",
+        result: "true",
+        severity: "none",
+        confidence: "high",
+        evidence: [{ type: "brief", text: "ok", timestamp: "" }],
+        sub_checks: [],
+      },
+    ],
+  };
+  const results = await runBriefAlignmentAgent(
+    makeContext(),
+    makeMockChat(findings),
+  );
+  const audience = results.find((r) => r.metric_id === "audience_fit");
+  assertEquals(audience?.result, "false");
+  assertEquals(audience?.severity, "high");
+});
+
+Deno.test("runBriefAlignmentAgent strips corrections from a cannot_assess metric", async () => {
+  const findings = {
+    findings: [
+      {
+        metric_id: "audience_fit",
+        result: "cannot_assess",
+        severity: "cannot_assess",
+        confidence: "low",
+        evidence: [],
+        suggested_correction: "Add explicit audience targeting.",
+        correction_type: "edit_recommendation",
+        sub_checks: [],
+      },
+      {
+        metric_id: "brief_adherence",
+        result: "true",
+        severity: "none",
+        confidence: "high",
+        evidence: [{ type: "brief", text: "ok", timestamp: "" }],
+        sub_checks: [],
+      },
+    ],
+  };
+  const results = await runBriefAlignmentAgent(
+    makeContext(),
+    makeMockChat(findings),
+  );
+  const audience = results.find((r) => r.metric_id === "audience_fit");
+  assertEquals(audience?.result, "cannot_assess");
+  assertEquals(audience?.correction_type, "none");
+  assertEquals(audience?.suggested_correction, undefined);
+});
+
+Deno.test("runBriefAlignmentAgent output satisfies shared validateMetricResults", async () => {
+  // Adversarial input: a failed sub-check with severity none, and a
+  // cannot_assess metric reported with severity none + a correction. The
+  // agent's normalization must make both pass the shared semantic invariants.
+  const findings = {
+    findings: [
+      {
+        metric_id: "audience_fit",
+        result: "false",
+        severity: "none",
+        confidence: "high",
+        evidence: [{ type: "brief", text: "x", timestamp: "" }],
+        sub_checks: [
+          {
+            check_id: "demographic_mismatch",
+            result: "failed",
+            severity: "none",
+          },
+        ],
+      },
+      {
+        metric_id: "brief_adherence",
+        result: "cannot_assess",
+        severity: "none",
+        confidence: "low",
+        evidence: [],
+        suggested_correction: "fix it",
+        correction_type: "rewrite",
+        sub_checks: [],
+      },
+    ],
+  };
+  const results = await runBriefAlignmentAgent(
+    makeContext(),
+    makeMockChat(findings),
+  );
+  // Throws if any result/severity/sub-check invariant is violated.
+  const validated = validateMetricResults(results);
+  assertEquals(validated.length, 2);
 });

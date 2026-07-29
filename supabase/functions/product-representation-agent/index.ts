@@ -14,25 +14,30 @@
  *
  * DB CONTEXT:
  *   - Orchestration invokes the agent with a request_id (AgentRunRequestSchema).
- *   - The agent loads its AgentContext from Supabase by request_id (see context.ts).
+ *   - The agent loads its AgentContext from Supabase by request_id via the shared
+ *     ownership-checked loader (shared/context.ts).
  *   - LLM calls go through shared/llm.ts (OPENROUTER_MODEL from env — no hardcoded model).
- *   - Results are persisted to agent_results (+ evidence, sub_checks) via persist.ts.
+ *   - Results are validated and persisted to agent_results (+ evidence,
+ *     sub_checks) via shared/persist.ts.
  */
 
-import { createEdgeHandler, ok } from "../shared/index.ts";
+import {
+  createEdgeHandler,
+  loadAgentContext,
+  ok,
+  persistMetricResults,
+} from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
-import { loadAgentContext } from "./context.ts";
 import { runProductRepresentationAgent } from "./agent.ts";
-import { persistAgentResults } from "./persist.ts";
 
 createEdgeHandler(
   "product-representation-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
     const requestId = ctx.body.request_id;
-    const context = await loadAgentContext(requestId);
+    const context = await loadAgentContext(requestId, { userId: ctx.user.id });
     const results = await runProductRepresentationAgent(context);
-    await persistAgentResults(requestId, results);
+    await persistMetricResults(requestId, results);
     return ok(results);
   },
 );
