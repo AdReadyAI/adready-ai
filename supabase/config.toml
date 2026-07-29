@@ -115,7 +115,7 @@ openai_api_key = "env(OPENAI_API_KEY)"
 [storage]
 enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
-file_size_limit = "50MiB"
+file_size_limit = "500MiB"
 
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]
@@ -123,6 +123,11 @@ file_size_limit = "50MiB"
 # file_size_limit = "50MiB"
 # allowed_mime_types = ["image/png", "image/jpeg"]
 # objects_path = "./images"
+
+[storage.buckets.uploads]
+public = false
+file_size_limit = "500MiB"
+allowed_mime_types = ["video/mp4", "video/quicktime", "video/webm", "image/png", "image/jpeg", "image/webp"]
 
 # Allow connections via S3 compatible clients
 [storage.s3_protocol]
@@ -160,7 +165,11 @@ site_url = "http://localhost:5173"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["http://127.0.0.1:5173"]
+additional_redirect_urls = [
+  "http://127.0.0.1:5173",
+  "http://localhost:5173/auth/callback",
+  "http://127.0.0.1:5173/auth/callback",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -334,6 +343,20 @@ skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
 
+[auth.external.google]
+enabled = true
+client_id = "env(GOOGLE_AUTH_CLIENT_ID)"
+secret = "env(GOOGLE_AUTH_CLIENT_SECRET)"
+# Overrides the default auth callback URL derived from auth.external_url.
+redirect_uri = ""
+# Overrides the default auth provider URL. Used to support self-hosted gitlab, single-tenant Azure,
+# or any other third-party OIDC providers.
+url = ""
+# Required for local development — skips the nonce check so Google redirects
+# back to http://localhost instead of requiring https.
+skip_nonce_check = true
+email_optional = false
+
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
 [auth.web3.solana]
@@ -381,6 +404,28 @@ policy = "per_worker"
 inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
+
+# All agent functions share the root Deno dependency configuration.
+[functions.brand-alignment-agent]
+import_map = "./deno.json"
+
+[functions.brief-alignment-agent]
+import_map = "./deno.json"
+
+[functions.claims-agent]
+import_map = "./deno.json"
+
+[functions.cta-effectiveness-agent]
+import_map = "./deno.json"
+
+[functions.product-representation-agent]
+import_map = "./deno.json"
+
+[functions.storyline-clarity-agent]
+import_map = "./deno.json"
+
+[functions.visual-quality-agent]
+import_map = "./deno.json"
 
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"

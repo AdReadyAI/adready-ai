@@ -6,7 +6,7 @@
 **Legend:** **`[OPEN]`** = tunable on golden set
 
 Public API output shape: `{ result_table, issues }` (`ScoreTablesOutput`).  
-Result UI / DB: `result_score_table` + `result_score_dimensions` (migration 024, pure columns).  
+Result UI / DB: `result_score_table` + `result_score_dimensions` (migration 026, pure columns).  
 Issue UI / DB: `public.issuetable` (migration 025); engine emits `issues[]` with matching column names.  
 Wire types: `ResultTable` / `IssueRow` / `ScoreTablesOutput` in `_shared/score-engine/types.ts`.
 

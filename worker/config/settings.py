@@ -22,3 +22,40 @@ RETRY_BASE_DELAY = 5
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
+
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+DOWNLOAD_TIMEOUT = 60
+DOWNLOAD_CHUNK_SIZE = 1 << 20  # 1 MB
+FFPROBE_TIMEOUT = 30
+FFMPEG_TIMEOUT = 120
+AUDIO_SAMPLE_RATE = 16000
+
+ADAPTIVE_KEYFRAME_THRESHOLD = 0.5
+ADAPTIVE_MIN_GAP_S = 0.2
+ADAPTIVE_MAX_GAP_S = 2.0
+
+
+
+
+SCENE_CUT_THRESHOLD = 27.0  
+SCENE_CONTENT_SCALE = 100.0    # Still not sure about the exact value wasn't able to find anything on line
+SCENE_MIN_SHOT_FRAMES = 12
+
+
+
+
+
+
+# Frame-sampling model weights
+WARM_MODELS = os.getenv("WARM_MODELS", "true").lower() in ("1", "true", "yes")
+
+EAST_MODEL_PATH = os.getenv(
+    "EAST_MODEL_PATH", "/app/assets/models/frozen_east_text_detection.pb"
+)
+MOBILECLIP_WEIGHTS_PATH = os.getenv(
+    "MOBILECLIP_WEIGHTS_PATH", "/app/assets/models/mobileclip_s0.pt"
+)
+MOBILECLIP_MODEL_NAME = os.getenv("MOBILECLIP_MODEL_NAME", "MobileCLIP-S0")

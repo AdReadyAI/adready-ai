@@ -1,5 +1,5 @@
 -- Persist Score Engine Result UI scores as relational columns (no jsonb blob).
--- File: 024_create_result_score_table.sql
+-- File: 026_create_result_score_table.sql
 -- Issue rows live in public.issuetable (Samy / migration 025).
 -- Edge Function remains read-only; orchestrator writes after scoring.
 -- Requires public.requests(request_id, batch_id) from an earlier migration.
@@ -7,9 +7,11 @@
 -- Write path: one row in result_score_table + six rows in result_score_dimensions.
 -- Dimension score NULL means Cannot Assess (API may use the string "Cannot Assess").
 
+-- batch_id is denormalized for query (same value as requests.batch_id for this
+-- request). Not a FK: requests.batch_id is not UNIQUE (many requests per batch).
 CREATE TABLE IF NOT EXISTS public.result_score_table (
   request_id uuid NOT NULL REFERENCES public.requests (request_id) ON DELETE CASCADE,
-  batch_id uuid NOT NULL REFERENCES public.requests (batch_id) ON DELETE CASCADE,
+  batch_id uuid NOT NULL,
   config_version text NOT NULL,
   ad_readiness_pct integer,
   readiness_status text NOT NULL,
@@ -61,8 +63,8 @@ CREATE INDEX IF NOT EXISTS idx_result_score_dimensions_dimension_id
 COMMENT ON TABLE public.result_score_table IS
   'Overall Ad Ready score and status for one request (Result UI).';
 
-COMMENT ON COLUMN public.result_score_table.ad_readiness_pct IS
-  'Integer 0–100, or NULL when Cannot Assess.';
+COMMENT ON COLUMN public.result_score_table.batch_id IS
+  'Copied from requests.batch_id for listing by batch; not a FK (batch_id is not unique).';
 
 COMMENT ON TABLE public.result_score_dimensions IS
   'Per-dimension scores for Result UI; one row per dimension per request.';

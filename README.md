@@ -65,7 +65,7 @@ early subset of it.
 
 Currently implemented:
 
-- Frontend routing and shared layout for upload, loading, and result pages
+- Frontend routing and shared layout for upload and result pages
 - Supabase browser-client configuration
 - Local Supabase configuration and database migrations
 - Initial PGMQ job creation and enqueue function
@@ -185,7 +185,7 @@ Start Vite:
 npm run dev
 ```
 
-Open <http://localhost:5173>. The current routes are `/upload`, `/loading`, and `/result`; each page
+Open <http://localhost:5173>. The current routes are `/upload` and `/result`; each page
 is a placeholder for its corresponding stage of the evaluation flow.
 
 ### 3. Start the media worker
