@@ -3,29 +3,20 @@ import {
   MetricResultSchema,
 } from "../shared/schemas.ts";
 
-import type {
-  AgentRunRequest,
-  MetricResult,
-} from "../shared/schemas.ts";
+import type { AgentRunRequest, MetricResult } from "../shared/schemas.ts";
 
 import {
   loadVisualQualityContext,
   persistVisualQualityResult,
 } from "./repository.ts";
 
-import {
-  auditVisualQuality,
-} from "./visual-audit.ts";
+import { auditVisualQuality } from "./visual-audit.ts";
 
-import {
-  evaluateProductionReadiness,
-} from "./metrics.ts";
+import { evaluateProductionReadiness } from "./metrics.ts";
 
-export const VisualQualityAgentRequestSchema =
-  AgentRunRequestSchema;
+export const VisualQualityAgentRequestSchema = AgentRunRequestSchema;
 
-export type VisualQualityAgentRequest =
-  AgentRunRequest;
+export type VisualQualityAgentRequest = AgentRunRequest;
 
 export type VisualQualityAgentRunOptions = {
   userId?: string;
