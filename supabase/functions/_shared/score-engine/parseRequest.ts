@@ -1,3 +1,4 @@
+import { ALL_METRIC_IDS } from "./config.ts";
 import type {
   Confidence,
   MetricId,
@@ -5,7 +6,6 @@ import type {
   MetricResultValue,
   Severity,
 } from "./types.ts";
-import { ALL_METRIC_IDS } from "./config.ts";
 
 const RESULTS = new Set<MetricResultValue>([
   "true",
@@ -24,6 +24,7 @@ const SEVERITIES = new Set<Severity>([
 const CONFIDENCES = new Set<Confidence>(["high", "medium", "low"]);
 
 const METRIC_IDS = new Set<string>(ALL_METRIC_IDS);
+const EXPECTED_METRIC_COUNT = ALL_METRIC_IDS.length;
 
 export interface ParseRequestSuccess {
   ok: true;
@@ -39,6 +40,7 @@ export type ParseRequestResult = ParseRequestSuccess | ParseRequestFailure;
 
 /**
  * Validate the thin Edge Function body: `{ "metric_results": MetricInput[] }`.
+ * Requires exactly the nine v0.3 metric_ids, each once.
  * Scoring rules stay in scoreEngine — this only checks shape/enums.
  */
 export function parseScoreEngineRequest(body: unknown): ParseRequestResult {
@@ -54,11 +56,16 @@ export function parseScoreEngineRequest(body: unknown): ParseRequestResult {
     };
   }
 
-  if (metricResults.length === 0) {
-    return { ok: false, error: '"metric_results" must not be empty' };
+  if (metricResults.length !== EXPECTED_METRIC_COUNT) {
+    return {
+      ok: false,
+      error:
+        `"metric_results" must contain exactly ${EXPECTED_METRIC_COUNT} items`,
+    };
   }
 
   const parsed: MetricInput[] = [];
+  const seen = new Set<MetricId>();
 
   for (let i = 0; i < metricResults.length; i++) {
     const row = metricResults[i];
@@ -76,6 +83,16 @@ export function parseScoreEngineRequest(body: unknown): ParseRequestResult {
         error: `metric_results[${i}].metric_id is invalid`,
       };
     }
+
+    const id = metricId as MetricId;
+    if (seen.has(id)) {
+      return {
+        ok: false,
+        error: `Duplicate metric_id "${id}" in metric_results`,
+      };
+    }
+    seen.add(id);
+
     if (
       typeof result !== "string" || !RESULTS.has(result as MetricResultValue)
     ) {
@@ -93,7 +110,7 @@ export function parseScoreEngineRequest(body: unknown): ParseRequestResult {
     }
 
     const input: MetricInput = {
-      metric_id: metricId as MetricId,
+      metric_id: id,
       result: result as MetricResultValue,
       severity: severity as Severity,
     };
@@ -146,7 +163,28 @@ export function parseScoreEngineRequest(body: unknown): ParseRequestResult {
       input.owner = owner;
     }
 
+    const videoTimestamp =
+      (row as { video_timestamp?: unknown }).video_timestamp;
+    if (videoTimestamp !== undefined) {
+      if (typeof videoTimestamp !== "string") {
+        return {
+          ok: false,
+          error: `metric_results[${i}].video_timestamp must be a string`,
+        };
+      }
+      input.video_timestamp = videoTimestamp;
+    }
+
     parsed.push(input);
+  }
+
+  for (const id of ALL_METRIC_IDS) {
+    if (!seen.has(id)) {
+      return {
+        ok: false,
+        error: `Missing required metric_id "${id}"`,
+      };
+    }
   }
 
   return { ok: true, metric_results: parsed };

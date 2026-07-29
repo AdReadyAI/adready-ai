@@ -81,9 +81,6 @@ export const SCORE_CONFIG_V0_3: ScoreEngineConfig = {
   gating_sort_effective_weight: 100,
 };
 
-/** @deprecated Use SCORE_CONFIG_V0_3. Alias kept for older imports. */
-export const SCORE_CONFIG_V0_2 = SCORE_CONFIG_V0_3;
-
 export const ALL_METRIC_IDS = Object.keys(
   SCORE_CONFIG_V0_3.weights,
 ) as Array<keyof typeof SCORE_CONFIG_V0_3.weights>;

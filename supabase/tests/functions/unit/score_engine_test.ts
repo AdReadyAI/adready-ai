@@ -64,30 +64,33 @@ Deno.test("metricScore applies severity deductions", () => {
   assertEquals(metricScore("critical"), 0);
 });
 
-Deno.test("mini-example returns 72 Needs Revision with v0.3 dims and fix confidence", () => {
+Deno.test("mini-example returns 72 Needs Revision with v0.3 dims and issue confidence", () => {
   const out = scoreEngine(MINI_EXAMPLE);
+  const { result_table, issues } = out;
 
-  assertEquals(out.config_version, "0.3");
-  assertEquals(out.ad_readiness_pct, 72);
-  assertEquals(out.readiness_status, "Needs Revision");
-  assertEquals(out.gating_failures, []);
+  assertEquals(result_table.config_version, "0.3");
+  assertEquals(result_table.ad_readiness_pct, 72);
+  assertEquals(result_table.readiness_status, "Needs Revision");
 
-  const byDim = Object.fromEntries(out.dimensions.map((d) => [d.id, d.score]));
+  const byDim = Object.fromEntries(
+    result_table.dimensions.map((d) => [d.id, d.score]),
+  );
   assertEquals(byDim.claims_accuracy, 0);
   assertEquals(byDim.product_representation, 100);
-  assertEquals(byDim.storyline_brief, 91.1);
+  assertEquals(byDim.storyline_brief, 91);
   assertEquals(byDim.cta_effectiveness, 60);
   assertEquals(byDim.brand_alignment, 100);
   assertEquals(byDim.visual_asset_quality, 100);
 
   assertEquals(
-    out.priority_fix_list.map((f) => f.metric_id),
+    issues.map((f) => f.metric_id),
     ["product_truth", "cta_clarity", "brief_adherence"],
   );
   assertEquals(
-    out.priority_fix_list.map((f) => f.confidence),
+    issues.map((f) => f.confidence),
     ["high", "low", "medium"],
   );
+  assertEquals(issues[0].title, "product_truth");
 });
 
 Deno.test("confidence does not change Ad Ready %", () => {
@@ -115,9 +118,12 @@ Deno.test("confidence does not change Ad Ready %", () => {
         : row
     ),
   );
-  assertEquals(withLow.ad_readiness_pct, withHigh.ad_readiness_pct);
-  assertEquals(withLow.priority_fix_list[0].confidence, "low");
-  assertEquals(withHigh.priority_fix_list[0].confidence, "high");
+  assertEquals(
+    withLow.result_table.ad_readiness_pct,
+    withHigh.result_table.ad_readiness_pct,
+  );
+  assertEquals(withLow.issues[0].confidence, "low");
+  assertEquals(withHigh.issues[0].confidence, "high");
 });
 
 Deno.test("policy_compliance high failure is High Risk gating", () => {
@@ -127,13 +133,30 @@ Deno.test("policy_compliance high failure is High Risk gating", () => {
       : row
   );
   const out = scoreEngine(inputs);
-  assertEquals(out.ad_readiness_pct, 100);
-  assertEquals(out.readiness_status, "High Risk");
-  assertEquals(out.gating_failures.length, 1);
-  assertEquals(out.gating_failures[0].metric_id, "policy_compliance");
-  assertEquals(out.priority_fix_list[0].metric_id, "policy_compliance");
-  assertEquals(out.priority_fix_list[0].is_gating_failure, true);
-  assertEquals(out.priority_fix_list[0].confidence, "unknown");
+  assertEquals(out.result_table.ad_readiness_pct, 100);
+  assertEquals(out.result_table.readiness_status, "High Risk");
+  assertEquals(out.issues[0].metric_id, "policy_compliance");
+  assertEquals(out.issues[0].title, "Compliance Readiness");
+  assertEquals(out.issues[0].confidence, "unknown");
+});
+
+Deno.test("maps explanation and recommended_fix to issuetable fields", () => {
+  const inputs = allTrue().map((row) =>
+    row.metric_id === "product_truth"
+      ? {
+        ...row,
+        result: "false" as const,
+        severity: "critical" as const,
+        explanation: "Claim not supported",
+        recommended_fix: "Remove claim",
+        video_timestamp: "00:12",
+      }
+      : row
+  );
+  const out = scoreEngine(inputs);
+  assertEquals(out.issues[0].detail, "Claim not supported");
+  assertEquals(out.issues[0].repair_suggestion, "Remove claim");
+  assertEquals(out.issues[0].video_timestamp, "00:12");
 });
 
 Deno.test("production_readiness medium failure does not gate", () => {
@@ -143,10 +166,10 @@ Deno.test("production_readiness medium failure does not gate", () => {
       : row
   );
   const out = scoreEngine(inputs);
-  assertEquals(out.gating_failures, []);
-  assertEquals(out.readiness_status, "Ready");
+  assertEquals(out.result_table.readiness_status, "Ready");
   assertEquals(
-    out.dimensions.find((d) => d.id === "visual_asset_quality")?.score,
+    out.result_table.dimensions.find((d) => d.id === "visual_asset_quality")
+      ?.score,
     80,
   );
 });
@@ -158,7 +181,19 @@ Deno.test("cannot_assess is excluded from Ad Ready % weight sum", () => {
       : row
   );
   const out = scoreEngine(inputs);
-  assertEquals(out.applicable_weight_sum, 90);
-  assertEquals(out.ad_readiness_pct, 100);
-  assertEquals(out.readiness_status, "Ready");
+  assertEquals(out.result_table.ad_readiness_pct, 100);
+  assertEquals(out.result_table.readiness_status, "Ready");
+});
+
+Deno.test("all cannot_assess dimension score is Cannot Assess", () => {
+  const inputs = allTrue().map((row) =>
+    row.metric_id === "brand_fit"
+      ? { ...row, result: "cannot_assess" as const, severity: "none" as const }
+      : row
+  );
+  const out = scoreEngine(inputs);
+  assertEquals(
+    out.result_table.dimensions.find((d) => d.id === "brand_alignment")?.score,
+    "Cannot Assess",
+  );
 });

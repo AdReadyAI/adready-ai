@@ -2,16 +2,16 @@ import { SCORE_CONFIG_V0_3 } from "./config.ts";
 import type {
   Confidence,
   ConfidenceLevel,
-  DimensionScore,
-  FixListItem,
   GatingFailure,
+  IssueRow,
   MetricId,
   MetricInput,
   MetricResultValue,
   ReadinessStatus,
+  ResultDimension,
   ScoredMetric,
   ScoreEngineConfig,
-  ScoreEngineOutput,
+  ScoreTablesOutput,
   Severity,
 } from "./types.ts";
 
@@ -30,6 +30,17 @@ const GATING_SEVERITY_RANK: Record<"high" | "critical", number> = {
 
 function round1(n: number): number {
   return Number(n.toFixed(1));
+}
+
+function roundInt(n: number): number {
+  return Math.round(n);
+}
+
+/** Internal dimension rollup before public result-table serialization. */
+interface InternalDimension {
+  id: string;
+  name: string;
+  score: number | null;
 }
 
 /** true / cannot_assess always use severity none. */
@@ -110,6 +121,7 @@ function scoreOne(
     confidence: normalizeConfidence(input?.confidence),
     explanation: input?.explanation,
     recommended_fix: input?.recommended_fix,
+    video_timestamp: input?.video_timestamp,
     owner: input?.owner,
   };
 }
@@ -140,7 +152,7 @@ function computeAdReadinessPct(
 function computeDimensions(
   byId: Map<MetricId, ScoredMetric>,
   config: ScoreEngineConfig,
-): DimensionScore[] {
+): InternalDimension[] {
   return config.display_dimensions.map((dim) => {
     const members = dim.metrics
       .map((id) => byId.get(id))
@@ -151,8 +163,6 @@ function computeDimensions(
         id: dim.id,
         name: dim.name,
         score: null,
-        metrics: dim.metrics,
-        also_gating: dim.also_gating,
       };
     }
 
@@ -163,8 +173,6 @@ function computeDimensions(
         id: dim.id,
         name: dim.name,
         score: members[0].metric_score,
-        metrics: dim.metrics,
-        also_gating: dim.also_gating,
       };
     }
 
@@ -176,10 +184,16 @@ function computeDimensions(
       id: dim.id,
       name: dim.name,
       score: round1(weighted / weightSum),
-      metrics: dim.metrics,
-      also_gating: dim.also_gating,
     };
   });
+}
+
+function toResultDimensions(dims: InternalDimension[]): ResultDimension[] {
+  return dims.map((d) => ({
+    id: d.id,
+    name: d.name,
+    score: d.score === null ? "Cannot Assess" : roundInt(d.score),
+  }));
 }
 
 function computeStatus(
@@ -202,10 +216,27 @@ function computeStatus(
   return "High Risk";
 }
 
-function buildFixList(
+function issueTitle(
+  metric: ScoredMetric,
+  config: ScoreEngineConfig,
+): string {
+  if (metric.is_gating_failure) {
+    const rule = config.gating_rules.find((r) =>
+      r.metric_id === metric.metric_id
+    );
+    if (rule?.label) return rule.label;
+  }
+  return metric.metric_id;
+}
+
+/**
+ * Build issuetable-shaped rows (no request_id / batch_id — orchestrator fills those).
+ * Array order is priority (gating → severity → weight).
+ */
+function buildIssues(
   metrics: ScoredMetric[],
   config: ScoreEngineConfig,
-): FixListItem[] {
+): IssueRow[] {
   return metrics
     .filter((m) => m.result === "false")
     .sort((a, b) => {
@@ -222,26 +253,32 @@ function buildFixList(
 
       return a.metric_id.localeCompare(b.metric_id);
     })
-    .map((m, index) => ({
-      priority: index + 1,
-      metric_id: m.metric_id,
-      severity: m.severity,
-      is_gating_failure: m.is_gating_failure,
-      confidence: m.confidence,
-      explanation: m.explanation,
-      recommended_fix: m.recommended_fix,
-      owner: m.owner,
-    }));
+    .map((m) => {
+      const row: IssueRow = {
+        metric_id: m.metric_id,
+        title: issueTitle(m, config),
+        severity: m.severity,
+        confidence: m.confidence,
+      };
+      if (m.explanation !== undefined) row.detail = m.explanation;
+      if (m.recommended_fix !== undefined) {
+        row.repair_suggestion = m.recommended_fix;
+      }
+      if (m.video_timestamp !== undefined) {
+        row.video_timestamp = m.video_timestamp;
+      }
+      return row;
+    });
 }
 
 /**
- * Score Engine v0.3: metric_results → Ad Ready %, status, dimensions, gating, fix list.
- * Confidence is passthrough on metrics / fix list only (non-scoring).
+ * Score Engine v0.3: metric_results → result_table + issuetable-shaped issues[].
+ * Confidence is passthrough on issues only (non-scoring).
  */
 export function scoreEngine(
   inputs: MetricInput[],
   config: ScoreEngineConfig = SCORE_CONFIG_V0_3,
-): ScoreEngineOutput {
+): ScoreTablesOutput {
   const byInput = indexInputs(inputs);
   const metricIds = Object.keys(config.weights) as MetricId[];
 
@@ -250,7 +287,7 @@ export function scoreEngine(
   );
   const byId = new Map(metricResults.map((m) => [m.metric_id, m]));
 
-  const { pct, weightSum } = computeAdReadinessPct(metricResults, config);
+  const { pct } = computeAdReadinessPct(metricResults, config);
 
   const gatingFailures: GatingFailure[] = metricResults
     .filter((m) => m.is_gating_failure)
@@ -265,16 +302,15 @@ export function scoreEngine(
 
   const dimensions = computeDimensions(byId, config);
   const readiness_status = computeStatus(pct, gatingFailures, config);
-  const priority_fix_list = buildFixList(metricResults, config);
+  const issues = buildIssues(metricResults, config);
 
   return {
-    config_version: config.version,
-    ad_readiness_pct: pct,
-    readiness_status,
-    applicable_weight_sum: weightSum,
-    metric_results: metricResults,
-    dimensions,
-    gating_failures: gatingFailures,
-    priority_fix_list,
+    result_table: {
+      config_version: config.version,
+      ad_readiness_pct: pct === null ? null : roundInt(pct),
+      readiness_status,
+      dimensions: toResultDimensions(dimensions),
+    },
+    issues,
   };
 }

@@ -1,24 +1,18 @@
 # AdReady Score Engine Proposal v0.3
-**Base:** Proposal v0.2 + Rubric v0.3 metric merge + confidence (issue-only) discussion 2026-07-24
 
-Legend: **`[OPEN]`** = tunable on golden set
+**Owned by:** Leijie Tao (Eval / Score Engine)  
+**Status:** Current (sole) Score Engine design version  
+**Companion config:** `score_config_v0.3.yaml`  
+**Legend:** **`[OPEN]`** = tunable on golden set
 
-
-**What changed vs v0.2**
-
-| Area | v0.2 | v0.3 |
-|------|------|------|
-| Rubric metrics | 10 (`audience_fit` + `channel_readiness` separate) | **9** — merge → `audience_channel_fit` |
-| Scored metrics | 8 (weights sum 100) | **7** (weights sum 100); **Plan A** locked (Plan B kept as rejected alternative) |
-| Storyline & Brief | brief + creative + `channel_readiness` | brief + creative + **`audience_channel_fit`** |
-| Brand Alignment | `brand_fit` + `audience_fit` | **`brand_fit` only** |
-| Confidence | not in proposal | **Issue / fix-list only**; does **not** affect scores |
-
-Severity deductions, overall formula, gating, status thresholds, fix-list sort keys: **unchanged** from v0.2.
+Public API output shape: `{ result_table, issues }` (`ScoreTablesOutput`).  
+Result UI / DB: `result_score_table` + `result_score_dimensions` (migration 024, pure columns).  
+Issue UI / DB: `public.issuetable` (migration 025); engine emits `issues[]` with matching column names.  
+Wire types: `ResultTable` / `IssueRow` / `ScoreTablesOutput` in `_shared/score-engine/types.ts`.
 
 ---
 
-## 1. Rubric v0.3 — 9 Metrics
+## 1. Rubric — 9 Metrics
 
 | # | metric_id | Role |
 |---|-----------|------|
@@ -26,8 +20,7 @@ Severity deductions, overall formula, gating, status thresholds, fix-list sort k
 | 8 | `production_readiness` | **Visual dimension score** + **gating**; weight **0** in Ad Ready % |
 | 9 | `policy_compliance` | **Gating only** (no display dimension); weight 0 |
 
-**Removed vs v0.2:** `audience_fit`, `channel_readiness`.  
-**Added:** `audience_channel_fit` — platform / placement / duration / viewing context **and** target audience needs/motivations (per Rubric v0.3 Channel / Placement question).
+`audience_channel_fit` covers platform / placement / duration / viewing context **and** target audience needs/motivations (Rubric Channel / Placement). Legacy separate ids `audience_fit` / `channel_readiness` are **not** accepted.
 
 Agents emit all **9** with `metric_id`. `cannot_assess` → exclude from % / applicable dimension rollup.
 
@@ -35,7 +28,7 @@ Agents emit all **9** with `metric_id`. `cannot_assess` → exclude from % / app
 
 ## 2. Per-metric score (severity deduction)
 
-Same as v0.2. Applies to **scored metrics (1–7)** for Ad Ready %, and to **`production_readiness`** for the Visual bar. `policy_compliance` keeps `result`/`severity` for gating + fix list only.
+Applies to **scored metrics (1–7)** for Ad Ready %, and to **`production_readiness`** for the Visual bar. `policy_compliance` keeps `result`/`severity` for gating + fix list only.
 
 | result | severity used |
 |--------|---------------|
@@ -68,13 +61,13 @@ Ad Readiness % =
   for applicable scored metrics 1–7 (result ≠ cannot_assess)
 ```
 
-`production_readiness` / `policy_compliance` weight = 0 → **not** in Ad Ready %.
+`production_readiness` / `policy_compliance` weight = 0 → **not** in Ad Ready %.  
+Dimension totals do **not** drive overall % — only each metric’s own weight does.  
+Public `result_table.ad_readiness_pct` is an **integer** 0–100 (or `null` when Cannot Assess).
 
-Dimension totals do **not** drive overall % — only each metric’s own weight does.
+### Weights (Plan A, locked)
 
-### Weights 
-
-Merging removed 20 weight (`audience_fit` 10 + `channel_readiness` 10) and introduced `audience_channel_fit`. Scored sum remains **100**.
+Scored sum = **100**.
 
 | metric_id | Weight |
 |-----------|--------|
@@ -87,15 +80,15 @@ Merging removed 20 weight (`audience_fit` 10 + `channel_readiness` 10) and intro
 | `creative_effectiveness` | **10** |
 | **Total** | **100** |
 
-**Why Plan A:** After the merge, the `audience_channel_fit` question is not compressed. This metric still covers channel, placement, and audience, so it keeps a higher weight (**15**). Separately, `creative_effectiveness` was underweighted: even a severe creative failure barely moved the overall score or ship decision, so its weight increases by 5 (**5 → 10**).
+**Why Plan A:** `audience_channel_fit` still covers channel, placement, and audience, so it keeps weight **15**. `creative_effectiveness` was underweighted for ship decisions, so it is **10**.
 
 #### Alternative considered (not selected): Plan B
 
-Earlier draft: `audience_channel_fit` 10 · `cta_clarity` 15 · `creative_effectiveness` 10. Superseded by locked Plan A above.
+`audience_channel_fit` 10 · `cta_clarity` 15 · `creative_effectiveness` 10. Superseded by Plan A.
 
 ---
 
-## 4. Display: → 6 dimensions
+## 4. Display → 6 dimensions
 
 ### Mapping
 
@@ -103,14 +96,14 @@ Earlier draft: `audience_channel_fit` 10 · `cta_clarity` 15 · `creative_effect
 |-------------------|---------|-----------------|
 | Claims Accuracy | `product_truth` | that `metric_score` |
 | Product Representation | `product_clarity` | that `metric_score` |
-| Storyline & Brief | `brief_adherence`, `creative_effectiveness`, **`audience_channel_fit`** | weight-aware average |
+| Storyline & Brief | `brief_adherence`, `creative_effectiveness`, `audience_channel_fit` | weight-aware average |
 | CTA Effectiveness | `cta_clarity` | that `metric_score` |
-| Brand Alignment | **`brand_fit` only** | that `metric_score` |
+| Brand Alignment | `brand_fit` only | that `metric_score` |
 | Visual / Asset Quality | `production_readiness` | that `metric_score` (0–100); **excluded from Ad Ready %** |
 
 `policy_compliance` remains gating-only (no dimension bar).
 
-### Merge rule — **weight-aware average** (unchanged)
+### Merge rule — weight-aware average
 
 ```
 dimension_score =
@@ -118,13 +111,14 @@ dimension_score =
   for applicable metrics j in that dimension
 ```
 
-Visual / single-metric dims → that `metric_score`. All `cannot_assess` in a dimension → Cannot Assess.
+Visual / single-metric dims → that `metric_score`.  
+All `cannot_assess` in a dimension → public score **`"Cannot Assess"`** (integer otherwise).
+
+Frontend display order/labels may differ; match rows by dimension `id`.
 
 ---
 
 ## 5. Gating & readiness status
-
-Unchanged from v0.2.
 
 ```
 metric_id ∈ {production_readiness, policy_compliance}
@@ -137,16 +131,14 @@ AND severity ∈ {high, critical}
 | Ready | No gating AND % ≥ **85** |
 | Needs Revision | No gating AND % **65–84** |
 | High Risk | Any gating OR % < **65** |
-| Cannot Assess | Global inputs missing |
+| Cannot Assess | No applicable scored weight (and no gating) |
 
 ---
 
 ## 6. Priority fix list — Score Engine owns sort (3 keys)
 
-Unchanged from v0.2.
-
 Candidates: all `result = false` metrics (including gates).  
-**Not** candidates: `result = true` or `cannot_assess` (severity is `none` under contract → never on fix list when valid).
+**Not** candidates: `result = true` or `cannot_assess`.
 
 | Order | Key |
 |-------|-----|
@@ -154,20 +146,16 @@ Candidates: all `result = false` metrics (including gates).
 | 2 | **Severity** critical → high → medium → low |
 | 3 | Within same severity: **metric weight** desc |
 
-Each item includes `metric_id`, plus agent correction / explanation / owner when present, and **confidence** (§7).
+Each issue includes `metric_id`, `title`, `severity`, `confidence`, and optional
+`detail` / `repair_suggestion` / `video_timestamp` (issuetable column names).  
+Agent input may still use `explanation` / `recommended_fix`; the engine renames on output.  
+Public payload: `issues[]` (array order = priority). Orchestrator adds `request_id` / `batch_id` on INSERT.
 
 ---
 
 ## 7. Confidence (issue / fix-list only)
 
-### Principles
-
-- Confidence is a **side-channel**. It does **not** change `metric_score`, Ad Ready %, dimension bars, gating, or status.
-- UI surfaces (score table vs issue table):
-  - **scores** → **no** confidence
-  - **Issue / fix list** → **yes**, one level per issue
-
-### Agent result
+### Agent field
 
 Optional on each metric row:
 
@@ -175,19 +163,21 @@ Optional on each metric row:
 |-------|--------|
 | `confidence` | `high` \| `medium` \| `low` |
 
-If the field is **omitted** (old fixtures, partial agents, unlabeled golden), Score Engine normalizes to **`unknown`**. Do **not** invent `high`. UI may hide the badge or show “—” for `unknown`.
+If **omitted**, Score Engine normalizes to **`unknown`**. Do **not** invent `high`. UI may hide the badge or show “—” for `unknown`.
 
-### How it appears on issues
+### On issues
 
-- Fix list item confidence = that failed metric’s `confidence` (after omit → `unknown`).
-- No multi-metric rollup: one issue ↔ one `metric_id` ↔ one level.
-- `result = true` with low confidence does **not** create a fix-list row (not an “issue” under current rules).
+- Fix-list item confidence = that failed metric’s `confidence` (after omit → `unknown`).
+- One issue ↔ one `metric_id` ↔ one level (no multi-metric rollup).
+- `result = true` with low confidence does **not** create a fix-list row.
+
+Fix-list sort stays gating → severity → weight. Confidence is **not** a sort key.
 
 ---
 
 ## 8. Mini-example (Plan A)
 
-Same failure pattern as v0.2, mapped to v0.3 ids: `product_truth` critical, `cta_clarity` high, `brief_adherence` medium; others pass; gates pass.
+Failures: `product_truth` critical, `cta_clarity` high, `brief_adherence` medium; others pass; gates pass.
 
 | metric | severity | score | coef | w | w×coef |
 |--------|----------|-------|------|---|--------|
@@ -200,17 +190,22 @@ Same failure pattern as v0.2, mapped to v0.3 ids: `product_truth` critical, `cta
 | audience_channel_fit | none | 100 | 1 | 15 | 15 |
 | | | | | **100** | **72** |
 
-**Ad Readiness % = 72** → Needs Revision (no gate).
-
-Storyline & Brief: `(20×80 + 10×100 + 15×100) / 45 ≈ 91.1`.  
-Brand Alignment: `brand_fit = 100`.  
-Fix order: product_truth → cta_clarity → brief_adherence (each may carry its own confidence badge).
+**Ad Readiness % = 72** → Needs Revision (no gate).  
+Storyline & Brief ≈ 91.1 → public integer **91**.  
+Fix order: product_truth → cta_clarity → brief_adherence (each may carry confidence).
 
 ---
 
-## 9. Implementation / handoff notes
+## 9. Implementation / handoff
 
-- Config companion: `score_config_v0.3.yaml` (Plan A locked).
-- Code: `supabase/functions/_shared/score-engine/` implements v0.3 Plan A + issue confidence.
-- Golden schema / agents contract: drop two ids, add `audience_channel_fit`; optional `confidence` on metrics.
-- Related draft: `confidence_handling_plan.md` — **§7 here is normative**; dimension badges are not required.
+| Artifact | Role |
+|----------|------|
+| `score_config_v0.3.yaml` | Machine-readable companion (Plan A locked) |
+| `supabase/functions/_shared/score-engine/` | Pure Score Engine + parser |
+| `supabase/functions/score-engine/` | Thin Edge: POST → `{ result_table, issues }` |
+| `024_create_result_score_table.sql` | `result_score_table` + `result_score_dimensions` (pure columns) |
+| `_shared/score-engine/types.ts` | Edge/API TypeScript shapes (`ResultTable`, `IssueRow`, …) |
+| `025` / `public.issuetable` | Issue rows (engine does not write this table) |
+
+Orchestrator writes result columns and issue rows; Edge does not write Postgres.
+

@@ -1,8 +1,4 @@
-export {
-  ALL_METRIC_IDS,
-  SCORE_CONFIG_V0_2,
-  SCORE_CONFIG_V0_3,
-} from "./config.ts";
+export { ALL_METRIC_IDS, SCORE_CONFIG_V0_3 } from "./config.ts";
 export { parseScoreEngineRequest } from "./parseRequest.ts";
 export type {
   ParseRequestFailure,
@@ -18,15 +14,16 @@ export {
 export type {
   Confidence,
   ConfidenceLevel,
-  DimensionScore,
-  FixListItem,
   GatingFailure,
+  IssueRow,
   MetricId,
   MetricInput,
   MetricResultValue,
   ReadinessStatus,
+  ResultDimension,
+  ResultTable,
   ScoredMetric,
   ScoreEngineConfig,
-  ScoreEngineOutput,
+  ScoreTablesOutput,
   Severity,
 } from "./types.ts";

@@ -25,18 +25,25 @@ export type ReadinessStatus =
   | "High Risk"
   | "Cannot Assess";
 
-/** One agent (or golden) metric row. Score Engine ignores any agent-provided score. */
+/**
+ * One agent (or golden) metric row. Score Engine ignores any agent-provided score.
+ * explanation / recommended_fix are accepted on input and emitted as
+ * detail / repair_suggestion on IssueRow (issuetable column names).
+ */
 export interface MetricInput {
   metric_id: MetricId;
   result: MetricResultValue;
   severity: Severity;
-  /** Optional. Omitted → `unknown` on output / fix list. */
+  /** Optional. Omitted → `unknown` on issue rows. */
   confidence?: Confidence;
   explanation?: string;
   recommended_fix?: string;
+  /** Optional passthrough onto IssueRow.video_timestamp. */
+  video_timestamp?: string;
   owner?: string;
 }
 
+/** Internal scored metric row (not part of the public response). */
 export interface ScoredMetric {
   metric_id: MetricId;
   result: MetricResultValue;
@@ -51,45 +58,60 @@ export interface ScoredMetric {
   confidence: ConfidenceLevel;
   explanation?: string;
   recommended_fix?: string;
+  video_timestamp?: string;
   owner?: string;
 }
 
-export interface DimensionScore {
-  id: string;
-  name: string;
-  /** null when all member metrics are cannot_assess. */
-  score: number | null;
-  metrics: MetricId[];
-  also_gating?: boolean;
-}
-
+/** Internal gating row used while computing status / High Risk. */
 export interface GatingFailure {
   metric_id: MetricId;
   severity: Severity;
   label: string;
 }
 
-export interface FixListItem {
-  priority: number;
+/**
+ * One issue row shaped for public.issuetable (Samy).
+ * Orchestrator adds request_id, batch_id, created_at on INSERT.
+ * Array order is the Score Engine priority order (not a stored column).
+ */
+export interface IssueRow {
   metric_id: MetricId;
+  title: string;
+  detail?: string;
   severity: Severity;
-  is_gating_failure: boolean;
-  /** Issue-only confidence badge; does not affect scores. */
   confidence: ConfidenceLevel;
-  explanation?: string;
-  recommended_fix?: string;
-  owner?: string;
+  repair_suggestion?: string;
+  video_timestamp?: string;
 }
 
-export interface ScoreEngineOutput {
+/** One dimension cell on the result table. */
+export interface ResultDimension {
+  id: string;
+  name: string;
+  /** Integer 0–100, or Cannot Assess when no applicable member metrics. */
+  score: number | "Cannot Assess";
+}
+
+/**
+ * Frontend / Edge result payload.
+ * DB stores the same fields as columns on result_score_table + result_score_dimensions.
+ */
+export interface ResultTable {
   config_version: string;
+  /** Integer 0–100, or null when status is Cannot Assess. */
   ad_readiness_pct: number | null;
   readiness_status: ReadinessStatus;
-  applicable_weight_sum: number;
-  metric_results: ScoredMetric[];
-  dimensions: DimensionScore[];
-  gating_failures: GatingFailure[];
-  priority_fix_list: FixListItem[];
+  dimensions: ResultDimension[];
+}
+
+/**
+ * Public Score Engine response.
+ * result_table → result_score_table + result_score_dimensions (orchestrator);
+ * issues[] → issuetable rows.
+ */
+export interface ScoreTablesOutput {
+  result_table: ResultTable;
+  issues: IssueRow[];
 }
 
 export interface ScoreEngineConfig {

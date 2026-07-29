@@ -1,12 +1,12 @@
 /**
  * Thin Edge Function: score-engine
  *
- * Stateless HTTP wrapper around the shared Score Engine v0.2.
+ * Stateless HTTP wrapper around the shared Score Engine v0.3.
  * Does not write to Postgres or invoke agents.
  *
  * POST /functions/v1/score-engine
  * Body: { "metric_results": MetricInput[] }
- * Response: ScoreEngineOutput
+ * Response: ScoreTablesOutput ({ result_table, issues })
  */
 import {
   parseScoreEngineRequest,
