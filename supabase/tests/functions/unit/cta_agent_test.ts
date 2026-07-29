@@ -21,6 +21,13 @@ import type {
 import { withChat } from "../support/stub_chat.ts";
 import { makeAgentContext } from "../support/fixtures.ts";
 
+const UNPOPULATED: CtaConfig = {
+  timing: null,
+  visibility: null,
+  phrasing: null,
+  goalBenchmarkPresent: false,
+};
+
 const POPULATED: CtaConfig = {
   timing: {
     buried_window_ms: 5000,
@@ -252,8 +259,9 @@ Deno.test("sparse: both calls malformed + unpopulated config → single cannot_a
       campaign_goal: "conversion",
       ocr_segments: [],
     });
-    // No config arg → resolves from the null global config surface.
-    const results = await runCtaAgent(ctx);
+    // Explicit unpopulated config → the degraded path, independent of whether
+    // the global config surface has since been populated.
+    const results = await runCtaAgent(ctx, UNPOPULATED);
     assertEquals(results.length, 1);
     assertEquals(results[0].result, "cannot_assess");
   }));

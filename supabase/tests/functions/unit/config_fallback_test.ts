@@ -2,10 +2,12 @@
  * Unit tests for the per-agent config scaffolding (each agent's config.ts) and
  * the config gate (gateOnConfig in each agent's checks.ts).
  *
- * The contract these lock in: every unresolved dependency defaults to null
- * (unpopulated), and a sub-check gated on it degrades to `cannot_assess` — never
- * a silent guess. One assertion per dependency, plus the gate's open path and
- * the sub-check builders.
+ * The contract these lock in: a sub-check gated on a dependency degrades to
+ * `cannot_assess` when that dependency is missing (null) — never a silent guess.
+ * That gate contract is tested with an explicit null so it holds regardless of
+ * whether the live tables are populated. Each dependency below is now populated
+ * (Config Decisions doc), so its accessor is asserted non-null, plus the gate's
+ * open path and the sub-check builders.
  */
 
 import { assertEquals } from "@std/assert";
@@ -27,9 +29,10 @@ import {
 } from "../../../functions/cta-effectiveness-agent/config.ts";
 
 /**
- * Each unresolved dependency: a human name, its default accessor (must be null),
- * and the sub-check it gates. The gate must return cannot_assess for all of them
- * until the underlying table/threshold is populated.
+ * Each dependency: a human name, its populated accessor (now non-null), and the
+ * sub-check it gates. The accessor is looked up with a key/value that the doc
+ * populated, so it must resolve. The gate must still return cannot_assess when
+ * the dependency is missing — verified below with an explicit null.
  */
 const DEPENDENCIES: {
   dependency: string;
@@ -39,7 +42,7 @@ const DEPENDENCIES: {
   {
     dependency: "platform spec table",
     checkId: "format_noncompliant",
-    accessor: () => getPlatformSpec("tiktok"),
+    accessor: () => getPlatformSpec("TikTok"),
   },
   {
     dependency: "arc-expectation table",
@@ -59,7 +62,7 @@ const DEPENDENCIES: {
   {
     dependency: "cta phrasing table",
     checkId: "cta_platform_mismatch",
-    accessor: () => getPlatformPhrasing("tiktok"),
+    accessor: () => getPlatformPhrasing("TikTok"),
   },
   {
     dependency: "goal→CTA-type benchmark",
@@ -69,13 +72,15 @@ const DEPENDENCIES: {
 ];
 
 for (const { dependency, checkId, accessor } of DEPENDENCIES) {
-  Deno.test(`config unpopulated: ${dependency} accessor returns null`, () => {
-    assertEquals(accessor(), null);
+  Deno.test(`config populated: ${dependency} accessor resolves non-null`, () => {
+    assertEquals(accessor() !== null, true);
   });
 
-  Deno.test(`fallback: ${checkId} degrades to cannot_assess while ${dependency} is missing`, () => {
+  Deno.test(`fallback: ${checkId} degrades to cannot_assess when ${dependency} is missing`, () => {
     const result = gateOnConfig(
-      accessor(),
+      // Explicit null (not the live accessor): the gate contract must hold
+      // whether or not the real table is populated.
+      null,
       checkId,
       checkId,
       `${dependency} not yet populated`,
@@ -137,4 +142,28 @@ Deno.test("sub-check builders produce well-formed rows", () => {
     severity: "cannot_assess",
     explanation: "no data",
   });
+});
+
+Deno.test("getPlatformSpec resolves regardless of casing/whitespace", () => {
+  const canonical = getPlatformSpec("TikTok");
+  assertEquals(canonical !== null, true);
+  // destination_platform arrives in varied casing from parsed_creative_briefs;
+  // the lookup must still resolve to the same spec.
+  assertEquals(getPlatformSpec("tiktok"), canonical);
+  assertEquals(getPlatformSpec("  TIKTOK  "), canonical);
+  assertEquals(getPlatformSpec("instagram reels") !== null, true);
+  // A genuinely unmapped platform still returns null → gate stays cannot_assess.
+  assertEquals(getPlatformSpec("Snapchat"), null);
+});
+
+Deno.test("getPlatformPhrasing resolves regardless of casing/whitespace", () => {
+  const canonical = getPlatformPhrasing("TikTok");
+  assertEquals(canonical !== null, true);
+  // destination_platform arrives in varied casing from parsed_creative_briefs;
+  // the lookup must still resolve to the same phrasing.
+  assertEquals(getPlatformPhrasing("tiktok"), canonical);
+  assertEquals(getPlatformPhrasing("  TIKTOK  "), canonical);
+  assertEquals(getPlatformPhrasing("instagram reels") !== null, true);
+  // A genuinely unmapped platform still returns null → gate stays cannot_assess.
+  assertEquals(getPlatformPhrasing("Snapchat"), null);
 });

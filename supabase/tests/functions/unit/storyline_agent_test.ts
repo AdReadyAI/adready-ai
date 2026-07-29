@@ -25,7 +25,10 @@ const POPULATED: StorylineConfig = {
     optimal_max_duration_ms: 30000,
     max_duration_ms: 60000,
   },
-  arcExpectationPresent: true,
+  arcExpectation: {
+    expected_roles: ["hook", "problem", "payoff"],
+    expect_payoff_resolved: true,
+  },
 };
 
 const ARC_OK = JSON.stringify({
@@ -100,6 +103,34 @@ Deno.test("happy path with populated config: both metrics pass", () =>
     ]);
     assertEquals(byId.get("creative_effectiveness")!.result, "true");
     assertEquals(byId.get("creative_effectiveness")!.severity, "none");
+  }));
+
+Deno.test("story_incomplete gates to cannot_assess when arcExpectation is null, even if the LLM graded it", () =>
+  withChat([
+    ARC_OK,
+    evalJson([
+      { check_id: "hook_missing", result: "passed", severity: "none" },
+      { check_id: "narrative_gap", result: "passed", severity: "none" },
+      { check_id: "value_prop_unclear", result: "passed", severity: "none" },
+      {
+        check_id: "story_incomplete",
+        result: "failed",
+        severity: "medium",
+        explanation: "arc left unresolved",
+      },
+      { check_id: "pacing_misallocation", result: "passed", severity: "none" },
+      { check_id: "placement_mismatch", result: "passed", severity: "none" },
+    ]),
+  ], async () => {
+    const config: StorylineConfig = { ...POPULATED, arcExpectation: null };
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), config),
+    );
+    const story = byId.get("creative_effectiveness")!.sub_checks!.find(
+      (s) => s.check_id === "story_incomplete",
+    )!;
+    assertEquals(story.result, "cannot_assess");
+    assertEquals(story.severity, "cannot_assess");
   }));
 
 Deno.test("placement_mismatch failure rolls up into channel_readiness (format passes)", () =>
@@ -297,10 +328,15 @@ Deno.test("total LLM failure: deterministic channel still stands, creative → c
     assertEquals(byId.get("creative_effectiveness")!.result, "cannot_assess");
   }));
 
-Deno.test("default (unpopulated) config: channel judged on the LLM placement check", () =>
+Deno.test("unmapped platform: channel judged on the LLM placement check", () =>
   withChat([ARC_OK, ALL_PASS], async () => {
-    // No config arg → resolves from the (null) global config surface.
-    const byId = metricsById(await runStorylineAgent(makeAgentContext()));
+    // No config arg → resolves from the global config surface. An unmapped
+    // platform has no spec row, so getPlatformSpec returns null.
+    const byId = metricsById(
+      await runStorylineAgent(
+        makeAgentContext({ destination_platform: "Snapchat" }),
+      ),
+    );
     const channel = byId.get("channel_readiness")!;
     // format_noncompliant gates off (null spec) → cannot_assess, but the LLM
     // placement_mismatch check is not config-gated and passes, so the metric stands.
@@ -351,12 +387,13 @@ Deno.test("sparse context + all-cannot_assess LLM: two rows, graceful, no throw"
     ], { confidence: "low" }),
   ], async () => {
     const sparse = makeAgentContext({
+      destination_platform: "Snapchat",
       transcript_segments: [],
       visual_frames: [],
       ocr_segments: [],
     });
-    // Default (unpopulated) config: the deterministic check gates off and the LLM
-    // abstains, so nothing is assessable — graceful cannot_assess, no fake pass.
+    // Unmapped platform (null spec) → the deterministic check gates off, and the
+    // LLM abstains, so nothing is assessable — graceful cannot_assess, no fake pass.
     const results = await runStorylineAgent(sparse);
     assertEquals(results.length, 2);
     assertEquals(byResult(results, "channel_readiness"), "cannot_assess");
