@@ -8,6 +8,9 @@ import requests
 from analyzer.types import Artifacts, Frame, VideoMetadata
 from analyzer.frame_sampling import FrameSampler
 from analyzer.frame_sampling.base import ProbeResult
+from analyzer.frame_sampling.probes.ocr_candidates import (
+    OcrCandidateCapacityError,
+)
 from app.errors import PermanentError, TransientError
 from app.schemas import JobPayload
 from config.connection import get_storage_session
@@ -190,10 +193,12 @@ class VideoPreprocessor:
             logo_imgs_folder_path=self.job_payload.logo_imgs_folder_path,
         )
         frames = sampler.run()
+        text_error = sampler.probe_errors.get("text")
+        if isinstance(text_error, OcrCandidateCapacityError):
+            raise PermanentError(str(text_error)) from text_error
         self._probe_results = sampler.probe_results
         return frames
 
     # Might be needed to pass the video link to gemini so their service is able to access a public video and analyse it 
     # def _signed_url(self) -> str | None:
     #     """Optional: signed URL for APIs that fetch by URL (Replicate)."""
-        

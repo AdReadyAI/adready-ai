@@ -10,6 +10,9 @@ import requests
 pytestmark = pytest.mark.unit
 
 import analyzer.video_preprocessor as vp  # noqa: E402
+from analyzer.frame_sampling.probes.ocr_candidates import (  # noqa: E402
+    OcrCandidateCapacityError,
+)
 from analyzer.types import VideoMetadata  # noqa: E402
 from app.errors import PermanentError, TransientError  # noqa: E402
 from app.schemas import JobPayload  # noqa: E402
@@ -275,6 +278,28 @@ def test_sample_frames_delegates_to_frame_sampler(tmp_path, monkeypatch):
         product_imgs_folder_path="p",
         logo_imgs_folder_path="l",
     )
+
+
+def test_sample_frames_promotes_only_ocr_capacity_failure(
+    tmp_path,
+    monkeypatch,
+):
+    """Required OCR coverage rejects the Ad Creative; optional errors do not."""
+    meta = VideoMetadata(1.0, 30.0, 1920, 1080, 1)
+    sampler = MagicMock()
+    sampler.run.return_value = ["frame"]
+    monkeypatch.setattr(vp, "FrameSampler", MagicMock(return_value=sampler))
+
+    sampler.probe_errors = {
+        "text": OcrCandidateCapacityError(
+            "periodic OCR coverage exceeds candidate capacity"
+        )
+    }
+    with pytest.raises(PermanentError, match="periodic OCR coverage"):
+        _pre(tmp_path)._sample_frames("v.mp4", meta)
+
+    sampler.probe_errors = {"quality": RuntimeError("optional failure")}
+    assert _pre(tmp_path)._sample_frames("v.mp4", meta) == ["frame"]
 
 
 # ---- prepare (orchestration) ----

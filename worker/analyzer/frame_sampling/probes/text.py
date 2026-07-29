@@ -1,13 +1,29 @@
 """Cost-cascaded detection and tracking of on-screen text-like regions."""
 
 from dataclasses import dataclass, field, replace
+import math
 from typing import Any, Protocol
 
+import cv2
 import numpy as np
 
-from analyzer.frame_sampling.base import ProbeResult, Stage, register_probe
+from analyzer.frame_sampling.base import (
+    ProbeResult,
+    ProbeSetup,
+    Stage,
+    register_probe,
+)
 from analyzer.frame_sampling.context import FrameContext
 from analyzer.frame_sampling.deferred import Candidate, DeferredModelProbe
+from analyzer.frame_sampling.probes.ocr_candidates import (
+    OcrCandidate,
+    OcrCandidateProvenance,
+    OcrCandidateStats,
+    OcrCandidateStore,
+)
+
+
+TextCandidate = Candidate | OcrCandidate
 
 
 @dataclass(frozen=True)
@@ -43,9 +59,9 @@ class _OpenTextSegment:
     last_seen_s: float
     last_detection: TextDetection
     representative_detection: TextDetection
-    representative: Candidate
+    representative: TextCandidate
     candidate_sources: tuple[str, ...]
-    observations: list[tuple[TextDetection, Candidate]]
+    observations: list[tuple[TextDetection, TextCandidate]]
     pending_absence_s: float | None = None
     missed_observations: int = 0
     timing_uncertainty_s: float = 0.0
@@ -56,6 +72,9 @@ class TextProbeResult(ProbeResult):
     """Public TextProbe result returned through sampler probe results."""
 
     text_segments: list[TextSegment] = field(default_factory=list)
+    candidate_stats: OcrCandidateStats = field(
+        default_factory=OcrCandidateStats
+    )
 
 
 class TextRegionDetector(Protocol):
@@ -84,6 +103,7 @@ class TextProbe(DeferredModelProbe):
     _GRID_OVERLAP = 0.05
     _EDGE_CHANGE_DELTA = 0.05
     _MISSING_TOLERANCE_S = 0.5
+    _PERIODIC_FPS = 4.0
 
     def __init__(self, detector: TextRegionDetector | None = None) -> None:
         super().__init__()
@@ -92,6 +112,87 @@ class TextProbe(DeferredModelProbe):
         self._candidate_sources: dict[int, tuple[str, ...]] = {}
         self._open_segments: list[_OpenTextSegment] = []
         self._text_segments: list[TextSegment] = []
+        self._ocr_candidate_store: OcrCandidateStore | None = None
+        self._next_periodic_timestamp = 0.0
+
+    def configure(self, setup: ProbeSetup) -> None:
+        """Reserve complete periodic OCR coverage inside the run work directory."""
+        source_rate = min(
+            setup.video_metadata.fps,
+            self._PERIODIC_FPS,
+        )
+        periodic_count = math.ceil(
+            setup.video_metadata.duration_s * source_rate
+        )
+        self._ocr_candidate_store = OcrCandidateStore(
+            work_dir=setup.work_dir,
+            reserved_periodic_count=periodic_count,
+        )
+
+    def process(self, ctx: FrameContext) -> None:
+        """Collect configured OCR candidates without retaining source pixels."""
+        if self._ocr_candidate_store is None:
+            super().process(ctx)
+            return
+
+        self._store = ctx.store
+        try:
+            gate_accepted = self._gate(ctx)
+            periodic = self._periodic_due(ctx.timestamp)
+            if not gate_accepted and not periodic:
+                return
+
+            provenance = tuple(
+                OcrCandidateProvenance(source)
+                for source in self._candidate_sources.get(ctx.index, ())
+            )
+            if periodic:
+                provenance = tuple(
+                    dict.fromkeys(
+                        provenance
+                        + (OcrCandidateProvenance.PERIODIC,)
+                    )
+                )
+            self._ocr_candidate_store.admit(
+                index=ctx.index,
+                timestamp=ctx.timestamp,
+                source_frame=ctx.frame,
+                model_input=self._candidate(ctx),
+                provenance=provenance,
+            )
+        except Exception:
+            self._ocr_candidate_store.cleanup()
+            self._candidate_sources.clear()
+            raise
+
+    def finalize(self) -> TextProbeResult:
+        """Infer configured OCR candidates and remove temporary source files."""
+        if self._ocr_candidate_store is None:
+            return super().finalize()
+
+        try:
+            candidates = self._ocr_candidate_store.candidates()
+            for start in range(0, len(candidates), self._BATCH_SIZE):
+                batch = candidates[start : start + self._BATCH_SIZE]
+                results = self._batch_infer(
+                    [candidate.model_input for candidate in batch]
+                )
+                for candidate, result in zip(batch, results):
+                    self._emit(candidate, result)
+            return self._result()
+        except Exception:
+            # Preserve the fixed-rate recall path for later OCR fallback
+            # without decoding the Ad Creative a second time.
+            for candidate in self._ocr_candidate_store.candidates():
+                if (
+                    OcrCandidateProvenance.PERIODIC
+                    in candidate.provenance
+                ):
+                    self._keep(candidate, ("periodic",))
+            raise
+        finally:
+            self._ocr_candidate_store.cleanup()
+            self._candidate_sources.clear()
 
     def _gate(self, ctx: FrameContext) -> bool:
         """Select edge changes and scene cuts while resetting at cut frames."""
@@ -122,12 +223,22 @@ class TextProbe(DeferredModelProbe):
         """Delegate one ordered batch to the configured detector adapter."""
         return self._detector.detect_batch(model_inputs)
 
-    def _emit(self, candidate: Candidate, result: list[TextDetection]) -> None:
+    def _emit(
+        self,
+        candidate: TextCandidate,
+        result: list[TextDetection],
+    ) -> None:
         """Update matched regions and retain absence evidence per open region."""
-        candidate_sources = self._candidate_sources.pop(
-            candidate.index,
-            ("edge_change",),
-        )
+        if isinstance(candidate, OcrCandidate):
+            candidate_sources = tuple(
+                source.value for source in candidate.provenance
+            )
+            self._candidate_sources.pop(candidate.index, None)
+        else:
+            candidate_sources = self._candidate_sources.pop(
+                candidate.index,
+                ("edge_change",),
+            )
         self._close_expired_segments(candidate.timestamp)
         if not result:
             for segment in self._open_segments:
@@ -197,7 +308,46 @@ class TextProbe(DeferredModelProbe):
             replace(segment, identifier=f"text_segment_{position:04d}")
             for position, segment in enumerate(self._text_segments, start=1)
         ]
-        return TextProbeResult(text_segments=self._text_segments)
+        candidate_stats = (
+            self._ocr_candidate_store.stats
+            if self._ocr_candidate_store is not None
+            else OcrCandidateStats()
+        )
+        return TextProbeResult(
+            text_segments=self._text_segments,
+            candidate_stats=candidate_stats,
+        )
+
+    def _keep(
+        self,
+        candidate: TextCandidate,
+        tags: tuple[str, ...],
+    ) -> None:
+        """Persist OCR representatives from either memory or candidate JPEG."""
+        if not isinstance(candidate, OcrCandidate):
+            super()._keep(candidate, tags)
+            return
+        if self._store is None:
+            return
+
+        source_frame = cv2.imread(candidate.path)
+        if source_frame is None:
+            raise ValueError(
+                f"Could not read OCR source candidate {candidate.index}"
+            )
+        self._store.keep_frame(
+            candidate.index,
+            candidate.timestamp,
+            source_frame,
+            tags,
+        )
+
+    def _periodic_due(self, timestamp: float) -> bool:
+        """Select the first decoded frame at each fixed 4-FPS boundary."""
+        if timestamp + 1e-9 < self._next_periodic_timestamp:
+            return False
+        self._next_periodic_timestamp += 1 / self._PERIODIC_FPS
+        return True
 
     def _close_open_segments(self) -> None:
         """Convert current tracking state into immutable public evidence."""
@@ -248,7 +398,7 @@ class TextProbe(DeferredModelProbe):
         self,
         segment: _OpenTextSegment,
         end_s: float,
-    ) -> tuple[TextDetection, Candidate]:
+    ) -> tuple[TextDetection, TextCandidate]:
         """Choose clear, substantial evidence nearest the visible midpoint."""
         midpoint_s = segment.start_s + (end_s - segment.start_s) / 2
         return max(

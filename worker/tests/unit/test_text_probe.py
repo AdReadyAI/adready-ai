@@ -3,9 +3,11 @@
 import numpy as np
 import pytest
 
+from analyzer.frame_sampling.base import ProbeSetup
 from analyzer.frame_sampling.context import FrameContext
 from analyzer.frame_sampling.probes.text import TextDetection, TextProbe
 from analyzer.frame_sampling.store import FrameStore
+from analyzer.types import VideoMetadata
 
 pytestmark = pytest.mark.unit
 
@@ -19,6 +21,150 @@ class FakeTextRegionDetector:
     def detect_batch(self, analysis_frames):
         """Return the configured spatial evidence for every candidate frame."""
         return self.detections_by_frame[: len(analysis_frames)]
+
+
+def test_configured_probe_uses_and_cleans_complete_periodic_path(tmp_path):
+    """Quiet visual content still receives fixed-rate OCR candidate coverage."""
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    frame_store = FrameStore(str(tmp_path))
+    contexts = [
+        FrameContext(
+            index=index,
+            timestamp=timestamp,
+            frame=frame,
+            gray=frame[:, :, 0],
+            small=frame,
+            edges=np.zeros((100, 200), dtype=np.uint8),
+            store=frame_store,
+        )
+        for index, timestamp in [(0, 0.0), (1, 0.25)]
+    ]
+    detection = TextDetection(
+        rectangle=(0.1, 0.2, 0.4, 0.1),
+        confidence=0.9,
+        visual_signature="stable-region",
+    )
+    probe = TextProbe(
+        detector=FakeTextRegionDetector([[detection], [detection]])
+    )
+    probe.configure(
+        ProbeSetup(
+            video_metadata=VideoMetadata(
+                duration_s=0.5,
+                fps=4.0,
+                width=200,
+                height=100,
+                size_bytes=100,
+            ),
+            work_dir=str(tmp_path),
+        )
+    )
+
+    for context in contexts:
+        probe.process(context)
+    result = probe.finalize()
+
+    assert len(result.text_segments) == 1
+    assert result.text_segments[0].end_s == 0.25
+    assert result.text_segments[0].candidate_sources == (
+        "edge_change",
+        "periodic",
+    )
+    assert result.candidate_stats.accepted_count == 2
+    assert result.candidate_stats.dropped_count == 0
+    assert list(tmp_path.glob("ocr-candidates-*")) == []
+
+
+def test_provider_failure_reuses_periodic_candidates_then_cleans_up(tmp_path):
+    """Fallback retains reserved JPEGs without decoding the Ad Creative again."""
+    class FailingTextRegionDetector:
+        """Deterministic provider failure at the detector adapter seam."""
+
+        def detect_batch(self, analysis_frames):
+            raise RuntimeError("provider unavailable")
+
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    frame_store = FrameStore(str(tmp_path))
+    contexts = [
+        FrameContext(
+            index=index,
+            timestamp=timestamp,
+            frame=frame,
+            gray=frame[:, :, 0],
+            small=frame,
+            edges=np.zeros((100, 200), dtype=np.uint8),
+            store=frame_store,
+        )
+        for index, timestamp in [(0, 0.0), (1, 0.25)]
+    ]
+    probe = TextProbe(detector=FailingTextRegionDetector())
+    probe.configure(
+        ProbeSetup(
+            video_metadata=VideoMetadata(
+                duration_s=0.5,
+                fps=4.0,
+                width=200,
+                height=100,
+                size_bytes=100,
+            ),
+            work_dir=str(tmp_path),
+        )
+    )
+
+    for context in contexts:
+        probe.process(context)
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        probe.finalize()
+
+    manifest = frame_store.manifest()
+    assert [frame.timestamp for frame in manifest] == [0.0, 0.25]
+    assert all(frame.tags == ("periodic",) for frame in manifest)
+    assert list(tmp_path.glob("ocr-candidates-*")) == []
+
+
+def test_unexpected_collection_failure_cleans_existing_candidates(tmp_path):
+    """A corrupt later frame cannot leak earlier OCR candidate files."""
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    frame_store = FrameStore(str(tmp_path))
+    probe = TextProbe(detector=FakeTextRegionDetector([]))
+    probe.configure(
+        ProbeSetup(
+            video_metadata=VideoMetadata(
+                duration_s=0.5,
+                fps=4.0,
+                width=200,
+                height=100,
+                size_bytes=100,
+            ),
+            work_dir=str(tmp_path),
+        )
+    )
+    first_context = FrameContext(
+        index=0,
+        timestamp=0.0,
+        frame=frame,
+        gray=frame[:, :, 0],
+        small=frame,
+        edges=np.zeros((100, 200), dtype=np.uint8),
+        store=frame_store,
+    )
+    corrupt_context = FrameContext(
+        index=1,
+        timestamp=0.25,
+        frame=frame,
+        gray=frame[:, :, 0],
+        small=frame,
+        edges=None,
+        store=frame_store,
+    )
+
+    probe.process(first_context)
+    assert len(list(tmp_path.glob("ocr-candidates-*"))) == 1
+
+    with pytest.raises(AttributeError):
+        probe.process(corrupt_context)
+
+    assert list(tmp_path.glob("ocr-candidates-*")) == []
 
 
 def test_first_frame_text_produces_segment_and_representative(tmp_path):
