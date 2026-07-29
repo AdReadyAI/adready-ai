@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS issuetable (
+CREATE TABLE IF NOT EXISTS issues (
     request_id UUID NOT NULL REFERENCES requests(request_id) ON DELETE CASCADE,
     batch_id UUID NOT NULL REFERENCES requests(batch_id) ON DELETE CASCADE,
     metric_id TEXT NOT NULL,
@@ -17,6 +17,6 @@ CREATE TABLE IF NOT EXISTS issuetable (
     PRIMARY KEY (request_id, metric_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_issuetable_batch_id ON issuetable(batch_id);
+CREATE INDEX IF NOT EXISTS idx_issues_batch_id ON issues(batch_id);
 
-ALTER TABLE public.issuetable ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.issues ENABLE ROW LEVEL SECURITY;
