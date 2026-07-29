@@ -22,6 +22,7 @@ import type {
 } from "../shared/schemas.ts";
 import { cannotAssess, formatNoncompliant } from "./checks.ts";
 import {
+  type ArcExpectation,
   getArcExpectation,
   getPlatformSpec,
   type PlatformSpec,
@@ -77,14 +78,18 @@ const PLACEMENT_MISMATCH = {
 
 export type StorylineConfig = {
   platformSpec: PlatformSpec | null;
-  arcExpectationPresent: boolean; // gates story_incomplete
+  /**
+   * The duration-bucket arc expectation for this ad. Null gates story_incomplete
+   * to cannot_assess; when present, its expected_roles + expect_payoff_resolved
+   * are threaded into the Call 2 prompt so story_incomplete grades against them.
+   */
+  arcExpectation: ArcExpectation | null;
 };
 
 export function resolveStorylineConfig(ctx: AgentContext): StorylineConfig {
   return {
     platformSpec: getPlatformSpec(ctx.destination_platform),
-    arcExpectationPresent:
-      getArcExpectation(ctx.video_metadata.duration_ms) !== null,
+    arcExpectation: getArcExpectation(ctx.video_metadata.duration_ms),
   };
 }
 
@@ -134,7 +139,9 @@ export async function runStorylineAgent(
   try {
     const arcRaw = await chat(derivationPrompt(ctx));
     arc = safeParseJson(arcRaw, ArcLabelingSchema);
-    const evalRaw = await chat(evaluationPrompt(ctx, arc));
+    const evalRaw = await chat(
+      evaluationPrompt(ctx, arc, config.arcExpectation),
+    );
     evaluation = safeParseJson(evalRaw, StorylineEvaluationSchema);
   } catch {
     // Total LLM failure: LLM-derived checks degrade to cannot_assess below.
@@ -246,7 +253,7 @@ export function buildCreativeEffectiveness(
   );
 
   // story_incomplete is gated on the arc-expectation table: cannot_assess until populated.
-  const story = config.arcExpectationPresent
+  const story = config.arcExpectation !== null
     ? fromLlmSubCheck(
       byId.get("story_incomplete"),
       "story_incomplete",

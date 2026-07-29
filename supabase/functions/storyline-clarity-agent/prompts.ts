@@ -12,6 +12,7 @@
 
 import type { ChatMessage } from "../shared/llm.ts";
 import type { AgentContext } from "../shared/schemas.ts";
+import type { ArcExpectation } from "./config.ts";
 import type { ArcLabeling } from "./response_schemas.ts";
 
 /** Flat default hook window (ms); the spec expects this to vary by platform later. */
@@ -47,7 +48,11 @@ export function derivationPrompt(ctx: AgentContext): ChatMessage[] {
   ];
 }
 
-function evaluationInput(ctx: AgentContext, arc: ArcLabeling | null): string {
+function evaluationInput(
+  ctx: AgentContext,
+  arc: ArcLabeling | null,
+  arcExpectation: ArcExpectation | null,
+): string {
   const brief = ctx.parsed_creative_brief;
   return JSON.stringify(
     {
@@ -64,6 +69,14 @@ function evaluationInput(ctx: AgentContext, arc: ArcLabeling | null): string {
       transcript_segments: ctx.transcript_segments,
       hook_window_ms: DEFAULT_HOOK_WINDOW_MS,
       narrative_arc: arc, // null when Call 1 could not be labeled
+      // Duration-bucket bar for story_incomplete; null → return cannot_assess for it.
+      arc_expectation: arcExpectation
+        ? {
+          required_arc_roles: arcExpectation.expected_roles,
+          payoff_must_resolve_within_runtime:
+            arcExpectation.expect_payoff_resolved,
+        }
+        : null,
     },
     null,
     2,
@@ -87,22 +100,29 @@ const CHANNEL_READINESS_RUBRIC =
 export function evaluationPrompt(
   ctx: AgentContext,
   arc: ArcLabeling | null,
+  arcExpectation: ArcExpectation | null,
 ): ChatMessage[] {
   const system =
     "You are evaluating a short-form ad on two metrics: creative_effectiveness (its internal storytelling) and " +
     "channel_readiness (its fit for the intended placement and audience). You are given the visual_frames with " +
     "their visual_descriptions and timestamps, the transcript_segments, the total duration, the " +
     "destination_platform, the campaign_goal, an audience_brief (target_audience, brand_voice/tone, and " +
-    "required_messages — any field may be null), and the narrative arc labeled in the previous step (each " +
-    "frame's arc role, which roles are unfilled, and where the payoff resolves). If narrative_arc is null the " +
+    "required_messages — any field may be null), the narrative arc labeled in the previous step (each " +
+    "frame's arc role, which roles are unfilled, and where the payoff resolves), and an arc_expectation for this " +
+    "ad's duration (required_arc_roles — the arc roles a well-formed ad of this length must resolve — and " +
+    "payoff_must_resolve_within_runtime). If narrative_arc is null the " +
     "labeling failed; judge only what the transcript and frames allow and use cannot_assess for arc-dependent " +
     "checks. Judge the five creative_effectiveness sub-checks (1–5) on the ad's own internal coherence, not on " +
     "brief conformance; use the audience_brief only for the channel_readiness sub-check (6).\n\n" +
     "Run each of these sub-checks and report each separately: (1) hook_missing — does the opening hook_window_ms " +
     "establish a relevant, attention-grabbing hook? (2) narrative_gap — do the frames flow logically, or is there " +
     "a jump/contradiction/unrelated cut? (3) value_prop_unclear — would a viewer with no prior knowledge " +
-    "understand what the product is and why it matters? (4) story_incomplete — does the arc resolve within the " +
-    "runtime, using unfilled_roles and payoff_resolved_at, adjusting for very short ads? (5) pacing_misallocation " +
+    "understand what the product is and why it matters? (4) story_incomplete — judge strictly against " +
+    "arc_expectation: is every role in required_arc_roles actually resolved by the ad (use the labeled arc and its " +
+    "unfilled_roles as evidence), and — only when payoff_must_resolve_within_runtime is true — does the payoff " +
+    "resolve before the end (use payoff_resolved_at)? A required role left unfilled, or a required payoff that " +
+    "never resolves, is story_incomplete; roles outside required_arc_roles are not required and their absence is " +
+    "not a fault. If arc_expectation is null, return cannot_assess for this sub-check. (5) pacing_misallocation " +
     "— using the frames labeled detour and their timestamps, judge whether the time they take is disproportionate " +
     "to the ad's length. (6) placement_mismatch — is the ad appropriate for the destination_platform and its " +
     "viewing context, and do its tone, message, pacing, and use-case suit the target audience's needs and " +
@@ -124,6 +144,6 @@ export function evaluationPrompt(
     "judge a sub-check; do not guess and do not report a pass to fill a gap.";
   return [
     { role: "system", content: system },
-    { role: "user", content: evaluationInput(ctx, arc) },
+    { role: "user", content: evaluationInput(ctx, arc, arcExpectation) },
   ];
 }
