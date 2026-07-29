@@ -113,9 +113,8 @@
  *   ]
  */
 
-import { createEdgeHandler, ok } from "../shared/index.ts";
+import { createEdgeHandler, loadAgentContext, ok } from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
-import { loadStorylineContext } from "./context.ts";
 import { runStorylineAgent } from "./agent.ts";
 
 // createEdgeHandler wraps CORS, auth, and AgentRunRequest validation. The agent
@@ -125,7 +124,7 @@ createEdgeHandler(
   "storyline-clarity-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
-    const context = await loadStorylineContext(ctx.body.request_id, {
+    const context = await loadAgentContext(ctx.body.request_id, {
       userId: ctx.user.id,
     });
     const results = await runStorylineAgent(context);

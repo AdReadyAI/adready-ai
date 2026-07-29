@@ -33,12 +33,17 @@ import type {
   AgentContext,
   MetricResult,
 } from "../../functions/shared/schemas.ts";
-import { loadStorylineContext } from "../../functions/storyline-clarity-agent/context.ts";
+import { loadAgentContext } from "../../functions/shared/context.ts";
 import { runStorylineAgent } from "../../functions/storyline-clarity-agent/agent.ts";
 import { runCtaAgent } from "../../functions/cta-effectiveness-agent/agent.ts";
 
 const DEFAULT_GOLDEN =
   new URL("./golden/mango_moon.json", import.meta.url).pathname;
+
+// The shared loader authorizes reads by the request's owner. The seeded local DB
+// owns its rows under this user; override with EVAL_USER_ID to point --db at a
+// request owned by someone else.
+const SEED_USER_ID = "11111111-1111-4111-8111-111111111111";
 
 function requireEnv(name: string): void {
   if (!Deno.env.get(name)) {
@@ -75,8 +80,9 @@ async function loadContext(): Promise<AgentContext> {
       Deno.exit(1);
     }
     console.log(`Source: DB  request_id=${requestId}`);
-    // The two per-agent context loaders are identical full-context loads.
-    return await loadStorylineContext(requestId);
+    // Both agents share one full-context loader; it authorizes by owner.
+    const userId = Deno.env.get("EVAL_USER_ID") ?? SEED_USER_ID;
+    return await loadAgentContext(requestId, { userId });
   }
 
   const path = Deno.args[0] ?? DEFAULT_GOLDEN;

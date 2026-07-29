@@ -21,6 +21,7 @@ import type {
   SeverityLevel,
   SubCheckResult,
 } from "../shared/schemas.ts";
+import { cannotAssess, failed, passed, severityRank } from "../shared/checks.ts";
 import type {
   CtaTiming,
   CtaVisibilityThresholds,
@@ -29,22 +30,9 @@ import type {
 import type { AcquiredCta } from "./response_schemas.ts";
 
 // ── Severity ordering ───────────────────────────────────────────────────────
-// `cannot_assess` is deliberately outside this ordering: it is a result state,
-// not a risk level. Helpers treat any out-of-range value (including
-// cannot_assess) as ranking below "none".
-
-/** Worst-wins ordering, low index = lower business risk. */
-export const SEVERITY_ORDER: readonly SeverityLevel[] = [
-  "none",
-  "low",
-  "medium",
-  "high",
-  "critical",
-];
-
-export function severityRank(severity: SeverityLevel): number {
-  return SEVERITY_ORDER.indexOf(severity);
-}
+// `severityRank` comes from shared/checks.ts (Anusha's kit): `cannot_assess`
+// ranks at -1 — deliberately outside the none→critical ordering, since it is a
+// result state, not a risk level. The helpers below build on it.
 
 /** The higher-risk of two severities (worst-wins). */
 export function maxSeverity(a: SeverityLevel, b: SeverityLevel): SeverityLevel {
@@ -64,34 +52,12 @@ export function clampSeverity(
   return severityRank(severity) > severityRank(max) ? max : severity;
 }
 
-// ── SubCheckResult builders + config gate ────────────────────────────────────
+// ── SubCheckResult builders (shared) + config gate ───────────────────────────
 
-export function passed(checkId: string, name: string): SubCheckResult {
-  return { check_id: checkId, name, result: "passed", severity: "none" };
-}
-
-export function failed(
-  checkId: string,
-  name: string,
-  severity: SeverityLevel,
-  explanation: string,
-): SubCheckResult {
-  return { check_id: checkId, name, result: "failed", severity, explanation };
-}
-
-export function cannotAssess(
-  checkId: string,
-  name: string,
-  reason: string,
-): SubCheckResult {
-  return {
-    check_id: checkId,
-    name,
-    result: "cannot_assess",
-    severity: "cannot_assess",
-    explanation: reason,
-  };
-}
+// passed/failed/cannotAssess are the shared constructors from shared/checks.ts
+// (Anusha's kit). Re-exported so this agent's other modules keep importing them
+// from one local place.
+export { cannotAssess, failed, passed };
 
 /**
  * Run a deterministic check only when its config dependency is populated.
@@ -124,7 +90,10 @@ const PLATFORM = {
 };
 
 /** cta_absent severity is goal-conditional (same absence, different business risk). */
-export const CTA_ABSENT_SEVERITY: Record<string, SeverityLevel> = {
+export const CTA_ABSENT_SEVERITY: Record<
+  string,
+  "none" | "medium" | "high" | "critical"
+> = {
   awareness: "none",
   consideration: "medium",
   repurchase: "high",
@@ -276,12 +245,15 @@ export function ctaLowVisibility(
           worst = maxSeverity(worst, "low");
         }
       }
-      return worst === "none" ? passed(LOW_VIS.id, LOW_VIS.name) : failed(
-        LOW_VIS.id,
-        LOW_VIS.name,
-        worst,
-        "CTA text is too small to register legibly.",
-      );
+      if (worst === "medium" || worst === "low") {
+        return failed(
+          LOW_VIS.id,
+          LOW_VIS.name,
+          worst,
+          "CTA text is too small to register legibly.",
+        );
+      }
+      return passed(LOW_VIS.id, LOW_VIS.name);
     },
   );
 }

@@ -108,9 +108,8 @@
  *   ]
  */
 
-import { createEdgeHandler, ok } from "../shared/index.ts";
+import { createEdgeHandler, loadAgentContext, ok } from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
-import { loadCtaContext } from "./context.ts";
 import { runCtaAgent } from "./agent.ts";
 
 // createEdgeHandler wraps CORS, auth, and AgentRunRequest validation. The agent
@@ -121,7 +120,7 @@ createEdgeHandler(
   "cta-effectiveness-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
-    const context = await loadCtaContext(ctx.body.request_id, {
+    const context = await loadAgentContext(ctx.body.request_id, {
       userId: ctx.user.id,
     });
     const results = await runCtaAgent(context);

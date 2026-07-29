@@ -1,15 +1,14 @@
 /**
  * Unit tests for the worst-wins metric rollup.
  *
- * The rollup is inlined per agent (self-contained, no shared framework); the two
- * copies are identical, so this exercises the CTA agent's `rollup`. Pure logic,
+ * Both agents share the one `rollupChecks` in shared/checks.ts. Pure logic,
  * no services, no network. Covers worst-wins across sub-checks, all-cannot_assess
  * → metric cannot_assess, mixed cannot_assess/assessable (judged on the
  * assessable ones), and the single-sub-check trivial rollup.
  */
 
 import { assertEquals } from "@std/assert";
-import { rollup } from "../../../functions/cta-effectiveness-agent/agent.ts";
+import { rollupChecks as rollup } from "../../../functions/shared/checks.ts";
 import type {
   SeverityLevel,
   SubCheckResult,

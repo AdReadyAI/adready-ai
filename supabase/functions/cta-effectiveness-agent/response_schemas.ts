@@ -21,13 +21,7 @@ import {
   SeverityLevelSchema,
   type SubCheckResult,
 } from "../shared/schemas.ts";
-import {
-  cannotAssess,
-  clampSeverity,
-  failed,
-  passed,
-  severityRank,
-} from "./checks.ts";
+import { cannotAssess, clampSeverity, failed, passed } from "./checks.ts";
 
 // ── Call 1 — CTA acquisition (derivation) ─────────────────────────────────────
 // CTAs are derived from transcript and OCR (there is no detected_ctas
@@ -230,13 +224,13 @@ export function fromLlmSubCheck(
       check.explanation ?? "Model could not assess this check.",
     );
   }
-  const raw = severityRank(check.severity) < 0 ? "low" : check.severity;
-  return failed(
-    id,
-    name,
-    clampSeverity(raw, max),
-    check.explanation ?? "Sub-check failed.",
-  );
+  // A failed verdict must carry a real risk severity: clamp to the sub-check's
+  // ceiling, then floor a none/unranked severity up to "low".
+  const clamped = clampSeverity(check.severity, max);
+  const severity = clamped === "none" || clamped === "cannot_assess"
+    ? "low"
+    : clamped;
+  return failed(id, name, severity, check.explanation ?? "Sub-check failed.");
 }
 
 /** Index a Call-2 reply's sub-checks by check_id (last write wins on dupes). */

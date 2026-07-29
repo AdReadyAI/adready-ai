@@ -14,13 +14,13 @@
  */
 
 import { chat } from "../shared/llm.ts";
+import { rollupChecks } from "../shared/checks.ts";
 import type {
   AgentContext,
   MetricResult,
-  SeverityLevel,
   SubCheckResult,
 } from "../shared/schemas.ts";
-import { cannotAssess, formatNoncompliant, severityRank } from "./checks.ts";
+import { cannotAssess, formatNoncompliant } from "./checks.ts";
 import {
   getArcExpectation,
   getPlatformSpec,
@@ -97,30 +97,6 @@ export type MetricLevelFields = {
   correction_type?: MetricResult["correction_type"];
 };
 
-/**
- * Worst-wins rollup: the metric fails if any sub-check failed (severity = the
- * highest among the failures); passes if at least one sub-check is assessable
- * and none failed; cannot_assess only when every sub-check is cannot_assess (or
- * there are none). Judged on the assessable sub-checks alone.
- */
-export function rollup(
-  subChecks: readonly SubCheckResult[],
-): { result: MetricResult["result"]; severity: SeverityLevel } {
-  const failedChecks = subChecks.filter((c) => c.result === "failed");
-  if (failedChecks.length > 0) {
-    const severity = failedChecks.reduce<SeverityLevel>(
-      (worst, c) =>
-        severityRank(c.severity) > severityRank(worst) ? c.severity : worst,
-      "none",
-    );
-    return { result: "false", severity };
-  }
-  if (subChecks.some((c) => c.result === "passed")) {
-    return { result: "true", severity: "none" };
-  }
-  return { result: "cannot_assess", severity: "cannot_assess" };
-}
-
 /** Assemble a MetricResult from its sub-checks (rolled up) + metric-level fields. */
 function assembleMetric(spec: {
   metric_id: MetricResult["metric_id"];
@@ -129,7 +105,7 @@ function assembleMetric(spec: {
   sub_checks: SubCheckResult[];
   fields?: MetricLevelFields;
 }): MetricResult {
-  const { result, severity } = rollup(spec.sub_checks);
+  const { result, severity } = rollupChecks(spec.sub_checks);
   return {
     metric_id: spec.metric_id,
     agent: AGENT,

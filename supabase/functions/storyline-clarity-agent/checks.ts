@@ -19,30 +19,13 @@ import type {
   SubCheckResult,
   VideoMetadata,
 } from "../shared/schemas.ts";
+import { cannotAssess, failed, passed, severityRank } from "../shared/checks.ts";
 import type { PlatformSpec } from "./config.ts";
 
 // ── Severity ordering ───────────────────────────────────────────────────────
-// `cannot_assess` is deliberately outside this ordering: it is a result state,
-// not a risk level. Helpers treat any out-of-range value (including
-// cannot_assess) as ranking below "none".
-
-/** Worst-wins ordering, low index = lower business risk. */
-export const SEVERITY_ORDER: readonly SeverityLevel[] = [
-  "none",
-  "low",
-  "medium",
-  "high",
-  "critical",
-];
-
-export function severityRank(severity: SeverityLevel): number {
-  return SEVERITY_ORDER.indexOf(severity);
-}
-
-/** The higher-risk of two severities (worst-wins). */
-export function maxSeverity(a: SeverityLevel, b: SeverityLevel): SeverityLevel {
-  return severityRank(b) > severityRank(a) ? b : a;
-}
+// `severityRank` comes from shared/checks.ts (Anusha's kit): `cannot_assess`
+// ranks at -1 — deliberately outside the none→critical ordering, since it is a
+// result state, not a risk level. `clampSeverity` below builds on it.
 
 /**
  * Clamp a severity down to a maximum allowed for a given check. Used to validate
@@ -58,34 +41,12 @@ export function clampSeverity(
   return severityRank(severity) > severityRank(max) ? max : severity;
 }
 
-// ── SubCheckResult builders + config gate ────────────────────────────────────
+// ── SubCheckResult builders (shared) + config gate ───────────────────────────
 
-export function passed(checkId: string, name: string): SubCheckResult {
-  return { check_id: checkId, name, result: "passed", severity: "none" };
-}
-
-export function failed(
-  checkId: string,
-  name: string,
-  severity: SeverityLevel,
-  explanation: string,
-): SubCheckResult {
-  return { check_id: checkId, name, result: "failed", severity, explanation };
-}
-
-export function cannotAssess(
-  checkId: string,
-  name: string,
-  reason: string,
-): SubCheckResult {
-  return {
-    check_id: checkId,
-    name,
-    result: "cannot_assess",
-    severity: "cannot_assess",
-    explanation: reason,
-  };
-}
+// passed/failed/cannotAssess are the shared constructors from shared/checks.ts
+// (Anusha's kit). Re-exported so this agent's other modules keep importing them
+// from one local place.
+export { cannotAssess, failed, passed };
 
 /**
  * Run a deterministic check only when its config dependency is populated.
