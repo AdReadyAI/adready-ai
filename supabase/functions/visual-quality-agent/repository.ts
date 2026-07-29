@@ -1,9 +1,6 @@
 import { createSupabaseServiceClient } from "../shared/index.ts";
 import { AgentContextSchema } from "../shared/schemas.ts";
-import type {
-  AgentContext,
-  MetricResult,
-} from "../shared/schemas.ts";
+import type { AgentContext, MetricResult } from "../shared/schemas.ts";
 
 function required<T>(
   value: T | null,
@@ -36,8 +33,7 @@ export async function loadVisualQualityContext(
     );
   }
 
-  const supabase =
-    createSupabaseServiceClient();
+  const supabase = createSupabaseServiceClient();
 
   // --------------------------------------------------
   // 1. Load and authorize the request
@@ -190,12 +186,11 @@ export async function loadVisualQualityContext(
   // 4. Find transcription processing task
   // --------------------------------------------------
 
-  const transcriptionProcessingId =
-    processingResponse.data?.find(
-      (row) =>
-        row.task_name ===
+  const transcriptionProcessingId = processingResponse.data?.find(
+    (row) =>
+      row.task_name ===
         "transcription",
-    )?.id;
+  )?.id;
 
   // --------------------------------------------------
   // 5. Load transcript segments
@@ -234,17 +229,15 @@ export async function loadVisualQualityContext(
   // 6. Validate required DB records
   // --------------------------------------------------
 
-  const parsedCreativeBrief =
-    required(
-      briefResponse.data,
-      "Parsed creative brief",
-    );
+  const parsedCreativeBrief = required(
+    briefResponse.data,
+    "Parsed creative brief",
+  );
 
-  const videoMetadata =
-    required(
-      metadataResponse.data,
-      "Video metadata",
-    );
+  const videoMetadata = required(
+    metadataResponse.data,
+    "Video metadata",
+  );
 
   // --------------------------------------------------
   // 7. Build and validate AgentContext
@@ -253,36 +246,26 @@ export async function loadVisualQualityContext(
   return AgentContextSchema.parse({
     request_id: requestId,
 
-    campaign_goal:
-      requestRow.campaign_goal ??
+    campaign_goal: requestRow.campaign_goal ??
       "unknown",
 
-    destination_platform:
-      parsedCreativeBrief.destination_platform,
+    destination_platform: parsedCreativeBrief.destination_platform,
 
-    parsed_creative_brief:
-      parsedCreativeBrief,
+    parsed_creative_brief: parsedCreativeBrief,
 
-    video_metadata:
-      videoMetadata,
+    video_metadata: videoMetadata,
 
-    transcript_segments:
-      transcriptSegments,
+    transcript_segments: transcriptSegments,
 
-    ocr_segments:
-      ocrResponse.data ?? [],
+    ocr_segments: ocrResponse.data ?? [],
 
-    visual_frames:
-      visualFramesResponse.data ?? [],
+    visual_frames: visualFramesResponse.data ?? [],
 
-    product_frames:
-      productFramesResponse.data ?? [],
+    product_frames: productFramesResponse.data ?? [],
 
-    logo_frames:
-      logoFramesResponse.data ?? [],
+    logo_frames: logoFramesResponse.data ?? [],
 
-    product_context:
-      productContextResponse.data ??
+    product_context: productContextResponse.data ??
       undefined,
   });
 }
@@ -295,8 +278,7 @@ export async function persistVisualQualityResult(
   requestId: string,
   result: MetricResult,
 ): Promise<void> {
-  const supabase =
-    createSupabaseServiceClient();
+  const supabase = createSupabaseServiceClient();
 
   const resultKey = {
     request_id: requestId,
@@ -315,28 +297,20 @@ export async function persistVisualQualityResult(
     .upsert(
       {
         ...resultKey,
-        metric_name:
-          result.metric_name,
-        result:
-          result.result,
-        severity:
-          result.severity,
-        confidence:
-          result.confidence ??
+        metric_name: result.metric_name,
+        result: result.result,
+        severity: result.severity,
+        confidence: result.confidence ??
           null,
-        explanation:
-          result.explanation ??
+        explanation: result.explanation ??
           null,
-        suggested_correction:
-          result.suggested_correction ??
+        suggested_correction: result.suggested_correction ??
           null,
-        correction_type:
-          result.correction_type ??
+        correction_type: result.correction_type ??
           null,
       },
       {
-        onConflict:
-          "request_id,agent,metric_id",
+        onConflict: "request_id,agent,metric_id",
       },
     );
 
@@ -388,12 +362,9 @@ export async function persistVisualQualityResult(
           ) => ({
             ...resultKey,
             evidence_order,
-            evidence_type:
-              evidence.type,
-            evidence_text:
-              evidence.text,
-            evidence_timestamp:
-              evidence.timestamp,
+            evidence_type: evidence.type,
+            evidence_text: evidence.text,
+            evidence_timestamp: evidence.timestamp,
           }),
         ),
       );
@@ -416,16 +387,11 @@ export async function persistVisualQualityResult(
         result.sub_checks.map(
           (check) => ({
             ...resultKey,
-            check_id:
-              check.check_id,
-            name:
-              check.name,
-            result:
-              check.result,
-            severity:
-              check.severity,
-            explanation:
-              check.explanation ??
+            check_id: check.check_id,
+            name: check.name,
+            result: check.result,
+            severity: check.severity,
+            explanation: check.explanation ??
               null,
           }),
         ),

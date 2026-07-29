@@ -111,13 +111,9 @@
  */
 
 import { createEdgeHandler, err, ok } from "../shared/index.ts";
-import {
-  AgentRunRequestSchema,
-} from "../shared/schemas.ts";
+import { AgentRunRequestSchema } from "../shared/schemas.ts";
 
-import {
-  runVisualQualityAgent,
-} from "./agent.ts";
+import { runVisualQualityAgent } from "./agent.ts";
 
 createEdgeHandler(
   "visual-quality-agent",

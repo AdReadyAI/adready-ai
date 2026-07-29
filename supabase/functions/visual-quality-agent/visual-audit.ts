@@ -1,64 +1,52 @@
 import { z } from "zod";
 
-import type {
-  AgentContext,
-} from "../shared/schemas.ts";
+import type { AgentContext } from "../shared/schemas.ts";
 
-import {
-  chat,
-} from "../shared/llm.ts";
+import { chat } from "../shared/llm.ts";
 
 import {
   buildVisualAuditUserPrompt,
   VISUAL_AUDIT_SYSTEM_PROMPT,
 } from "./prompts.ts";
 
-const SeverityScoreSchema =
-  z.union([
-    z.literal(0),
-    z.literal(1),
-    z.literal(2),
-    z.literal(3),
-    z.literal(4),
-  ]);
+const SeverityScoreSchema = z.union([
+  z.literal(0),
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+]);
 
-const VisualAuditResponseSchema =
-  z.object({
-    findings: z.array(
-      z.object({
-        check_id: z.enum([
-          "ai_artifacts",
-          "poor_framing_lighting",
-          "jarring_transitions",
-        ]),
+const VisualAuditResponseSchema = z.object({
+  findings: z.array(
+    z.object({
+      check_id: z.enum([
+        "ai_artifacts",
+        "poor_framing_lighting",
+        "jarring_transitions",
+      ]),
 
-        severity:
-          SeverityScoreSchema,
+      severity: SeverityScoreSchema,
 
-        explanation:
-          z.string(),
+      explanation: z.string(),
 
-        evidence_text:
-          z.string(),
+      evidence_text: z.string(),
 
-        evidence_timestamp_ms:
-          z.number()
-            .int()
-            .nonnegative()
-            .nullable(),
+      evidence_timestamp_ms: z.number()
+        .int()
+        .nonnegative()
+        .nullable(),
 
-        confidence_score:
-          z.number()
-            .min(0)
-            .max(1),
-      }),
-    ),
-  });
+      confidence_score: z.number()
+        .min(0)
+        .max(1),
+    }),
+  ),
+});
 
-export type VisualAuditFinding =
-  z.infer<
-    typeof VisualAuditResponseSchema
-  >["findings"][number];
+export type VisualAuditFinding = z.infer<
+  typeof VisualAuditResponseSchema
+>["findings"][number];
 
 /**
  * Runs the LLM-assisted visual audit.
@@ -74,33 +62,26 @@ export async function auditVisualQuality(
   const response = await chat([
     {
       role: "system",
-      content:
-        VISUAL_AUDIT_SYSTEM_PROMPT,
+      content: VISUAL_AUDIT_SYSTEM_PROMPT,
     },
 
     {
       role: "user",
-      content:
-        buildVisualAuditUserPrompt({
-          video_metadata:
-            context.video_metadata,
+      content: buildVisualAuditUserPrompt({
+        video_metadata: context.video_metadata,
 
-          ocr_segments:
-            context.ocr_segments,
+        ocr_segments: context.ocr_segments,
 
-          visual_frames:
-            context.visual_frames,
-        }),
+        visual_frames: context.visual_frames,
+      }),
     },
   ]);
 
-  const parsed =
-    parseLLMJson(response);
+  const parsed = parseLLMJson(response);
 
-  const validated =
-    VisualAuditResponseSchema.parse(
-      parsed,
-    );
+  const validated = VisualAuditResponseSchema.parse(
+    parsed,
+  );
 
   const requiredCheckIds = [
     "ai_artifacts",
@@ -111,12 +92,11 @@ export async function auditVisualQuality(
   for (
     const checkId of requiredCheckIds
   ) {
-    const matches =
-      validated.findings.filter(
-        (finding) =>
-          finding.check_id ===
+    const matches = validated.findings.filter(
+      (finding) =>
+        finding.check_id ===
           checkId,
-      );
+    );
 
     if (matches.length !== 1) {
       throw new Error(
@@ -131,22 +111,21 @@ export async function auditVisualQuality(
 function parseLLMJson(
   content: string,
 ): unknown {
-  const cleaned =
-    content
-      .trim()
-      .replace(
-        /^```json\s*/i,
-        "",
-      )
-      .replace(
-        /^```\s*/i,
-        "",
-      )
-      .replace(
-        /\s*```$/i,
-        "",
-      )
-      .trim();
+  const cleaned = content
+    .trim()
+    .replace(
+      /^```json\s*/i,
+      "",
+    )
+    .replace(
+      /^```\s*/i,
+      "",
+    )
+    .replace(
+      /\s*```$/i,
+      "",
+    )
+    .trim();
 
   try {
     return JSON.parse(
