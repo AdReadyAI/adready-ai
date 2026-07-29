@@ -12,6 +12,8 @@ from analyzer.frame_sampling.base import (
     get_probe_classes,
 )
 from analyzer.frame_sampling.context import FrameContext
+from analyzer.frame_sampling.probes.east import EastTextRegionDetector
+from analyzer.frame_sampling.probes.text import TextProbe
 from analyzer.frame_sampling.store import FrameStore
 from app.errors import PermanentError
 
@@ -82,7 +84,15 @@ class FrameSampler:
     # ---- internals ----
     def _build_probes(self) -> list[Probe]:
         """Instantiate registered probes in declared order (Scene before Sampler)."""
-        probes = [cls() for cls in get_probe_classes()]
+        probes = []
+        for probe_class in get_probe_classes():
+            # EAST belongs only to the runtime TextProbe composition. Direct
+            # TextProbe construction remains injectable for deterministic tests.
+            if probe_class is TextProbe:
+                probe = TextProbe(detector=EastTextRegionDetector())
+            else:
+                probe = probe_class()
+            probes.append(probe)
         self._validate_probe_names(probes)
         return probes
 
