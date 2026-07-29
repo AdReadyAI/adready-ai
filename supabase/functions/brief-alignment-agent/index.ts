@@ -17,19 +17,23 @@
  *   - Orchestration invokes the agent with a request_id (AgentRunRequestSchema).
  *   - The agent loads its AgentContext from Supabase by request_id (see context.ts).
  *   - LLM calls go through shared/llm.ts (OPENROUTER_MODEL from env — no hardcoded model).
+ *   - Results are persisted to agent_results (+ evidence, sub_checks) via persist.ts.
  */
 
 import { createEdgeHandler, ok } from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
 import { loadAgentContext } from "./context.ts";
 import { runBriefAlignmentAgent } from "./agent.ts";
+import { persistAgentResults } from "./persist.ts";
 
 createEdgeHandler(
   "brief-alignment-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
-    const context = await loadAgentContext(ctx.body.request_id);
+    const requestId = ctx.body.request_id;
+    const context = await loadAgentContext(requestId);
     const results = await runBriefAlignmentAgent(context);
+    await persistAgentResults(requestId, results);
     return ok(results);
   },
 );
