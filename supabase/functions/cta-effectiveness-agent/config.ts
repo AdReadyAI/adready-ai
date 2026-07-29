@@ -26,8 +26,13 @@ export type CtaTiming = {
   min_dwell_ms: number;
 };
 
-/** null = unpopulated. Replace with confirmed CPG benchmarks. */
-export const CTA_TIMING: CtaTiming | null = null;
+/** Confirmed CPG benchmarks (Config Decisions doc, table 2). */
+export const CTA_TIMING: CtaTiming | null = {
+  buried_window_ms: 5000,
+  landing_zone_start_fraction: 0.70,
+  landing_zone_end_fraction: 1.0,
+  min_dwell_ms: 2000,
+};
 
 export function getCtaTiming(): CtaTiming | null {
   return CTA_TIMING;
@@ -51,8 +56,19 @@ export type CtaVisibilityThresholds = {
   marginal_font_size_px: number;
 };
 
-/** null = unpopulated. Replace with confirmed size thresholds. */
-export const CTA_VISIBILITY: CtaVisibilityThresholds | null = null;
+/**
+ * Size thresholds from the Config Decisions doc (table 3). region_area_pct_of_frame
+ * maps to min/marginal_region_size (values are % of frame, e.g. 0.03 = 3%).
+ * NOTE: pending Media's confirmation that ocr_segments.region_size is expressed as
+ * % of frame (not raw pixel area or 0–1 normalized) — if not, the region thresholds
+ * won't compare correctly. font_size_px units match on both sides.
+ */
+export const CTA_VISIBILITY: CtaVisibilityThresholds | null = {
+  min_region_size: 0.03,
+  marginal_region_size: 0.05,
+  min_font_size_px: 32,
+  marginal_font_size_px: 48,
+};
 
 export function getCtaVisibilityThresholds(): CtaVisibilityThresholds | null {
   return CTA_VISIBILITY;
@@ -69,12 +85,39 @@ export type PlatformPhrasing = {
   discouraged_phrases: string[];
 };
 
-/** null = unpopulated. Replace with a real table keyed by destination_platform. */
-export const CTA_PHRASING: Readonly<Record<string, PlatformPhrasing>> | null =
-  null;
+/**
+ * Discouraged/stale CTA phrasings per platform (Config Decisions doc, table 6).
+ * Keys are the canonical platform names; lookup via getPlatformPhrasing is case-
+ * and whitespace-insensitive, so parsed_creative_briefs.destination_platform
+ * values like "tiktok" or " TikTok " still resolve. Phrase casing is irrelevant
+ * (both sides are lowercased). The doc's "reason" column is human context only
+ * and has no field here.
+ */
+export const CTA_PHRASING: Readonly<Record<string, PlatformPhrasing>> | null = {
+  "TikTok": {
+    discouraged_phrases: ["swipe up", "link in bio", "click the link below"],
+  },
+  "Instagram Reels": {
+    discouraged_phrases: ["swipe up", "link in bio", "click below"],
+  },
+  "YouTube Shorts": {
+    discouraged_phrases: ["click below", "link in description", "swipe up"],
+  },
+};
+
+// Canonical keys indexed by their normalized (lowercased, trimmed) form so a
+// destination_platform in any casing resolves to the right phrasing. Built once.
+const CTA_PHRASING_BY_NORMALIZED_KEY: Readonly<
+  Record<string, PlatformPhrasing>
+> = Object.fromEntries(
+  Object.entries(CTA_PHRASING ?? {}).map(([key, phrasing]) => [
+    key.trim().toLowerCase(),
+    phrasing,
+  ]),
+);
 
 export function getPlatformPhrasing(platform: string): PlatformPhrasing | null {
-  return CTA_PHRASING?.[platform] ?? null;
+  return CTA_PHRASING_BY_NORMALIZED_KEY[platform.trim().toLowerCase()] ?? null;
 }
 
 // ── campaign_goal → CTA-type benchmark (cta_goal_mismatch) ──────────────────
@@ -93,10 +136,28 @@ export type GoalBenchmark = {
   examples: string[];
 };
 
-/** null = unpopulated. Replace with a real table keyed by campaign_goal. */
+/**
+ * campaign_goal → expected CTA type + example phrasings (Config Decisions doc,
+ * table 4). Enum completeness is still open: if goals beyond these four (app
+ * install, lead-gen, retargeting, …) are introduced, add their rows here.
+ */
 export const CTA_GOAL_BENCHMARK:
   | Readonly<Record<string, GoalBenchmark>>
-  | null = null;
+  | null = {
+    awareness: { expected_cta_type: "soft", examples: ["Learn more"] },
+    consideration: {
+      expected_cta_type: "soft",
+      examples: ["See how it works"],
+    },
+    repurchase: {
+      expected_cta_type: "strong",
+      examples: ["Reorder now", "Stock up"],
+    },
+    conversion: {
+      expected_cta_type: "strong",
+      examples: ["Shop now", "Get 20% off"],
+    },
+  };
 
 export function getGoalBenchmark(campaignGoal: string): GoalBenchmark | null {
   return CTA_GOAL_BENCHMARK?.[campaignGoal] ?? null;

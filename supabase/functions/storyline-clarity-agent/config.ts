@@ -23,12 +23,48 @@ export type PlatformSpec = {
   max_duration_ms: number; // hard limit → high; ingestion failure → critical
 };
 
-/** null = unpopulated. Replace with a real table keyed by destination_platform. */
-export const PLATFORM_SPECS: Readonly<Record<string, PlatformSpec>> | null =
-  null;
+/**
+ * Per-platform technical specs (Config Decisions doc, table 5). Keys are the
+ * canonical platform names; lookup via getPlatformSpec is case- and
+ * whitespace-insensitive, so parsed_creative_briefs.destination_platform values
+ * like "tiktok" or " TikTok " still resolve.
+ */
+export const PLATFORM_SPECS: Readonly<Record<string, PlatformSpec>> | null = {
+  "TikTok": {
+    allowed_aspect_ratios: ["9:16"],
+    min_width: 1080,
+    min_height: 1920,
+    optimal_max_duration_ms: 34000,
+    max_duration_ms: 60000,
+  },
+  "Instagram Reels": {
+    allowed_aspect_ratios: ["9:16"],
+    min_width: 1080,
+    min_height: 1920,
+    optimal_max_duration_ms: 30000,
+    max_duration_ms: 90000,
+  },
+  "YouTube Shorts": {
+    allowed_aspect_ratios: ["9:16"],
+    min_width: 1080,
+    min_height: 1920,
+    optimal_max_duration_ms: 60000,
+    max_duration_ms: 180000,
+  },
+};
+
+// Canonical keys indexed by their normalized (lowercased, trimmed) form so a
+// destination_platform in any casing resolves to the right spec. Built once.
+const PLATFORM_SPECS_BY_NORMALIZED_KEY: Readonly<Record<string, PlatformSpec>> =
+  Object.fromEntries(
+    Object.entries(PLATFORM_SPECS ?? {}).map(([key, spec]) => [
+      key.trim().toLowerCase(),
+      spec,
+    ]),
+  );
 
 export function getPlatformSpec(platform: string): PlatformSpec | null {
-  return PLATFORM_SPECS?.[platform] ?? null;
+  return PLATFORM_SPECS_BY_NORMALIZED_KEY[platform.trim().toLowerCase()] ?? null;
 }
 
 // ── Arc expectations (story_incomplete) ─────────────────────────────────────
@@ -44,9 +80,30 @@ export type ArcExpectation = {
   expect_payoff_resolved: boolean;
 };
 
-/** null = unpopulated. Replace with a real table keyed by duration bucket. */
-export const ARC_EXPECTATIONS: Readonly<Record<string, ArcExpectation>> | null =
-  null;
+/**
+ * Arc expectations per duration bucket (Config Decisions doc, table 1). The doc's
+ * "tension/problem" maps to the `problem` arc role. payoff_must_be_onscreen maps to
+ * expect_payoff_resolved ("resolved before cut").
+ *
+ * The doc's "turn" role (a complication/twist, listed for 60s) is intentionally
+ * omitted: the ARC_ROLES vocabulary is shared across all durations and nothing
+ * downstream consumes expected_roles for grading (story_incomplete gates on this
+ * table's presence only — Call 2 judges from unfilled_roles/payoff_resolved_at, not
+ * these values). Adding "turn" would change Call 1 labeling for every ad with no
+ * grading benefit. Reintroduce it only if Eval Science confirms turn-at-60s should
+ * be enforced, together with wiring expected_roles into the Call 2 prompt.
+ */
+export const ARC_EXPECTATIONS: Readonly<Record<string, ArcExpectation>> | null = {
+  "15s": { expected_roles: ["hook", "payoff"], expect_payoff_resolved: true },
+  "30s": {
+    expected_roles: ["hook", "problem", "payoff"],
+    expect_payoff_resolved: true,
+  },
+  "60s": {
+    expected_roles: ["hook", "problem", "payoff"],
+    expect_payoff_resolved: false,
+  },
+};
 
 /** Resolve the expectation bucket for a runtime (e.g. 15000 → "15s"). */
 export function getArcExpectation(durationMs: number): ArcExpectation | null {
