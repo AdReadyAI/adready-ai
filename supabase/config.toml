@@ -394,6 +394,9 @@ import_map = "./deno.json"
 [functions.brief-alignment-agent]
 import_map = "./deno.json"
 
+[functions.parse-creative-brief]
+import_map = "./deno.json"
+
 [functions.claims-agent]
 import_map = "./deno.json"
 
