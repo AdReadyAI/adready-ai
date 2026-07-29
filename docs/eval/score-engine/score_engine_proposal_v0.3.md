@@ -203,7 +203,7 @@ Fix order: product_truth → cta_clarity → brief_adherence (each may carry con
 | `score_config_v0.3.yaml` | Machine-readable companion (Plan A locked) |
 | `supabase/functions/_shared/score-engine/` | Pure Score Engine + parser |
 | `supabase/functions/score-engine/` | Thin Edge: POST → `{ result_table, issues }` |
-| `024_create_result_score_table.sql` | `result_score_table` + `result_score_dimensions` (pure columns) |
+| `026_create_result_score_table.sql` | `result_score_table` + `result_score_dimensions` (pure columns) |
 | `_shared/score-engine/types.ts` | Edge/API TypeScript shapes (`ResultTable`, `IssueRow`, …) |
 | `025` / `public.issuetable` | Issue rows (engine does not write this table) |
 
