@@ -113,7 +113,13 @@
  *   ]
  */
 
-import { createEdgeHandler, loadAgentContext, ok } from "../shared/index.ts";
+import {
+  createEdgeHandler,
+  loadAgentContext,
+  ok,
+  persistMetricResults,
+  validateMetricResults,
+} from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
 import { runStorylineAgent } from "./agent.ts";
 
@@ -128,6 +134,10 @@ createEdgeHandler(
       userId: ctx.user.id,
     });
     const results = await runStorylineAgent(context);
-    return ok(results);
+    // Validate the assembled results once, then use the validated array for both
+    // persistence and the HTTP response so what we store and what we return match.
+    const validated = validateMetricResults(results);
+    await persistMetricResults(ctx.body.request_id, validated);
+    return ok(validated);
   },
 );
