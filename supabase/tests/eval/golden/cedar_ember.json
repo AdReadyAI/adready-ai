@@ -1,0 +1,476 @@
+{
+  "request_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "campaign_goal": "conversion",
+  "destination_platform": "tiktok",
+  "parsed_creative_brief": {
+    "raw_text": "30-second TikTok launch ad for Cedar & Ember, a small-batch ready-to-drink cold brew coffee sold by subscription. Open on the universal 6 AM struggle, contrast with gas-station coffee, then introduce the product. Lead with the 18-hour cold steep, low-acid smoothness, and zero added sugar. Reinforce with real customer proof (10,000+ five-star reviews). Close on the offer: 20% off the first box with code FIRSTSIP at cedarember.com, subscription auto-renews monthly, cancel anytime. Tone: warm, honest, a little witty; never hype-y or medical. Keep the charcoal + ember-orange palette and the vintage 16mm film-grain look throughout. Logo must appear in the final 5 seconds. Target lapsed drip-coffee drinkers, 25-40, who care about quality and convenience.",
+    "brand_voice": "warm, honest, lightly witty, unpretentious",
+    "target_audience": "coffee drinkers 25-40, lapsed drip/gas-station drinkers who value quality and convenience",
+    "required_messages": [
+      "18-hour cold steep for a smooth, low-acid finish",
+      "zero added sugar, no syrups",
+      "single-origin beans",
+      "10,000+ five-star reviews",
+      "20% off the first box"
+    ],
+    "required_ctas": ["Subscribe & save at cedarember.com"],
+    "approved_claims": [
+      "steeped 18 hours",
+      "low-acid",
+      "0g added sugar",
+      "single-origin beans",
+      "10,000+ five-star reviews",
+      "cancel anytime"
+    ],
+    "forbidden_claims": [
+      "healthiest coffee you can buy",
+      "boosts your metabolism",
+      "cures fatigue",
+      "clinically proven"
+    ],
+    "brand_guidelines": [
+      "use the charcoal + ember-orange palette",
+      "keep the vintage 16mm film-grain look",
+      "logo appears in the final 5 seconds",
+      "wordmark set in the Cedar serif"
+    ],
+    "policy_requirements": [
+      "disclose that the subscription auto-renews monthly",
+      "state that customers can cancel anytime",
+      "show a 'contains caffeine' disclaimer"
+    ]
+  },
+  "video_metadata": {
+    "duration_ms": 30000,
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "dropped_frame_markers": [],
+    "corruption_detected": false
+  },
+  "transcript_segments": [
+    {
+      "segment_id": "tr_001",
+      "start_ms": 0,
+      "end_ms": 3000,
+      "text": "It's 6 AM. The alarm won. Again.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_002",
+      "start_ms": 3000,
+      "end_ms": 7000,
+      "text": "But your coffee shouldn't taste like the bottom of a gas-station pot.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_003",
+      "start_ms": 7000,
+      "end_ms": 12000,
+      "text": "Meet Cedar and Ember. Small-batch cold brew, steeped a full eighteen hours for a smooth, low-acid finish.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_004",
+      "start_ms": 12000,
+      "end_ms": 17000,
+      "text": "No syrups. No sugar bombs. Just single-origin beans and cold, filtered water.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_005",
+      "start_ms": 17000,
+      "end_ms": 21000,
+      "text": "Over ten thousand five-star mornings, and counting.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_006",
+      "start_ms": 21000,
+      "end_ms": 25000,
+      "text": "Get your first box for twenty percent off with code FIRSTSIP.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_007",
+      "start_ms": 25000,
+      "end_ms": 30000,
+      "text": "Subscribe and save at cedar ember dot com. Cancel anytime.",
+      "speaker": "narrator"
+    }
+  ],
+  "ocr_segments": [
+    {
+      "ocr_id": "ocr_001",
+      "frame_ids": ["frame_003"],
+      "start_ms": 7500,
+      "end_ms": 11500,
+      "text": "CEDAR & EMBER",
+      "on_screen_duration_ms": 4000,
+      "region_size": 0.28,
+      "font_size_px": 72
+    },
+    {
+      "ocr_id": "ocr_002",
+      "frame_ids": ["frame_003"],
+      "start_ms": 8500,
+      "end_ms": 12000,
+      "text": "18-HOUR COLD STEEP",
+      "on_screen_duration_ms": 3500,
+      "region_size": 0.14,
+      "font_size_px": 40
+    },
+    {
+      "ocr_id": "ocr_003",
+      "frame_ids": ["frame_005"],
+      "start_ms": 13000,
+      "end_ms": 16500,
+      "text": "0g ADDED SUGAR",
+      "on_screen_duration_ms": 3500,
+      "region_size": 0.12,
+      "font_size_px": 38
+    },
+    {
+      "ocr_id": "ocr_004",
+      "frame_ids": ["frame_006"],
+      "start_ms": 17500,
+      "end_ms": 21000,
+      "text": "10,000+ ★★★★★ REVIEWS",
+      "on_screen_duration_ms": 3500,
+      "region_size": 0.18,
+      "font_size_px": 44
+    },
+    {
+      "ocr_id": "ocr_005",
+      "frame_ids": ["frame_008"],
+      "start_ms": 21500,
+      "end_ms": 25000,
+      "text": "20% OFF FIRST BOX",
+      "on_screen_duration_ms": 3500,
+      "region_size": 0.2,
+      "font_size_px": 56
+    },
+    {
+      "ocr_id": "ocr_006",
+      "frame_ids": ["frame_008"],
+      "start_ms": 22000,
+      "end_ms": 25000,
+      "text": "Code: FIRSTSIP",
+      "on_screen_duration_ms": 3000,
+      "region_size": 0.1,
+      "font_size_px": 48
+    },
+    {
+      "ocr_id": "ocr_007",
+      "frame_ids": ["frame_010"],
+      "start_ms": 25500,
+      "end_ms": 30000,
+      "text": "SUBSCRIBE & SAVE",
+      "on_screen_duration_ms": 4500,
+      "region_size": 0.22,
+      "font_size_px": 60
+    },
+    {
+      "ocr_id": "ocr_008",
+      "frame_ids": ["frame_010"],
+      "start_ms": 25500,
+      "end_ms": 30000,
+      "text": "cedarember.com",
+      "on_screen_duration_ms": 4500,
+      "region_size": 0.11,
+      "font_size_px": 48
+    },
+    {
+      "ocr_id": "ocr_009",
+      "frame_ids": ["frame_010"],
+      "start_ms": 26000,
+      "end_ms": 30000,
+      "text": "Auto-renews monthly. Cancel anytime. Contains caffeine.",
+      "on_screen_duration_ms": 4000,
+      "region_size": 0.04,
+      "font_size_px": 16
+    }
+  ],
+  "visual_frames": [
+    {
+      "frame_id": "frame_001",
+      "timestamp_ms": 1000,
+      "image_url": "https://cdn.example.com/frames/cedar-ember/frame_001.jpg",
+      "visual_description": "Dark bedroom before dawn; a hand slaps a buzzing phone alarm on the nightstand. Cool blue light, heavy film grain.",
+      "people": {
+        "count": 1,
+        "apparent_ages": ["adult, 30s"],
+        "apparent_presentation": ["just-woken sleeper"],
+        "activity": "silencing a phone alarm",
+        "clothing_style": "sleepwear"
+      },
+      "color_palette": {
+        "dominant_colors": ["charcoal", "blue-gray"],
+        "lighting_quality": "dim pre-dawn"
+      },
+      "background": { "location_type": "bedroom", "mood": "groggy" },
+      "camera_movement": "handheld",
+      "technical_flags": ["intentional_film_grain"]
+    },
+    {
+      "frame_id": "frame_002",
+      "timestamp_ms": 5000,
+      "image_url": "https://cdn.example.com/frames/cedar-ember/frame_002.jpg",
+      "visual_description": "Unappetizing pour of thin, gray coffee from a scorched gas-station carafe into a paper cup under harsh fluorescent light.",
+      "people": {
+        "count": 1,
+        "apparent_ages": ["adult, 30s"],
+        "apparent_presentation": ["tired commuter"],
+        "activity": "pouring gas-station coffee",
+        "clothing_style": "work casual"
+      },
+      "color_palette": {
+        "dominant_colors": ["fluorescent white", "gray", "beige"],
+        "lighting_quality": "harsh fluorescent"
+      },
+      "background": { "location_type": "convenience store", "mood": "bleak" },
+      "camera_movement": "static",
+      "technical_flags": ["intentional_film_grain"]
+    },
+    {
+      "frame_id": "frame_003",
+      "timestamp_ms": 9000,
+      "image_url": "https://cdn.example.com/frames/cedar-ember/frame_003.jpg",
+      "visual_description": "Hero reveal: a frosted Cedar & Ember bottle on a walnut counter, ember-orange sunrise behind it; wordmark and '18-hour cold steep' supered over the shot.",
+      "people": {
+        "count": 0,
+        "apparent_ages": [],
+        "apparent_presentation": [],
+        "activity": "product hero reveal",
+        "clothing_style": "not applicable"
+      },
+      "color_palette": {
+        "dominant_colors": ["charcoal", "ember orange", "amber"],
+        "lighting_quality": "warm golden-hour"
+      },
+      "background": { "location_type": "kitchen counter", "mood": "inviting" },
+      "camera_movement": "zoom",
+      "technical_flags": ["intentional_film_grain"]
+    },
+    {
+      "frame_id": "frame_004",
+      "timestamp_ms": 11000,
+      "image_url": "https://cdn.example.com/frames/cedar-ember/frame_004.jpg",
+      "visual_description": "Macro slow-motion of dark cold-brew concentrate swirling through cold water in a glass carafe, coffee grounds settling.",
+      "people": {
+        "count": 0,
+        "apparent_ages": [],
+        "apparent_presentation": [],
+        "activity": "cold-brew steeping demo",
+        "clothing_style": "not applicable"
+      },
+      "color_palette": {
+        "dominant_colors": ["deep brown", "amber", "charcoal"],
+        "lighting_quality": "low-key rim light"
+      },
+      "background": { "location_type": "studio product set", "mood": "crafted" },
+      "camera_movement": "static",
+      "technical_flags": ["intentional_film_grain"]
+    },
+    {
+      "frame_id": "frame_005",
+      "timestamp_ms": 14500,
+      "image_url": "https://cdn.example.com/frames/cedar-ember/frame_005.jpg",
+      "visual_description": "Flat-lay of single-origin beans scattered beside the bottle; a '0g added sugar' badge animates in. Ember-orange accents.",
+      "people": {
+        "count": 0,
+        "apparent_ages": [],
+        "apparent_presentation": [],
+        "activity": "ingredient flat-lay",
+        "clothing_style": "not applicable"
+      },
+      "color_palette": {
+        "dominant_colors": ["charcoal", "ember orange", "coffee brown"],
+        "lighting_quality": "soft overhead"
+      },
+      "background": { "location_type": "studio flat-lay", "mood": "honest" },
+      "camera_movement": "pan",
+      "technical_flags": ["intentional_film_grain"]
+    },
+    {
+      "frame_id": "frame_006",
+      "timestamp_ms": 18500,
+      "image_url": "https://cdn.example.com/frames/cedar-ember/frame_006.jpg",
+      "visual_description": "A woman on a sunlit porch sips from the bottle and smiles; a '10,000+ five-star reviews' banner with stars overlays the lower third.",
+      "people": {
+        "count": 1,
+        "apparent_ages": ["adult, 30s"],
+        "apparent_presentation": ["satisfied customer"],
+        "activity": "drinking cold brew and smiling",
+        "clothing_style": "cozy knit"
+      },
+      "color_palette": {
+        "dominant_colors": ["ember orange", "warm cream", "green"],
+        "lighting_quality": "warm morning daylight"
+      },
+      "background": { "location_type": "porch", "mood": "content" },
+      "camera_movement": "handheld",
+      "technical_flags": ["intentional_film_grain"]
+    },
+    {
+      "frame_id": "frame_007",
+      "timestamp_ms": 20500,
+      "image_url": "https://cdn.example.com/frames/cedar-ember/frame_007.jpg",
+      "visual_description": "Quick montage of three subscribers pouring Cedar & Ember over ice in different kitchens; UGC feel, natural light.",
+      "people": {
+        "count": 3,
+        "apparent_ages": ["adult, 20s", "adult, 30s", "adult, 40s"],
+        "apparent_presentation": ["everyday customers"],
+        "activity": "pouring cold brew over ice",
+        "clothing_style": "casual home wear"
+      },
+      "color_palette": {
+        "dominant_colors": ["warm neutrals", "ember orange"],
+        "lighting_quality": "mixed natural light"
+      },
+      "background": { "location_type": "home kitchens", "mood": "relatable" },
+      "camera_movement": "handheld",
+      "technical_flags": ["intentional_film_grain"]
+    },
+    {
+      "frame_id": "frame_008",
+      "timestamp_ms": 23000,
+      "image_url": "https://cdn.example.com/frames/cedar-ember/frame_008.jpg",
+      "visual_description": "Subscription box shot: a Cedar & Ember carton open with four bottles; bold '20% OFF FIRST BOX' and 'Code: FIRSTSIP' supered on the ember-orange panel.",
+      "people": {
+        "count": 0,
+        "apparent_ages": [],
+        "apparent_presentation": [],
+        "activity": "subscription box reveal",
+        "clothing_style": "not applicable"
+      },
+      "color_palette": {
+        "dominant_colors": ["ember orange", "kraft brown", "charcoal"],
+        "lighting_quality": "clean product light"
+      },
+      "background": { "location_type": "graphic offer card", "mood": "energetic" },
+      "camera_movement": "static",
+      "technical_flags": ["intentional_film_grain"]
+    },
+    {
+      "frame_id": "frame_009",
+      "timestamp_ms": 26000,
+      "image_url": "https://cdn.example.com/frames/cedar-ember/frame_009.jpg",
+      "visual_description": "The commuter from the open now enjoys the cold brew at a tidy desk, visibly more awake; callback to the first scenes.",
+      "people": {
+        "count": 1,
+        "apparent_ages": ["adult, 30s"],
+        "apparent_presentation": ["refreshed customer"],
+        "activity": "enjoying cold brew at a desk",
+        "clothing_style": "work casual"
+      },
+      "color_palette": {
+        "dominant_colors": ["warm cream", "ember orange", "charcoal"],
+        "lighting_quality": "bright morning daylight"
+      },
+      "background": { "location_type": "home office", "mood": "upbeat" },
+      "camera_movement": "static",
+      "technical_flags": ["intentional_film_grain"]
+    },
+    {
+      "frame_id": "frame_010",
+      "timestamp_ms": 28500,
+      "image_url": "https://cdn.example.com/frames/cedar-ember/frame_010.jpg",
+      "visual_description": "End card: bottle centered on charcoal, ember-orange 'SUBSCRIBE & SAVE' with cedarember.com below, Cedar & Ember wordmark logo top-center, fine-print disclaimer along the bottom.",
+      "people": {
+        "count": 0,
+        "apparent_ages": [],
+        "apparent_presentation": [],
+        "activity": "end card",
+        "clothing_style": "not applicable"
+      },
+      "color_palette": {
+        "dominant_colors": ["charcoal", "ember orange", "cream"],
+        "lighting_quality": "clean graphic"
+      },
+      "background": { "location_type": "graphic end card", "mood": "confident" },
+      "camera_movement": "static",
+      "technical_flags": ["intentional_film_grain"]
+    }
+  ],
+  "product_frames": [
+    {
+      "frame_id": "frame_003",
+      "timestamp_ms": 9000,
+      "location": { "x": 380, "y": 560, "w": 320, "h": 820 },
+      "confidence_score": 0.98,
+      "prominence": "foreground_in_use",
+      "focus_quality": "sharp",
+      "framing": "fully_visible",
+      "usage_context": "product hero reveal on counter"
+    },
+    {
+      "frame_id": "frame_006",
+      "timestamp_ms": 18500,
+      "location": { "x": 430, "y": 700, "w": 240, "h": 560 },
+      "confidence_score": 0.93,
+      "prominence": "foreground_in_use",
+      "focus_quality": "sharp",
+      "framing": "fully_visible",
+      "usage_context": "held while drinking on porch"
+    },
+    {
+      "frame_id": "frame_008",
+      "timestamp_ms": 23000,
+      "location": { "x": 210, "y": 620, "w": 660, "h": 700 },
+      "confidence_score": 0.95,
+      "prominence": "foreground_static",
+      "focus_quality": "sharp",
+      "framing": "fully_visible",
+      "usage_context": "subscription box with four bottles"
+    },
+    {
+      "frame_id": "frame_010",
+      "timestamp_ms": 28500,
+      "location": { "x": 400, "y": 520, "w": 280, "h": 760 },
+      "confidence_score": 0.97,
+      "prominence": "foreground_static",
+      "focus_quality": "sharp",
+      "framing": "fully_visible",
+      "usage_context": "centered on end card"
+    }
+  ],
+  "logo_frames": [
+    {
+      "frame_id": "frame_003",
+      "timestamp_ms": 9000,
+      "location": { "x": 300, "y": 300, "w": 480, "h": 140 },
+      "confidence_score": 0.9,
+      "prominence": "large_central",
+      "reference_match": "matches_reference"
+    },
+    {
+      "frame_id": "frame_010",
+      "timestamp_ms": 28500,
+      "location": { "x": 300, "y": 240, "w": 480, "h": 150 },
+      "confidence_score": 0.96,
+      "prominence": "large_central",
+      "reference_match": "matches_reference"
+    }
+  ],
+  "product_context": {
+    "raw_text": "Cedar & Ember is a small-batch, ready-to-drink cold brew coffee sold by monthly subscription. Each batch is steeped for 18 hours from single-origin beans and cold, filtered water for a smooth, low-acid cup with 0g added sugar. Product page lists 10,000+ verified five-star reviews. Each 12oz bottle contains roughly 180mg of caffeine. Subscriptions auto-renew monthly and can be canceled anytime from the account page. New customers get 20% off the first box with code FIRSTSIP.",
+    "claims": [
+      "steeped 18 hours",
+      "low-acid",
+      "0g added sugar",
+      "single-origin beans",
+      "10,000+ five-star reviews",
+      "180mg caffeine per bottle",
+      "cancel anytime"
+    ],
+    "contraindications": [
+      "contains caffeine",
+      "not recommended for children or pregnant people"
+    ],
+    "reference_asset_urls": [
+      "https://cdn.example.com/reference/cedar_ember_logo.png",
+      "https://cdn.example.com/reference/cedar_ember_bottle_front.png",
+      "https://cdn.example.com/reference/cedar_ember_subscription_box.png"
+    ]
+  }
+}
