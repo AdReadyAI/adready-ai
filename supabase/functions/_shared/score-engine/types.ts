@@ -28,7 +28,7 @@ export type ReadinessStatus =
 /**
  * One agent (or golden) metric row. Score Engine ignores any agent-provided score.
  * explanation / recommended_fix are accepted on input and emitted as
- * detail / repair_suggestion on IssueRow (issuetable column names).
+ * detail / repair_suggestion on IssueRow (issues table column names).
  */
 export interface MetricInput {
   metric_id: MetricId;
@@ -70,8 +70,9 @@ export interface GatingFailure {
 }
 
 /**
- * One issue row shaped for public.issuetable (Samy).
- * Orchestrator adds request_id, batch_id, created_at on INSERT.
+ * One issue row shaped for public.issues.
+ * Orchestrator adds request_id, batch_id, created_at on INSERT
+ * (same pair as on public.requests).
  * Array order is the Score Engine priority order (not a stored column).
  */
 export interface IssueRow {
@@ -107,7 +108,7 @@ export interface ResultTable {
 /**
  * Public Score Engine response.
  * result_table → result_score_table + result_score_dimensions (orchestrator);
- * issues[] → issuetable rows.
+ * issues[] → public.issues rows (orchestrator adds request_id + batch_id).
  */
 export interface ScoreTablesOutput {
   result_table: ResultTable;

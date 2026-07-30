@@ -230,7 +230,7 @@ function issueTitle(
 }
 
 /**
- * Build issuetable-shaped rows (no request_id / batch_id — orchestrator fills those).
+ * Build issues-table-shaped rows (no request_id / batch_id — orchestrator fills those).
  * Array order is priority (gating → severity → weight).
  */
 function buildIssues(
@@ -272,7 +272,7 @@ function buildIssues(
 }
 
 /**
- * Score Engine v0.3: metric_results → result_table + issuetable-shaped issues[].
+ * Score Engine v0.3: metric_results → result_table + issues[] (public.issues shape).
  * Confidence is passthrough on issues only (non-scoring).
  */
 export function scoreEngine(

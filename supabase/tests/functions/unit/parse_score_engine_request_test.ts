@@ -109,3 +109,55 @@ Deno.test("parseScoreEngineRequest rejects invalid confidence", () => {
   const parsed = parseScoreEngineRequest({ metric_results: rows });
   assertEquals(parsed.ok, false);
 });
+
+Deno.test("parseScoreEngineRequest rejects false with severity none", () => {
+  const parsed = parseScoreEngineRequest({
+    metric_results: fullMetricResults({
+      product_truth: { result: "false", severity: "none" },
+    }),
+  });
+  assertEquals(parsed.ok, false);
+  if (!parsed.ok) {
+    assertEquals(parsed.error.includes("result=false"), true);
+  }
+});
+
+Deno.test("parseScoreEngineRequest rejects true with non-none severity", () => {
+  const parsed = parseScoreEngineRequest({
+    metric_results: fullMetricResults({
+      brand_fit: { result: "true", severity: "high" },
+    }),
+  });
+  assertEquals(parsed.ok, false);
+  if (!parsed.ok) {
+    assertEquals(parsed.error.includes("result=true"), true);
+  }
+});
+
+Deno.test("parseScoreEngineRequest rejects cannot_assess with non-none severity", () => {
+  const parsed = parseScoreEngineRequest({
+    metric_results: fullMetricResults({
+      creative_effectiveness: {
+        result: "cannot_assess",
+        severity: "medium",
+      },
+    }),
+  });
+  assertEquals(parsed.ok, false);
+  if (!parsed.ok) {
+    assertEquals(parsed.error.includes("result=cannot_assess"), true);
+  }
+});
+
+Deno.test("parseScoreEngineRequest accepts false with failure severities", () => {
+  for (
+    const severity of ["low", "medium", "high", "critical"] as const
+  ) {
+    const parsed = parseScoreEngineRequest({
+      metric_results: fullMetricResults({
+        cta_clarity: { result: "false", severity },
+      }),
+    });
+    assertEquals(parsed.ok, true, `expected accept false+${severity}`);
+  }
+});

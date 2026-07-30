@@ -7,7 +7,7 @@
 
 Public API output shape: `{ result_table, issues }` (`ScoreTablesOutput`).  
 Result UI / DB: `result_score_table` + `result_score_dimensions` (migration 026, pure columns).  
-Issue UI / DB: `public.issuetable` (migration 025); engine emits `issues[]` with matching column names.  
+Issue UI / DB: `public.issues` ; engine emits `issues[]` with matching column names.  
 Wire types: `ResultTable` / `IssueRow` / `ScoreTablesOutput` in `_shared/score-engine/types.ts`.
 
 ---
@@ -147,7 +147,7 @@ Candidates: all `result = false` metrics (including gates).
 | 3 | Within same severity: **metric weight** desc |
 
 Each issue includes `metric_id`, `title`, `severity`, `confidence`, and optional
-`detail` / `repair_suggestion` / `video_timestamp` (issuetable column names).  
+`detail` / `repair_suggestion` / `video_timestamp` (public.issues column names).  
 Agent input may still use `explanation` / `recommended_fix`; the engine renames on output.  
 Public payload: `issues[]` (array order = priority). Orchestrator adds `request_id` / `batch_id` on INSERT.
 
@@ -203,9 +203,15 @@ Fix order: product_truth → cta_clarity → brief_adherence (each may carry con
 | `score_config_v0.3.yaml` | Machine-readable companion (Plan A locked) |
 | `supabase/functions/_shared/score-engine/` | Pure Score Engine + parser |
 | `supabase/functions/score-engine/` | Thin Edge: POST → `{ result_table, issues }` |
-| `026_create_result_score_table.sql` | `result_score_table` + `result_score_dimensions` (pure columns) |
+| `026_create_result_score_table.sql` | `result_score_table` + `result_score_dimensions` (pure columns; composite FK to `requests`) |
 | `_shared/score-engine/types.ts` | Edge/API TypeScript shapes (`ResultTable`, `IssueRow`, …) |
-| `025` / `public.issuetable` | Issue rows (engine does not write this table) |
+| `public.issues` | Issue rows (engine does not write this table) |
 
-Orchestrator writes result columns and issue rows; Edge does not write Postgres.
+### Orchestrator write convention
+
+Score Engine is read-only on DB. After scoring, the orchestrator persists:
+
+1. **Result:** one `result_score_table` row + six `result_score_dimensions` rows.
+2. **Issues:** one `public.issues` row per item in `issues[]`.
+
 

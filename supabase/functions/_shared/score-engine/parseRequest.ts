@@ -26,6 +26,34 @@ const CONFIDENCES = new Set<Confidence>(["high", "medium", "low"]);
 const METRIC_IDS = new Set<string>(ALL_METRIC_IDS);
 const EXPECTED_METRIC_COUNT = ALL_METRIC_IDS.length;
 
+const FALSE_SEVERITIES = new Set<Severity>([
+  "low",
+  "medium",
+  "high",
+  "critical",
+]);
+
+/**
+ * After result and severity are valid enums, enforce pairing:
+ * true / cannot_assess → none; false → low|medium|high|critical.
+ */
+function resultSeverityPairError(
+  index: number,
+  result: MetricResultValue,
+  severity: Severity,
+): string | null {
+  if (result === "true" && severity !== "none") {
+    return `metric_results[${index}]: result=true requires severity none`;
+  }
+  if (result === "cannot_assess" && severity !== "none") {
+    return `metric_results[${index}]: result=cannot_assess requires severity none`;
+  }
+  if (result === "false" && !FALSE_SEVERITIES.has(severity)) {
+    return `metric_results[${index}]: result=false requires severity low|medium|high|critical`;
+  }
+  return null;
+}
+
 export interface ParseRequestSuccess {
   ok: true;
   metric_results: MetricInput[];
@@ -41,7 +69,7 @@ export type ParseRequestResult = ParseRequestSuccess | ParseRequestFailure;
 /**
  * Validate the thin Edge Function body: `{ "metric_results": MetricInput[] }`.
  * Requires exactly the nine v0.3 metric_ids, each once.
- * Scoring rules stay in scoreEngine — this only checks shape/enums.
+ * Enforces result×severity pairs; scoring rules stay in scoreEngine.
  */
 export function parseScoreEngineRequest(body: unknown): ParseRequestResult {
   if (body === null || typeof body !== "object" || Array.isArray(body)) {
@@ -109,10 +137,17 @@ export function parseScoreEngineRequest(body: unknown): ParseRequestResult {
       };
     }
 
+    const resultValue = result as MetricResultValue;
+    const severityValue = severity as Severity;
+    const pairError = resultSeverityPairError(i, resultValue, severityValue);
+    if (pairError) {
+      return { ok: false, error: pairError };
+    }
+
     const input: MetricInput = {
       metric_id: id,
-      result: result as MetricResultValue,
-      severity: severity as Severity,
+      result: resultValue,
+      severity: severityValue,
     };
 
     const confidence = (row as { confidence?: unknown }).confidence;

@@ -140,7 +140,7 @@ Deno.test("policy_compliance high failure is High Risk gating", () => {
   assertEquals(out.issues[0].confidence, "unknown");
 });
 
-Deno.test("maps explanation and recommended_fix to issuetable fields", () => {
+Deno.test("maps explanation and recommended_fix to issues table fields", () => {
   const inputs = allTrue().map((row) =>
     row.metric_id === "product_truth"
       ? {
