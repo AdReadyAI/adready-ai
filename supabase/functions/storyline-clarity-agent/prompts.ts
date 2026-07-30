@@ -77,6 +77,10 @@ function evaluationInput(
       },
       visual_frames: ctx.visual_frames,
       transcript_segments: ctx.transcript_segments,
+      // On-screen text (captions, supers, end-card copy). Placement fit judges
+      // whether the ad uses native on-screen text; without this the model would
+      // wrongly read the absence of text in the frame descriptions as no text.
+      ocr_segments: ctx.ocr_segments,
       hook_window_ms: DEFAULT_HOOK_WINDOW_MS,
       narrative_arc: arc, // null when Call 1 could not be labeled
       // Duration-bucket bar for story_incomplete; null → return cannot_assess for it.
@@ -116,7 +120,8 @@ export function evaluationPrompt(
   const system =
     "You are evaluating a short-form ad on two metrics: creative_effectiveness (its internal storytelling) and " +
     "channel_readiness (its fit for the intended placement and audience). You are given the visual_frames with " +
-    "their visual_descriptions and timestamps, the transcript_segments, the total duration, the " +
+    "their visual_descriptions and timestamps, the transcript_segments, the ocr_segments (on-screen text such as " +
+    "captions and end-card copy — treat a non-empty ocr_segments as proof the ad has on-screen text), the total duration, the " +
     "destination_platform, the campaign_goal, an audience_brief (target_audience, brand_voice/tone, and " +
     "required_messages — any field may be null), the narrative arc labeled in the previous step (each " +
     "frame's arc role, which roles are unfilled, and where the payoff resolves), and an arc_expectation for this " +
