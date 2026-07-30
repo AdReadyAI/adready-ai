@@ -5,7 +5,7 @@
 // those presentational components themselves.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import UploadPage from './UploadPage'
 
 const { uploadMock, removeMock } = vi.hoisted(() => ({
@@ -44,6 +44,14 @@ function getImageInput() {
   return document.querySelectorAll('input[type="file"]')[1] as HTMLInputElement
 }
 
+// Sidebar (rendered alongside the upload sections) has its own static "✓"
+// checkmarks in its "What we'll analyze" list, unrelated to upload status —
+// so a page-wide getByText('✓') is ambiguous. Scope to the specific card
+// via its remove button instead.
+function getVideoCard(filename: string) {
+  return screen.getByRole('button', { name: `Remove ${filename}` }).closest('.bg-white') as HTMLElement
+}
+
 describe('UploadPage', () => {
   beforeEach(() => {
     uploadMock.mockReset()
@@ -80,7 +88,7 @@ describe('UploadPage', () => {
     expect(screen.getByText('ad.mp4')).toBeInTheDocument()
     expect(document.querySelector('.animate-spin')).toBeInTheDocument()
 
-    await waitFor(() => expect(screen.getByText('✓')).toBeInTheDocument())
+    await waitFor(() => expect(within(getVideoCard('ad.mp4')).getByText('✓')).toBeInTheDocument())
     expect(uploadMock).toHaveBeenCalledWith(
       expect.stringContaining('user-123'),
       file,
@@ -106,7 +114,7 @@ describe('UploadPage', () => {
     const file = makeFile('ad.mp4', 'video/mp4')
 
     fireEvent.change(getVideoInput(), { target: { files: [file] } })
-    await waitFor(() => expect(screen.getByText('✓')).toBeInTheDocument())
+    await waitFor(() => expect(within(getVideoCard('ad.mp4')).getByText('✓')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove ad.mp4' }))
 
