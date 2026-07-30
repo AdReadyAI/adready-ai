@@ -25,6 +25,13 @@ vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({ user: { id: 'user-123' } }),
 }))
 
+// UploadPage renders CampaignSection -> CampaignForm, which calls
+// useNavigate(). Mock it here too so the full page tree can render without
+// a real <Router> around it.
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+}))
+
 function makeFile(name: string, type: string) {
   return new File(['content'], name, { type })
 }
