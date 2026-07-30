@@ -10,6 +10,7 @@ from app.schemas import JobPayload
 from app.errors import TransientError
 from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS
 from analyzer.output_models import TaskResult
+from app.ocr_runs import OcrRunLifecycle
 from app.supabase import Supabase
 
 
@@ -25,6 +26,17 @@ def process_message(cur, msg_id, payload):
 
         analyzer = VideoAnalyzer(artifact)
         db = Supabase(cur=cur, request_id=request_id)
+        ocr_lifecycle = OcrRunLifecycle(
+            cur=cur,
+            request_id=request_id,
+            source_bucket=payload.bucket,
+            source_path=payload.video_path,
+        )
+        analyzer = _OcrLifecycleAnalyzer(
+            analyzer,
+            ocr_lifecycle,
+            artifact.video_metadata,
+        )
         results, errors = _run_analysis(db, analyzer)
 
         db.persist_results(results, errors)
@@ -40,6 +52,30 @@ def _parse_payload(msg_id, payload: dict) -> JobPayload:
         return JobPayload.model_validate(payload) 
     except (KeyError, TypeError) as e:
         raise ValueError(f"invalid job {msg_id} payload: {e}")
+
+
+class _OcrLifecycleAnalyzer:
+    """Apply durable lifecycle to OCR while preserving the analyzer registry."""
+
+    def __init__(self, analyzer, lifecycle, video_metadata):
+        self.analyzer = analyzer
+        self.lifecycle = lifecycle
+        self.video_metadata = video_metadata
+
+    def analysis_tasks(self):
+        """Return the existing registry with only its OCR callable wrapped."""
+        tasks = self.analyzer.analysis_tasks()
+        hosted_ocr = tasks.get("ocr")
+        if hosted_ocr is None:
+            return tasks
+
+        def run_ocr():
+            """Execute registered OCR through its durable lifecycle boundary."""
+            return self.lifecycle.execute(hosted_ocr, self.video_metadata)
+
+        # Preserve the task identity used by the existing retry logger.
+        run_ocr._analysis_task = "ocr"
+        return {**tasks, "ocr": run_ocr}
 
 
 def _run_analysis(db: Supabase, analyzer: VideoAnalyzer) -> tuple[dict[str, TaskResult], dict[str, str]]:

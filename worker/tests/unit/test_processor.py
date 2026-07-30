@@ -8,6 +8,7 @@ import app.processor as processor  # noqa: E402
 from app.errors import PermanentError, TransientError  # noqa: E402
 from app.schemas import JobPayload  # noqa: E402
 from analyzer.output_models import TranscriptionResult, TranscriptSegment  # noqa: E402
+from analyzer.types import VideoMetadata  # noqa: E402
 
 
 VALID_PAYLOAD = {
@@ -167,7 +168,16 @@ def _wire_process_message(monkeypatch, tasks, done=None, recorder=None):
             pass
 
         def prepare(self):
-            return object()
+            # The production artifact always carries metadata used by the
+            # OCR-local lifecycle before hosted analysis begins.
+            metadata = VideoMetadata(
+                duration_s=10.0,
+                fps=30.0,
+                width=1920,
+                height=1080,
+                size_bytes=1_000,
+            )
+            return type("PreparedArtifacts", (), {"video_metadata": metadata})()
 
     class FakeVideoAnalyzer:
         def __init__(self, artifact):
@@ -188,9 +198,20 @@ def _wire_process_message(monkeypatch, tasks, done=None, recorder=None):
             if recorder is not None:
                 recorder["persisted"] = (results, errors)
 
+    class FakeOcrRunLifecycle:
+        """Keep legacy processor tests focused on their existing behavior."""
+
+        def __init__(self, cur, request_id, source_bucket, source_path):
+            pass
+
+        def execute(self, hosted_ocr, metadata):
+            """Delegate through the OCR boundary without changing task results."""
+            return hosted_ocr()
+
     monkeypatch.setattr(processor, "VideoPreprocessor", FakePreprocessor)
     monkeypatch.setattr(processor, "VideoAnalyzer", FakeVideoAnalyzer)
     monkeypatch.setattr(processor, "Supabase", FakeSupabase)
+    monkeypatch.setattr(processor, "OcrRunLifecycle", FakeOcrRunLifecycle)
 
 
 def test_process_message_persists_results(monkeypatch):
@@ -235,3 +256,81 @@ def test_process_message_with_all_stub_tasks_does_not_crash(monkeypatch):
     assert results == {}
     assert errors == {}
 
+
+def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
+    """Media Processing adds durable lifecycle only around the OCR analysis."""
+    execution_events = []
+    metadata = VideoMetadata(
+        duration_s=10.0,
+        fps=30.0,
+        width=1920,
+        height=1080,
+        size_bytes=1_000,
+    )
+
+    class FakePreprocessor:
+        """Return prepared media without exercising shared preprocessing."""
+
+        def __init__(self, payload, work_dir):
+            self.payload = payload
+
+        def prepare(self):
+            """Expose only the metadata required by the OCR lifecycle."""
+            return type("PreparedArtifacts", (), {"video_metadata": metadata})()
+
+    class FakeVideoAnalyzer:
+        """Expose one OCR task and one unaffected non-OCR task."""
+
+        def __init__(self, artifact):
+            self.artifact = artifact
+
+        def analysis_tasks(self):
+            """Return the worker-owned analysis registry."""
+            return {
+                "ocr": lambda: execution_events.append("hosted-ocr"),
+                "transcription": lambda: execution_events.append("transcription"),
+            }
+
+    class FakeSupabase:
+        """Provide the existing generalized result-persistence boundary."""
+
+        def __init__(self, cur, request_id):
+            self.request_id = request_id
+
+        def completed_analyzers(self):
+            """Report that both registered analyses still require execution."""
+            return set()
+
+        def persist_results(self, results, errors):
+            """Accept the unchanged processor result envelope."""
+
+    class FakeOcrRunLifecycle:
+        """Expose whether the processor routes OCR through its owned slice."""
+
+        def __init__(self, cur, request_id, source_bucket, source_path):
+            execution_events.append("ocr-lifecycle-created")
+
+        def execute(self, hosted_ocr, prepared_metadata):
+            """Record the OCR boundary before delegating to hosted OCR."""
+            assert prepared_metadata is metadata
+            execution_events.append("ocr-lifecycle")
+            return hosted_ocr()
+
+    monkeypatch.setattr(processor, "VideoPreprocessor", FakePreprocessor)
+    monkeypatch.setattr(processor, "VideoAnalyzer", FakeVideoAnalyzer)
+    monkeypatch.setattr(processor, "Supabase", FakeSupabase)
+    monkeypatch.setattr(
+        processor,
+        "OcrRunLifecycle",
+        FakeOcrRunLifecycle,
+        raising=False,
+    )
+
+    processor.process_message(cur=object(), msg_id=9, payload=VALID_PAYLOAD)
+
+    assert set(execution_events) == {
+        "ocr-lifecycle-created",
+        "ocr-lifecycle",
+        "hosted-ocr",
+        "transcription",
+    }
