@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sanitizeFilename } from './UploadPage'
+import { sanitizeFilename } from './sanitizeFilename'
 
 describe('sanitizeFilename', () => {
   it('strips diacritics down to their base letter', () => {
