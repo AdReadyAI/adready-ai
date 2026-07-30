@@ -95,8 +95,10 @@ export function evaluationPrompt(
     '"cta_goal_mismatch", "cta_no_urgency", "cta_destination_unclear" — and NEVER the list number, ' +
     '"confidence" (high|medium|low), "evidence" (array of { type: transcript|ocr|visual|brief|metadata, text, ' +
     'timestamp }), "explanation", "suggested_correction" (a specific CTA rewrite or placement fix), ' +
-    '"correction_type". Do not nest confidence/evidence/explanation under any other key. Use cannot_assess when ' +
-    "the inputs do not let you judge a sub-check; do not guess.";
+    '"correction_type". Do not nest confidence/evidence/explanation under any other key. Whenever any sub-check ' +
+    "fails, you MUST include a non-empty top-level explanation and at least one evidence entry quoting the CTA " +
+    "text and its timestamp — do not return a failure with no evidence. Set correction_type to none when nothing " +
+    "needs fixing. Use cannot_assess when the inputs do not let you judge a sub-check; do not guess.";
   return [
     { role: "system", content: system },
     { role: "user", content: evaluationInput(ctx, acquisition, benchmark) },

@@ -17,11 +17,18 @@
  */
 
 import type {
+  EvidenceRef,
+  MetricResult,
   OCRSegment,
   SeverityLevel,
   SubCheckResult,
 } from "../shared/schemas.ts";
-import { cannotAssess, failed, passed, severityRank } from "../shared/checks.ts";
+import {
+  cannotAssess,
+  failed,
+  passed,
+  severityRank,
+} from "../shared/checks.ts";
 import type {
   CtaTiming,
   CtaVisibilityThresholds,
@@ -77,6 +84,62 @@ export function gateOnConfig<T>(
     return cannotAssess(checkId, name, missingReason);
   }
   return evaluate(config);
+}
+
+/**
+ * Reconcile a metric's correction_type against its rolled-up result. A metric
+ * that passed ("true") or could not be assessed ("cannot_assess") has nothing to
+ * correct, so its correction_type is forced to "none" and any suggested_correction
+ * is dropped. Only a genuine failure ("false") keeps a correction — its stated
+ * correction_type (a missing one defaulting to "edit_recommendation") and its
+ * suggested_correction. This is the single choke point that stops a clean pass
+ * from carrying an "edit_recommendation" the model left unset. Kept local to the
+ * agent folder like the other metric-assembly helpers.
+ */
+export function reconcileMetricCorrection(
+  result: "true" | "false" | "cannot_assess",
+  fields: {
+    correction_type?: MetricResult["correction_type"];
+    suggested_correction?: string;
+  },
+): {
+  correction_type: NonNullable<MetricResult["correction_type"]>;
+  suggested_correction?: string;
+} {
+  if (result !== "false") {
+    return { correction_type: "none", suggested_correction: undefined };
+  }
+  return {
+    correction_type: fields.correction_type ?? "edit_recommendation",
+    suggested_correction: fields.suggested_correction,
+  };
+}
+
+/**
+ * Derive a metric-level explanation + evidence from a metric's failed sub-checks,
+ * for when the LLM returned verdicts but left the metric-level narrative blank.
+ * This is reuse of judgments the model already made (each failed sub-check carries
+ * its own explanation), not invented content — so a failing metric is never
+ * persisted with no metric-level evidence (agent_result_evidence is populated only
+ * from metric.evidence). Returns undefined when nothing failed (a pass needs no
+ * derived narrative). Kept local like the other metric-assembly helpers.
+ */
+export function narrativeFromFailedChecks(
+  subChecks: SubCheckResult[],
+): { explanation: string; evidence: EvidenceRef[] } | undefined {
+  const failures = subChecks.filter((c) => c.result === "failed");
+  if (failures.length === 0) return undefined;
+  const explanation = failures
+    .map((c) => (c.explanation ? `${c.name}: ${c.explanation}` : c.name))
+    .join(" ");
+  const evidence: EvidenceRef[] = failures
+    .filter((c) => c.explanation)
+    .map((c) => ({
+      type: "metadata",
+      text: `${c.name}: ${c.explanation}`,
+      timestamp: "",
+    }));
+  return { explanation, evidence };
 }
 
 // ── Deterministic sub-checks ─────────────────────────────────────────────────

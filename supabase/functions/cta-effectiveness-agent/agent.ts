@@ -30,7 +30,9 @@ import {
   ctaMistimed,
   ctaPlatformMismatch,
   failed,
+  narrativeFromFailedChecks,
   passed,
+  reconcileMetricCorrection,
 } from "./checks.ts";
 import {
   type CtaTiming,
@@ -100,6 +102,9 @@ function assembleMetric(spec: {
   fields?: MetricLevelFields;
 }): MetricResult {
   const { result, severity } = rollupChecks(spec.sub_checks);
+  // Correction only makes sense for a genuine failure; a pass or an unassessable
+  // metric is forced to correction_type "none" (see reconcileMetricCorrection).
+  const correction = reconcileMetricCorrection(result, spec.fields ?? {});
   return {
     metric_id: CTA.metric_id,
     agent: AGENT,
@@ -108,6 +113,7 @@ function assembleMetric(spec: {
     result,
     severity,
     ...spec.fields,
+    ...correction,
     sub_checks: spec.sub_checks,
   };
 }
@@ -227,10 +233,22 @@ export function buildCtaClarity(
     platform,
   ];
 
+  // When the metric fails but the LLM left the metric-level evidence/explanation
+  // blank, fall back to the failed sub-checks' own explanations so the result is
+  // never persisted with no metric-level evidence. (undefined on a pass.)
+  const derived = narrativeFromFailedChecks(subChecks);
+  const modelEvidence = coerceEvidence(evaluation?.evidence);
+  const modelExplanation = evaluation?.explanation?.trim()
+    ? evaluation.explanation
+    : undefined;
+
   const fields: MetricLevelFields = {
     confidence: evaluation?.confidence ?? "low",
-    evidence: coerceEvidence(evaluation?.evidence),
-    explanation: evaluation?.explanation ??
+    evidence: modelEvidence && modelEvidence.length > 0
+      ? modelEvidence
+      : derived?.evidence,
+    explanation: modelExplanation ??
+      derived?.explanation ??
       (evaluation === null
         ? "The evaluation call did not return a usable result."
         : undefined),

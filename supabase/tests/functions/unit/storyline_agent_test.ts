@@ -162,6 +162,10 @@ Deno.test("placement_mismatch failure rolls up into channel_readiness (format pa
         .severity,
       "high",
     );
+    // A failing channel_readiness must carry metric-level evidence derived from
+    // its own failed sub-check — persist.ts fills agent_result_evidence from it.
+    assertEquals((channel.evidence?.length ?? 0) > 0, true);
+    assertEquals(channel.correction_type, "edit_recommendation");
     // creative_effectiveness is unaffected by the channel-only failure.
     assertEquals(byId.get("creative_effectiveness")!.result, "true");
   }));
@@ -348,6 +352,71 @@ Deno.test("unmapped platform: channel judged on the LLM placement check", () =>
     assertEquals(channel.result, "true");
     // hook/narrative/value/pacing passed; story cannot_assess → judged on the passes.
     assertEquals(byId.get("creative_effectiveness")!.result, "true");
+  }));
+
+// --- correction_type normalization ------------------------------------------
+
+Deno.test("correction_type: a passing creative_effectiveness is normalized to none, dropping any model correction", () =>
+  withChat([
+    ARC_OK,
+    evalJson([
+      { check_id: "hook_missing", result: "passed", severity: "none" },
+      { check_id: "narrative_gap", result: "passed", severity: "none" },
+      { check_id: "value_prop_unclear", result: "passed", severity: "none" },
+      { check_id: "story_incomplete", result: "passed", severity: "none" },
+      { check_id: "pacing_misallocation", result: "passed", severity: "none" },
+      { check_id: "placement_mismatch", result: "passed", severity: "none" },
+    ], {
+      correction_type: "rewrite",
+      suggested_correction: "punch up the hook",
+    }),
+  ], async () => {
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    const creative = byId.get("creative_effectiveness")!;
+    assertEquals(creative.result, "true");
+    assertEquals(creative.correction_type, "none");
+    assertEquals(creative.suggested_correction, undefined);
+  }));
+
+Deno.test("partial reply: a failing creative_effectiveness with only sub_checks derives metric evidence/explanation and defaults correction_type", () =>
+  withChat([
+    ARC_OK,
+    // A failing sub-check; the envelope omits evidence/explanation/correction_type.
+    JSON.stringify({
+      sub_checks: [
+        { check_id: "hook_missing", result: "passed", severity: "none" },
+        {
+          check_id: "narrative_gap",
+          result: "failed",
+          severity: "high",
+          explanation: "Hard cut at 00:05 breaks the flow.",
+        },
+        { check_id: "value_prop_unclear", result: "passed", severity: "none" },
+        { check_id: "story_incomplete", result: "passed", severity: "none" },
+        {
+          check_id: "pacing_misallocation",
+          result: "passed",
+          severity: "none",
+        },
+        { check_id: "placement_mismatch", result: "passed", severity: "none" },
+      ],
+    }),
+  ], async () => {
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    const creative = byId.get("creative_effectiveness")!;
+    assertEquals(creative.result, "false");
+    // Metric-level evidence/explanation are derived from the failed sub-check.
+    assertEquals((creative.evidence?.length ?? 0) > 0, true);
+    assertEquals(
+      typeof creative.explanation === "string" &&
+        creative.explanation.length > 0,
+      true,
+    );
+    assertEquals(creative.correction_type, "edit_recommendation");
   }));
 
 Deno.test("sparse context + all-cannot_assess LLM: two rows, graceful, no throw", () =>

@@ -253,6 +253,65 @@ Deno.test("malformed Call 1: cta_absent falls back to the Call 2 presence verdic
     assertEquals(stub.callCount, 2);
   }));
 
+// --- correction_type normalization ------------------------------------------
+
+Deno.test("correction_type: a passing cta_clarity is normalized to none, dropping any model correction", () =>
+  // Awareness + no CTA → cta_absent passes and every other check passes → true.
+  withChat([
+    acq(false, []),
+    evl(PASS_CHECKS, {
+      correction_type: "rewrite",
+      suggested_correction: "tighten the CTA",
+    }),
+  ], async () => {
+    const ctx = makeAgentContext({
+      campaign_goal: "awareness",
+      ocr_segments: [],
+    });
+    const [result] = await runCtaAgent(ctx, POPULATED);
+    assertEquals(result.result, "true");
+    assertEquals(result.correction_type, "none");
+    assertEquals(result.suggested_correction, undefined);
+  }));
+
+Deno.test("partial reply: a failing cta_clarity with only sub_checks derives metric evidence/explanation and defaults correction_type", () =>
+  withChat([
+    acq(true, PRESENT_CTA),
+    // A failing sub-check; the envelope omits evidence/explanation/correction_type.
+    JSON.stringify({
+      sub_checks: [
+        { check_id: "cta_absent", result: "passed", severity: "none" },
+        {
+          check_id: "cta_language_weak",
+          result: "failed",
+          severity: "medium",
+          explanation: "Vague 'Check us out' at 00:08.",
+        },
+        { check_id: "cta_goal_mismatch", result: "passed", severity: "none" },
+        { check_id: "cta_no_urgency", result: "passed", severity: "none" },
+        {
+          check_id: "cta_destination_unclear",
+          result: "passed",
+          severity: "none",
+        },
+      ],
+    }),
+  ], async () => {
+    const ctx = makeAgentContext({ ocr_segments: [] });
+    const [result] = await runCtaAgent(ctx, POPULATED);
+    assertEquals(result.result, "false");
+    // Metric-level evidence/explanation are derived from the failed sub-check so
+    // the failure is never persisted evidence-less (agent_result_evidence reads
+    // only from metric.evidence).
+    assertEquals((result.evidence?.length ?? 0) > 0, true);
+    assertEquals(
+      typeof result.explanation === "string" && result.explanation.length > 0,
+      true,
+    );
+    // A real failure keeps a correction type (missing → edit_recommendation).
+    assertEquals(result.correction_type, "edit_recommendation");
+  }));
+
 Deno.test("sparse: both calls malformed + unpopulated config → single cannot_assess row, no throw", () =>
   withChat(["nope", "nope"], async () => {
     const ctx = makeAgentContext({

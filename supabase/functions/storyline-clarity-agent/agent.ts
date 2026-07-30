@@ -20,7 +20,12 @@ import type {
   MetricResult,
   SubCheckResult,
 } from "../shared/schemas.ts";
-import { cannotAssess, formatNoncompliant } from "./checks.ts";
+import {
+  cannotAssess,
+  formatNoncompliant,
+  narrativeFromFailedChecks,
+  reconcileMetricCorrection,
+} from "./checks.ts";
 import {
   type ArcExpectation,
   getArcExpectation,
@@ -111,6 +116,9 @@ function assembleMetric(spec: {
   fields?: MetricLevelFields;
 }): MetricResult {
   const { result, severity } = rollupChecks(spec.sub_checks);
+  // Correction only makes sense for a genuine failure; a pass or an unassessable
+  // metric is forced to correction_type "none" (see reconcileMetricCorrection).
+  const correction = reconcileMetricCorrection(result, spec.fields ?? {});
   return {
     metric_id: spec.metric_id,
     agent: AGENT,
@@ -119,6 +127,7 @@ function assembleMetric(spec: {
     result,
     severity,
     ...spec.fields,
+    ...correction,
     sub_checks: spec.sub_checks,
   };
 }
@@ -185,10 +194,17 @@ export function buildChannelReadiness(
   // guest sub-check riding in that same reply. Copying the shared narrative here
   // would put storytelling prose on the channel row. format_noncompliant is also
   // deterministic (computed in code), so the LLM's narrative never describes it.
+  // Evidence for a channel failure comes from this metric's OWN failed sub-checks
+  // (format_noncompliant / placement_mismatch), not the creative narrative — same
+  // mechanical reuse as creative_effectiveness. Without it a failing channel row
+  // persists evidence-less (persist.ts fills agent_result_evidence from metric.evidence).
+  const derived = narrativeFromFailedChecks(subChecks);
+
   let fields: MetricLevelFields;
   if (formatCheck.result === "failed") {
     fields = {
       confidence: "high",
+      evidence: derived?.evidence,
       explanation: formatCheck.explanation,
       suggested_correction:
         "Reformat the asset to meet the destination platform's technical spec.",
@@ -197,6 +213,7 @@ export function buildChannelReadiness(
   } else if (placement.result === "failed") {
     fields = {
       confidence: evaluation?.confidence ?? "medium",
+      evidence: derived?.evidence,
       explanation: placement.explanation,
       suggested_correction:
         "Adjust the creative's tone, message, or pacing to fit the placement and the target audience.",
@@ -282,10 +299,22 @@ export function buildCreativeEffectiveness(
   let confidence = evaluation?.confidence ?? "low";
   if (arc?.overall_confidence === "low") confidence = "low";
 
+  // When the metric fails but the LLM left the metric-level evidence/explanation
+  // blank, fall back to the failed sub-checks' own explanations so the result is
+  // never persisted with no metric-level evidence. (undefined on a pass.)
+  const derived = narrativeFromFailedChecks(subChecks);
+  const modelEvidence = coerceEvidence(evaluation?.evidence);
+  const modelExplanation = evaluation?.explanation?.trim()
+    ? evaluation.explanation
+    : undefined;
+
   const fields: MetricLevelFields = {
     confidence,
-    evidence: coerceEvidence(evaluation?.evidence),
-    explanation: evaluation?.explanation ??
+    evidence: modelEvidence && modelEvidence.length > 0
+      ? modelEvidence
+      : derived?.evidence,
+    explanation: modelExplanation ??
+      derived?.explanation ??
       (evaluation === null
         ? "The evaluation call did not return a usable result."
         : undefined),
