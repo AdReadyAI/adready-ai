@@ -16,11 +16,11 @@ describe('Dropzone', () => {
   it('opens the native file picker when clicked (click-to-browse)', () => {
     render(<Dropzone onFilesSelected={onFilesSelected} accept="video/mp4" label="Drop videos here" />)
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
-    const clickSpy = vi.spyOn(input, 'click')
+    // Stub the implementation instead of calling through: a real .click()
+    // dispatches a genuine bubbling click event, which re-triggers the
+    // dropzone div's onClick handler and calls input.click() again.
+    const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => {})
 
-    // The label shares its element with a leading arrow glyph ("↑  {label}"),
-    // so the element's exact text isn't "Drop videos here" — match on
-    // substring instead of an exact string.
     fireEvent.click(screen.getByText(/Drop videos here/))
 
     expect(clickSpy).toHaveBeenCalledTimes(1)
