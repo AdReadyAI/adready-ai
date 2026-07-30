@@ -255,6 +255,28 @@ function overlaps(cta: AcquiredCta, ocr: OCRSegment): boolean {
   return cta.start_ms <= ocr.end_ms && ocr.start_ms <= cta.end_ms;
 }
 
+/** Tokenize for CTA↔OCR text association: lowercase, split on non-alphanumerics. */
+function textTokens(text: string): string[] {
+  return text.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 0);
+}
+
+/**
+ * Whether an OCR segment renders (part of) the CTA rather than merely sharing its
+ * time window. An on-screen CTA's text is derived from the OCR itself, so the
+ * CTA's words cover its own rendering segments; a co-timed but unrelated overlay —
+ * a legal disclaimer, a separate headline — shares few or none. True when a
+ * majority of the OCR segment's tokens appear in the CTA's token set. Without this,
+ * temporal overlap alone lets a tiny co-timed disclaimer drag the CTA's legibility
+ * score down (worst-wins), even though the CTA itself is rendered at a legible size.
+ */
+function ocrRendersCta(cta: AcquiredCta, ocr: OCRSegment): boolean {
+  const ocrTokens = textTokens(ocr.text);
+  if (ocrTokens.length === 0) return false;
+  const ctaTokens = new Set(textTokens(cta.text));
+  const hits = ocrTokens.filter((t) => ctaTokens.has(t)).length;
+  return hits / ocrTokens.length >= 0.5;
+}
+
 /**
  * cta_low_visibility — SIZE-only legibility. Reads region_size and font_size_px
  * from ocr_segments[] (contrast_ratio is not available, and the agent never
@@ -278,13 +300,16 @@ export function ctaLowVisibility(
       );
       if (onScreen.length === 0) return passed(LOW_VIS.id, LOW_VIS.name);
 
-      const matched = ocrSegments.filter(
+      // Sized OCR sharing a CTA's time window. Temporal overlap alone is only the
+      // candidate set — it also captures co-timed non-CTA overlays — so the CTA's
+      // own rendering is then selected by text below.
+      const temporal = ocrSegments.filter(
         (o) =>
           o.region_size !== undefined &&
           o.font_size_px !== undefined &&
           onScreen.some((c) => overlaps(c, o)),
       );
-      if (matched.length === 0) {
+      if (temporal.length === 0) {
         return cannotAssess(
           LOW_VIS.id,
           LOW_VIS.name,
@@ -292,8 +317,17 @@ export function ctaLowVisibility(
         );
       }
 
+      // Prefer the OCR segments that actually render the CTA text; a co-timed
+      // overlay whose words are not part of the CTA (e.g. a legal disclaimer) must
+      // not drag the score. Fall back to the temporal set when nothing matches by
+      // text, so assessability is never lost.
+      const rendered = temporal.filter((o) =>
+        onScreen.some((c) => overlaps(c, o) && ocrRendersCta(c, o))
+      );
+      const measured = rendered.length > 0 ? rendered : temporal;
+
       let worst: SeverityLevel = "none";
-      for (const o of matched) {
+      for (const o of measured) {
         const region = o.region_size!;
         const font = o.font_size_px!;
         if (

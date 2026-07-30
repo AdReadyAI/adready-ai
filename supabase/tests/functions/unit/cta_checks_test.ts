@@ -155,6 +155,46 @@ Deno.test("cta_low_visibility: medium when under-size (region or font too small)
   assertEquals(r.severity, "medium");
 });
 
+Deno.test("cta_low_visibility: a co-timed non-CTA overlay (disclaimer) does not drag the score", () => {
+  // The CTA renders large, but a tiny legal disclaimer shares its time window.
+  // Temporal overlap alone would pick the disclaimer (worst-wins) and falsely
+  // report medium; text association scopes the check to the CTA's own rendering.
+  const legibleCta = ocr({
+    ocr_id: "cta",
+    text: "Shop now",
+    region_size: 2500,
+    font_size_px: 42,
+  });
+  const disclaimer = ocr({
+    ocr_id: "fine_print",
+    text: "Auto-renews monthly. Cancel anytime. Terms apply.",
+    region_size: 1500,
+    font_size_px: 16,
+  });
+  const r = ctaLowVisibility([cta()], [legibleCta, disclaimer], VIS);
+  assertEquals(r.result, "passed");
+});
+
+Deno.test("cta_low_visibility: still flags when the CTA's own rendering is too small", () => {
+  // Same disclaimer, but now the CTA text itself is under-size — a real failure
+  // that text association must not mask.
+  const smallCta = ocr({
+    ocr_id: "cta",
+    text: "Shop now",
+    region_size: 2500,
+    font_size_px: 16,
+  });
+  const disclaimer = ocr({
+    ocr_id: "fine_print",
+    text: "Auto-renews monthly. Cancel anytime. Terms apply.",
+    region_size: 1500,
+    font_size_px: 14,
+  });
+  const r = ctaLowVisibility([cta()], [smallCta, disclaimer], VIS);
+  assertEquals(r.result, "failed");
+  assertEquals(r.severity, "medium");
+});
+
 // --- cta_platform_mismatch ---------------------------------------------------
 
 Deno.test("cta_platform_mismatch: cannot_assess when the convention table is null", () => {
