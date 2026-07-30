@@ -1,19 +1,19 @@
 /**
- * config.ts — Unresolved-dependency config for the storyline-clarity agent.
+ * config.ts — Grading config for the storyline-clarity agent.
  *
- * Every threshold/table below is an UNRESOLVED DEPENDENCY the team does not yet
- * own. Each defaults to null (unpopulated) so the dependent sub-check degrades
- * to cannot_assess via `gateOnConfig` (see checks.ts) rather than grading
- * against an invented bar. Populate a dependency by replacing its `null` with a
- * real value; no code change is needed elsewhere.
+ * The tables below are populated from the Config Decisions doc and actively
+ * drive grading. The null-tolerant contract is retained: any table set back to
+ * `null` degrades its dependent sub-check to cannot_assess (via `gateOnConfig`
+ * in checks.ts, or the explicit null checks in the accessors here) rather than
+ * grading against an invented bar. Retune a dependency by editing its values;
+ * no code change is needed elsewhere.
  */
 
 // ── Platform technical-spec table (format_noncompliant) ─────────────────────
-// Per-platform aspect ratio, resolution, and duration limits. Until Evaluation
-// Science / the platform team supplies this table, `PLATFORM_SPECS` stays null
-// and `format_noncompliant` — and therefore the whole single-sub-check
-// channel_readiness metric — returns cannot_assess. Populate by replacing
-// `null` with a real record keyed by destination_platform.
+// Per-platform aspect ratio, resolution, and duration limits, keyed by
+// destination_platform. Populated below for the launch platforms; a platform
+// not in the table resolves to null via getPlatformSpec, so format_noncompliant
+// returns cannot_assess for it rather than grading against an invented spec.
 
 export type PlatformSpec = {
   allowed_aspect_ratios: string[]; // e.g. ["9:16"]
@@ -64,14 +64,16 @@ const PLATFORM_SPECS_BY_NORMALIZED_KEY: Readonly<Record<string, PlatformSpec>> =
   );
 
 export function getPlatformSpec(platform: string): PlatformSpec | null {
-  return PLATFORM_SPECS_BY_NORMALIZED_KEY[platform.trim().toLowerCase()] ?? null;
+  return PLATFORM_SPECS_BY_NORMALIZED_KEY[platform.trim().toLowerCase()] ??
+    null;
 }
 
 // ── Arc expectations (story_incomplete) ─────────────────────────────────────
 // Which arc stages are realistically expected to resolve at a given runtime — a
 // 15s ad has little room for a full arc, a 60s ad does. Feeds the
-// story_incomplete judgment in Call 2. Until the table exists,
-// `getArcExpectation` returns null and story_incomplete returns cannot_assess.
+// story_incomplete judgment in Call 2. Populated per duration bucket below; if
+// set back to null, `getArcExpectation` returns null and story_incomplete
+// returns cannot_assess.
 
 export type ArcExpectation = {
   /** Arc roles a well-formed ad of this length is expected to fill. */
@@ -85,25 +87,25 @@ export type ArcExpectation = {
  * "tension/problem" maps to the `problem` arc role. payoff_must_be_onscreen maps to
  * expect_payoff_resolved ("resolved before cut").
  *
- * The doc's "turn" role (a complication/twist, listed for 60s) is intentionally
- * omitted: the ARC_ROLES vocabulary is shared across all durations and nothing
- * downstream consumes expected_roles for grading (story_incomplete gates on this
- * table's presence only — Call 2 judges from unfilled_roles/payoff_resolved_at, not
- * these values). Adding "turn" would change Call 1 labeling for every ad with no
- * grading benefit. Reintroduce it only if Eval Science confirms turn-at-60s should
- * be enforced, together with wiring expected_roles into the Call 2 prompt.
+ * expected_roles is threaded into the Call 2 prompt as required_arc_roles (see
+ * prompts.ts evaluationInput), and story_incomplete grades against it plus
+ * expect_payoff_resolved. The doc's "turn" role (a complication/twist, listed for
+ * 60s) is intentionally omitted: the ARC_ROLES vocabulary is shared across all
+ * durations, and adding "turn" would change Call 1 labeling for every ad.
+ * Reintroduce it only if Eval Science confirms turn-at-60s should be enforced.
  */
-export const ARC_EXPECTATIONS: Readonly<Record<string, ArcExpectation>> | null = {
-  "15s": { expected_roles: ["hook", "payoff"], expect_payoff_resolved: true },
-  "30s": {
-    expected_roles: ["hook", "problem", "payoff"],
-    expect_payoff_resolved: true,
-  },
-  "60s": {
-    expected_roles: ["hook", "problem", "payoff"],
-    expect_payoff_resolved: false,
-  },
-};
+export const ARC_EXPECTATIONS: Readonly<Record<string, ArcExpectation>> | null =
+  {
+    "15s": { expected_roles: ["hook", "payoff"], expect_payoff_resolved: true },
+    "30s": {
+      expected_roles: ["hook", "problem", "payoff"],
+      expect_payoff_resolved: true,
+    },
+    "60s": {
+      expected_roles: ["hook", "problem", "payoff"],
+      expect_payoff_resolved: false,
+    },
+  };
 
 /** Resolve the expectation bucket for a runtime (e.g. 15000 → "15s"). */
 export function getArcExpectation(durationMs: number): ArcExpectation | null {

@@ -1,19 +1,19 @@
 /**
- * config.ts — Unresolved-dependency config for the cta-effectiveness agent.
+ * config.ts — Grading config for the cta-effectiveness agent.
  *
- * Every threshold/table below is an UNRESOLVED DEPENDENCY the team does not yet
- * own. Each defaults to null (unpopulated) so the dependent sub-check degrades
- * to cannot_assess via `gateOnConfig` (see checks.ts) rather than grading
- * against an invented bar. Populate a dependency by replacing its `null` with a
- * real value; no code change is needed elsewhere.
+ * The tables below are populated from the Config Decisions doc and actively
+ * drive grading. The null-tolerant contract is retained: any table set back to
+ * `null` degrades its dependent sub-check to cannot_assess via `gateOnConfig`
+ * (see checks.ts) rather than grading against an invented bar. Retune a
+ * dependency by editing its values; no code change is needed elsewhere.
  */
 
 // ── CTA timing benchmarks (cta_buried, cta_mistimed) ────────────────────────
 // The positional windows both deterministic timing checks compare CTA
 // timestamps against: the "buried" early-only window (design doc's 5s), and the
 // "lands late enough" placement window (design doc's last 20–30%) with a
-// minimum on-screen dwell. The math is exact once the numbers are confirmed;
-// until then cta_buried and cta_mistimed return cannot_assess.
+// minimum on-screen dwell. Populated with the confirmed benchmarks below; if set
+// back to null, cta_buried and cta_mistimed return cannot_assess.
 
 export type CtaTiming = {
   /** A CTA seen only within this opening window (ms), never repeated, is buried. */
@@ -42,8 +42,8 @@ export function getCtaTiming(): CtaTiming | null {
 // The AgentContext schema no longer carries a contrast_ratio (Media dropped it,
 // and these agents never inspect pixels), so cta_low_visibility is a SIZE-only
 // legibility check: it reads the numeric region_size and font_size_px that
-// ocr_segments[] still provide. Only the thresholds are missing. Until they are
-// set, cta_low_visibility returns cannot_assess.
+// ocr_segments[] still provide. Thresholds are populated below; if set back to
+// null, cta_low_visibility returns cannot_assess.
 
 export type CtaVisibilityThresholds = {
   /** Below this on-screen region size the CTA text is too small to register. */
@@ -77,8 +77,9 @@ export function getCtaVisibilityThresholds(): CtaVisibilityThresholds | null {
 // ── CTA phrasing conventions (cta_platform_mismatch) ────────────────────────
 // Per-platform table of CTA phrasing that violates current conventions — e.g.
 // "swipe up" is stale on modern TikTok. destination_platform is already an
-// input, so only the table is missing. Until it exists, cta_platform_mismatch
-// returns cannot_assess.
+// input; the table is populated below. A platform not in the table resolves to
+// null via getPlatformPhrasing, so cta_platform_mismatch returns cannot_assess
+// for it.
 
 export type PlatformPhrasing = {
   /** Lowercased phrases that are discouraged / stale on this platform. */
@@ -123,10 +124,9 @@ export function getPlatformPhrasing(platform: string): PlatformPhrasing | null {
 // ── campaign_goal → CTA-type benchmark (cta_goal_mismatch) ──────────────────
 // Maps each campaign_goal to the CTA type it calls for — none / soft / strong /
 // loyalty — with examples, resolved before Call 2 and evaluated against there.
-// The four examples in the design doc are a starting point, not a complete
-// reference, so the table is treated as unpopulated: until it is supplied,
-// cta_goal_mismatch returns cannot_assess rather than judging against a partial
-// bar.
+// Populated for the four known goals below; a campaign_goal not in the table
+// resolves to null via getGoalBenchmark, so cta_goal_mismatch returns
+// cannot_assess for it rather than judging against a partial bar.
 
 export type CtaType = "none" | "soft" | "strong" | "loyalty";
 
