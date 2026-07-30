@@ -18,7 +18,10 @@ describe('Dropzone', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     const clickSpy = vi.spyOn(input, 'click')
 
-    fireEvent.click(screen.getByText('Drop videos here'))
+    // The label shares its element with a leading arrow glyph ("↑  {label}"),
+    // so the element's exact text isn't "Drop videos here" — match on
+    // substring instead of an exact string.
+    fireEvent.click(screen.getByText(/Drop videos here/))
 
     expect(clickSpy).toHaveBeenCalledTimes(1)
   })
@@ -37,7 +40,7 @@ describe('Dropzone', () => {
     render(<Dropzone onFilesSelected={onFilesSelected} accept="video/mp4" label="Drop videos here" />)
     const file = makeFile('clip.mp4', 'video/mp4')
 
-    fireEvent.drop(screen.getByText('Drop videos here'), { dataTransfer: { files: [file] } })
+    fireEvent.drop(screen.getByText(/Drop videos here/), { dataTransfer: { files: [file] } })
 
     expect(onFilesSelected).toHaveBeenCalledWith([file])
   })
