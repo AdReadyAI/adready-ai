@@ -1,0 +1,326 @@
+{
+  "request_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "campaign_goal": "awareness",
+  "destination_platform": "youtube",
+  "parsed_creative_brief": {
+    "raw_text": "20-second cinematic YouTube brand-launch film (skippable in-stream) for Halden, a sustainable sneaker startup. This is an awareness spot, not a hard-sell: open on an evocative, cinematic mood, build a quiet aspirational feeling, and leave viewers curious about the brand. Soft close on 'Discover Halden' — no promo code, no urgency. Communicate that the shoes are sustainably made from recycled ocean plastic and designed for all-day comfort. Keep an understated, cinematic tone with a muted natural palette. Wordmark on the final card. Target design-conscious adults 28-45 who care about sustainability. 16:9, sound-on.",
+    "brand_voice": "understated, cinematic, aspirational",
+    "target_audience": "design-conscious adults 28-45 who value sustainability",
+    "required_messages": [
+      "sustainably made from recycled ocean plastic",
+      "designed for all-day comfort"
+    ],
+    "required_ctas": ["Discover Halden"],
+    "approved_claims": [
+      "made from recycled ocean plastic",
+      "carbon-neutral shipping"
+    ],
+    "forbidden_claims": [
+      "100% sustainable",
+      "eliminates your carbon footprint"
+    ],
+    "brand_guidelines": [
+      "understated, cinematic tone",
+      "muted natural color palette",
+      "wordmark on the final card"
+    ],
+    "policy_requirements": [
+      "substantiate any environmental claim with the recycled-content percentage"
+    ]
+  },
+  "video_metadata": {
+    "duration_ms": 20000,
+    "aspect_ratio": "16:9",
+    "resolution": "1920x1080",
+    "dropped_frame_markers": [],
+    "corruption_detected": false
+  },
+  "transcript_segments": [
+    {
+      "segment_id": "tr_001",
+      "start_ms": 0,
+      "end_ms": 3000,
+      "text": "Some mornings ask more of us than others.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_002",
+      "start_ms": 3000,
+      "end_ms": 6500,
+      "text": "The mountains don't wait. Neither does the tide.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_003",
+      "start_ms": 6500,
+      "end_ms": 9000,
+      "text": "The world keeps moving.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_004",
+      "start_ms": 9000,
+      "end_ms": 11500,
+      "text": "Discover Halden.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_005",
+      "start_ms": 11500,
+      "end_ms": 14500,
+      "text": "Made by hands that care.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_006",
+      "start_ms": 14500,
+      "end_ms": 17500,
+      "text": "Footwear for the way forward.",
+      "speaker": "narrator"
+    },
+    {
+      "segment_id": "tr_007",
+      "start_ms": 17500,
+      "end_ms": 20000,
+      "text": "Halden.",
+      "speaker": "narrator"
+    }
+  ],
+  "ocr_segments": [
+    {
+      "ocr_id": "ocr_001",
+      "frame_ids": ["frame_004"],
+      "start_ms": 9000,
+      "end_ms": 11000,
+      "text": "DISCOVER HALDEN",
+      "on_screen_duration_ms": 2000,
+      "region_size": 0.16,
+      "font_size_px": 46
+    },
+    {
+      "ocr_id": "ocr_002",
+      "frame_ids": ["frame_008"],
+      "start_ms": 17800,
+      "end_ms": 20000,
+      "text": "HALDEN",
+      "on_screen_duration_ms": 2200,
+      "region_size": 0.2,
+      "font_size_px": 60
+    }
+  ],
+  "visual_frames": [
+    {
+      "frame_id": "frame_001",
+      "timestamp_ms": 500,
+      "image_url": "https://cdn.example.com/frames/halden/frame_001.jpg",
+      "visual_description": "Abstract macro shot of dust motes drifting in a shaft of pale morning light against a blank plaster wall. No product, no text, no people.",
+      "people": {
+        "count": 0,
+        "apparent_ages": [],
+        "apparent_presentation": [],
+        "activity": "none",
+        "clothing_style": "not applicable"
+      },
+      "color_palette": {
+        "dominant_colors": ["warm gray", "cream"],
+        "lighting_quality": "soft low-contrast dawn"
+      },
+      "background": { "location_type": "empty interior", "mood": "still" },
+      "camera_movement": "static",
+      "technical_flags": []
+    },
+    {
+      "frame_id": "frame_002",
+      "timestamp_ms": 3500,
+      "image_url": "https://cdn.example.com/frames/halden/frame_002.jpg",
+      "visual_description": "Sweeping aerial drone shot over fog-shrouded mountain ridges at dawn. Purely scenic; no product or brand element on screen.",
+      "people": {
+        "count": 0,
+        "apparent_ages": [],
+        "apparent_presentation": [],
+        "activity": "none",
+        "clothing_style": "not applicable"
+      },
+      "color_palette": {
+        "dominant_colors": ["slate blue", "fog white"],
+        "lighting_quality": "flat overcast dawn"
+      },
+      "background": { "location_type": "mountain range", "mood": "vast" },
+      "camera_movement": "pan",
+      "technical_flags": []
+    },
+    {
+      "frame_id": "frame_003",
+      "timestamp_ms": 6500,
+      "image_url": "https://cdn.example.com/frames/halden/frame_003.jpg",
+      "visual_description": "Aerial drone shot over open ocean waves breaking at sunrise. Purely scenic mood footage; still no product, brand, or person.",
+      "people": {
+        "count": 0,
+        "apparent_ages": [],
+        "apparent_presentation": [],
+        "activity": "none",
+        "clothing_style": "not applicable"
+      },
+      "color_palette": {
+        "dominant_colors": ["teal", "gold"],
+        "lighting_quality": "warm low sun"
+      },
+      "background": { "location_type": "open ocean", "mood": "expansive" },
+      "camera_movement": "pan",
+      "technical_flags": []
+    },
+    {
+      "frame_id": "frame_004",
+      "timestamp_ms": 9500,
+      "image_url": "https://cdn.example.com/frames/halden/frame_004.jpg",
+      "visual_description": "Minimalist title card: the words 'DISCOVER HALDEN' set small in the center of an off-white frame. No product shown, no website, no store.",
+      "people": {
+        "count": 0,
+        "apparent_ages": [],
+        "apparent_presentation": [],
+        "activity": "none",
+        "clothing_style": "not applicable"
+      },
+      "color_palette": {
+        "dominant_colors": ["off-white", "charcoal"],
+        "lighting_quality": "flat graphic"
+      },
+      "background": { "location_type": "graphic title card", "mood": "quiet" },
+      "camera_movement": "static",
+      "technical_flags": []
+    },
+    {
+      "frame_id": "frame_005",
+      "timestamp_ms": 12000,
+      "image_url": "https://cdn.example.com/frames/halden/frame_005.jpg",
+      "visual_description": "Extreme close-up of two hands stitching a knit upper onto a sole in a dim workshop. The object is abstract in frame and not yet recognizable as a shoe; cuts here directly from the ocean shot with no connective visual.",
+      "people": {
+        "count": 1,
+        "apparent_ages": ["adult, unknown"],
+        "apparent_presentation": ["craftsperson, hands only"],
+        "activity": "stitching a shoe upper",
+        "clothing_style": "not visible"
+      },
+      "color_palette": {
+        "dominant_colors": ["deep brown", "amber"],
+        "lighting_quality": "low-key workshop"
+      },
+      "background": { "location_type": "workshop", "mood": "crafted" },
+      "camera_movement": "static",
+      "technical_flags": []
+    },
+    {
+      "frame_id": "frame_006",
+      "timestamp_ms": 15000,
+      "image_url": "https://cdn.example.com/frames/halden/frame_006.jpg",
+      "visual_description": "A person crouches on a wet city sidewalk and laces up a pair of Halden sneakers; the shoe is clearly visible for the first time. No supered text describing it.",
+      "people": {
+        "count": 1,
+        "apparent_ages": ["adult, 30s"],
+        "apparent_presentation": ["urban commuter"],
+        "activity": "lacing up sneakers",
+        "clothing_style": "minimalist streetwear"
+      },
+      "color_palette": {
+        "dominant_colors": ["wet gray", "muted olive"],
+        "lighting_quality": "overcast city daylight"
+      },
+      "background": { "location_type": "city sidewalk", "mood": "understated" },
+      "camera_movement": "handheld",
+      "technical_flags": []
+    },
+    {
+      "frame_id": "frame_007",
+      "timestamp_ms": 16500,
+      "image_url": "https://cdn.example.com/frames/halden/frame_007.jpg",
+      "visual_description": "The same person walks away down the rainy street; the sneakers are visible only briefly and softly in the lower frame as they move out of focus.",
+      "people": {
+        "count": 1,
+        "apparent_ages": ["adult, 30s"],
+        "apparent_presentation": ["urban commuter"],
+        "activity": "walking away down the street",
+        "clothing_style": "minimalist streetwear"
+      },
+      "color_palette": {
+        "dominant_colors": ["wet gray", "muted olive"],
+        "lighting_quality": "overcast city daylight"
+      },
+      "background": { "location_type": "city sidewalk", "mood": "reflective" },
+      "camera_movement": "handheld",
+      "technical_flags": []
+    },
+    {
+      "frame_id": "frame_008",
+      "timestamp_ms": 18500,
+      "image_url": "https://cdn.example.com/frames/halden/frame_008.jpg",
+      "visual_description": "End card: the 'HALDEN' wordmark centered on a clean white background. No call to action, no website, no store, no product on screen.",
+      "people": {
+        "count": 0,
+        "apparent_ages": [],
+        "apparent_presentation": [],
+        "activity": "none",
+        "clothing_style": "not applicable"
+      },
+      "color_palette": {
+        "dominant_colors": ["white", "charcoal"],
+        "lighting_quality": "clean graphic"
+      },
+      "background": { "location_type": "graphic end card", "mood": "minimal" },
+      "camera_movement": "static",
+      "technical_flags": []
+    }
+  ],
+  "product_frames": [
+    {
+      "frame_id": "frame_006",
+      "timestamp_ms": 15000,
+      "location": { "x": 640, "y": 720, "w": 520, "h": 260 },
+      "confidence_score": 0.94,
+      "prominence": "foreground_in_use",
+      "focus_quality": "sharp",
+      "framing": "fully_visible",
+      "usage_context": "sneakers being laced on the sidewalk"
+    },
+    {
+      "frame_id": "frame_007",
+      "timestamp_ms": 16500,
+      "location": { "x": 700, "y": 820, "w": 300, "h": 160 },
+      "confidence_score": 0.71,
+      "prominence": "background",
+      "focus_quality": "soft_focus",
+      "framing": "partially_cropped",
+      "usage_context": "sneakers visible while walking away"
+    }
+  ],
+  "logo_frames": [
+    {
+      "frame_id": "frame_004",
+      "timestamp_ms": 9500,
+      "location": { "x": 760, "y": 500, "w": 400, "h": 90 },
+      "confidence_score": 0.88,
+      "prominence": "large_central",
+      "reference_match": "matches_reference"
+    },
+    {
+      "frame_id": "frame_008",
+      "timestamp_ms": 18500,
+      "location": { "x": 720, "y": 470, "w": 480, "h": 120 },
+      "confidence_score": 0.97,
+      "prominence": "large_central",
+      "reference_match": "matches_reference"
+    }
+  ],
+  "product_context": {
+    "raw_text": "Halden makes minimalist sneakers with a knit upper made from recycled ocean plastic and a natural-rubber sole, designed for all-day comfort. Every order ships carbon-neutral. Sold direct-to-consumer at halden.com.",
+    "claims": [
+      "recycled ocean plastic upper",
+      "natural-rubber sole",
+      "carbon-neutral shipping"
+    ],
+    "contraindications": [],
+    "reference_asset_urls": [
+      "https://cdn.example.com/reference/halden_wordmark.png",
+      "https://cdn.example.com/reference/halden_sneaker_side.png"
+    ]
+  }
+}

@@ -24,8 +24,13 @@
  *
  * Default golden file: tests/eval/golden/mango_moon.json
  *
- * Note: agent config thresholds/tables are unpopulated (null), so the deterministic
- * checks report cannot_assess; this run exercises the LLM-derived sub-checks.
+ * Note: the agent config tables (config.ts in each agent folder) are now populated
+ * and actively drive the deterministic sub-checks, so this run exercises BOTH the
+ * deterministic checks and the LLM-derived ones. A deterministic check still reports
+ * cannot_assess when its dependency does not resolve for the given input — e.g. a
+ * destination_platform absent from the phrasing/spec tables (cta_platform_mismatch,
+ * format_noncompliant) or a campaign_goal absent from the benchmark table
+ * (cta_goal_mismatch) — not because the tables are globally null.
  */
 
 import { AgentContextSchema } from "../../functions/shared/schemas.ts";
