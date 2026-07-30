@@ -22,9 +22,13 @@ import type {
 } from "../shared/schemas.ts";
 import {
   cannotAssess,
+  clampSeverity,
+  failed,
   formatNoncompliant,
+  isSparseAnalysis,
   narrativeFromFailedChecks,
   reconcileMetricCorrection,
+  reconcileStoryIncomplete,
 } from "./checks.ts";
 import {
   type ArcExpectation,
@@ -159,9 +163,10 @@ export async function runStorylineAgent(
     // Total LLM failure: LLM-derived checks degrade to cannot_assess below.
   }
 
+  const sparse = isSparseAnalysis(ctx, arc);
   return [
-    buildChannelReadiness(formatCheck, evaluation),
-    buildCreativeEffectiveness(config, arc, evaluation),
+    buildChannelReadiness(formatCheck, evaluation, sparse),
+    buildCreativeEffectiveness(config, arc, evaluation, sparse),
   ];
 }
 
@@ -174,19 +179,38 @@ export async function runStorylineAgent(
 export function buildChannelReadiness(
   formatCheck: SubCheckResult,
   evaluation: StorylineEvaluation | null,
+  sparse: boolean,
 ): MetricResult {
   const byId = indexSubChecks(evaluation);
   const missing = evaluation === null
     ? "Evaluation call did not return a usable result."
     : "Sub-check was not returned by the evaluation call.";
 
-  const placement = fromLlmSubCheck(
+  const rawPlacement = fromLlmSubCheck(
     byId.get(PLACEMENT_MISMATCH.id),
     PLACEMENT_MISMATCH.id,
     PLACEMENT_MISMATCH.name,
     PLACEMENT_MISMATCH.max,
     missing,
   );
+
+  // Sparse-analysis gate (see isSparseAnalysis): a thin frame set can't support a
+  // loud placement failure — the ad may well be dynamic, we just can't see it. Cap
+  // a medium/high placement failure to low with a note, so placement stops
+  // disagreeing with creative_effectiveness (which abstains on the same sparsity).
+  // A genuine tone/message mismatch can still surface as low.
+  const cappedSeverity = clampSeverity(rawPlacement.severity, "low");
+  const capApplied = sparse && rawPlacement.result === "failed" &&
+    cappedSeverity !== rawPlacement.severity;
+  const placement = capApplied
+    ? failed(
+      PLACEMENT_MISMATCH.id,
+      PLACEMENT_MISMATCH.name,
+      "low",
+      `${rawPlacement.explanation ?? ""} (Severity capped to low: the analysis ` +
+        `input is too sparse to judge platform/visual fit confidently.)`.trim(),
+    )
+    : rawPlacement;
 
   const subChecks = [formatCheck, placement];
 
@@ -215,7 +239,8 @@ export function buildChannelReadiness(
     };
   } else if (placement.result === "failed") {
     fields = {
-      confidence: evaluation?.confidence ?? "medium",
+      // A cap means we're unsure by construction — never report it confidently.
+      confidence: capApplied ? "low" : (evaluation?.confidence ?? "medium"),
       evidence: derived?.evidence,
       explanation: placement.explanation,
       // Channel-fit correction only — pacing/hook/narrative are creative_effectiveness's
@@ -246,6 +271,7 @@ export function buildCreativeEffectiveness(
   config: StorylineConfig,
   arc: ArcLabeling | null,
   evaluation: StorylineEvaluation | null,
+  sparse: boolean,
 ): MetricResult {
   const byId = indexSubChecks(evaluation);
   const missing = evaluation === null
@@ -288,6 +314,14 @@ export function buildCreativeEffectiveness(
       LLM_CHECKS.story_incomplete.name,
       "duration-based arc-expectation table not yet populated",
     );
+  // Deterministic guardrail: correct an LLM story_incomplete over-fail when the
+  // labeled arc provably satisfies the expectation (and the input is not sparse).
+  const storyReconciled = reconcileStoryIncomplete(
+    story,
+    arc,
+    config.arcExpectation,
+    sparse,
+  );
 
   // pacing_misallocation: LLM-judged (no scene durations to sum in AgentContext).
   const pacing = fromLlmSubCheck(
@@ -298,7 +332,7 @@ export function buildCreativeEffectiveness(
     missing,
   );
 
-  const subChecks = [hook, gap, value, story, pacing];
+  const subChecks = [hook, gap, value, storyReconciled, pacing];
 
   // Low arc confidence must not become a confident pass (spec p.5): cap confidence.
   let confidence = evaluation?.confidence ?? "low";

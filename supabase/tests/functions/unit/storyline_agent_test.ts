@@ -42,6 +42,20 @@ const ARC_OK = JSON.stringify({
   overall_confidence: "high",
 });
 
+// An arc that mechanically satisfies POPULATED.arcExpectation ([hook, problem,
+// payoff] with the payoff resolved): every required role is labeled and
+// payoff_resolved_at is non-null. Used to exercise the story_incomplete guardrail.
+const ARC_COMPLETE = JSON.stringify({
+  arc: [
+    { frame_id: "f1", role: "hook", confidence: "high" },
+    { frame_id: "f2", role: "problem", confidence: "high" },
+    { frame_id: "f3", role: "payoff", confidence: "high" },
+  ],
+  unfilled_roles: [],
+  payoff_resolved_at: "00:08",
+  overall_confidence: "high",
+});
+
 function evalJson(
   subChecks: unknown[],
   extra: Record<string, unknown> = {},
@@ -133,6 +147,106 @@ Deno.test("story_incomplete gates to cannot_assess when arcExpectation is null, 
     assertEquals(story.severity, "cannot_assess");
   }));
 
+Deno.test("story_incomplete over-fail is corrected to pass when the arc satisfies the expectation", () =>
+  withChat([
+    ARC_COMPLETE,
+    evalJson([
+      { check_id: "hook_missing", result: "passed", severity: "none" },
+      // A genuine narrative_gap failure co-exists; the guardrail is surgical and
+      // only touches story_incomplete, so creative_effectiveness still fails.
+      {
+        check_id: "narrative_gap",
+        result: "failed",
+        severity: "high",
+        explanation: "Abrupt jump between frames.",
+      },
+      { check_id: "value_prop_unclear", result: "passed", severity: "none" },
+      {
+        check_id: "story_incomplete",
+        result: "failed",
+        severity: "medium",
+        explanation: "Story feels thin; problem/solution not developed.",
+      },
+      { check_id: "pacing_misallocation", result: "passed", severity: "none" },
+      { check_id: "placement_mismatch", result: "passed", severity: "none" },
+    ]),
+  ], async () => {
+    // Dense fixture (3 frames / 10s → not sparse) + an arc that fills every
+    // required role with the payoff resolved: the LLM's story_incomplete=failed is
+    // a provable false positive and must be corrected to passed.
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    const story = byId.get("creative_effectiveness")!.sub_checks!.find(
+      (s) => s.check_id === "story_incomplete",
+    )!;
+    assertEquals(story.result, "passed");
+    assertEquals(story.severity, "none");
+    // The surgical correction leaves the genuine narrative_gap failure intact.
+    assertEquals(byId.get("creative_effectiveness")!.result, "false");
+  }));
+
+Deno.test("story_incomplete guardrail does NOT manufacture a pass on sparse input", () =>
+  withChat([
+    ARC_COMPLETE,
+    evalJson([
+      { check_id: "hook_missing", result: "passed", severity: "none" },
+      { check_id: "narrative_gap", result: "passed", severity: "none" },
+      { check_id: "value_prop_unclear", result: "passed", severity: "none" },
+      {
+        check_id: "story_incomplete",
+        result: "failed",
+        severity: "medium",
+        explanation: "Required role could not be observed.",
+      },
+      { check_id: "pacing_misallocation", result: "passed", severity: "none" },
+      { check_id: "placement_mismatch", result: "passed", severity: "none" },
+    ]),
+  ], async () => {
+    // Even with a satisfying arc, a 1-frame/10s context is sparse — the arc itself
+    // is untrustworthy there, so the guardrail must not flip the failure to pass.
+    const ctx = makeAgentContext({
+      visual_frames: [
+        { frame_id: "f1", timestamp_ms: 0, visual_description: "One frame." },
+      ],
+    });
+    const byId = metricsById(await runStorylineAgent(ctx, POPULATED));
+    const story = byId.get("creative_effectiveness")!.sub_checks!.find(
+      (s) => s.check_id === "story_incomplete",
+    )!;
+    assertEquals(story.result, "failed");
+  }));
+
+Deno.test("story_incomplete failure stands when the arc does NOT satisfy the expectation", () =>
+  withChat([
+    // ARC_OK is missing 'problem' and 'payoff' roles → does not satisfy POPULATED.
+    ARC_OK,
+    evalJson([
+      { check_id: "hook_missing", result: "passed", severity: "none" },
+      { check_id: "narrative_gap", result: "passed", severity: "none" },
+      { check_id: "value_prop_unclear", result: "passed", severity: "none" },
+      {
+        check_id: "story_incomplete",
+        result: "failed",
+        severity: "medium",
+        explanation: "Required payoff role is unfilled.",
+      },
+      { check_id: "pacing_misallocation", result: "passed", severity: "none" },
+      { check_id: "placement_mismatch", result: "passed", severity: "none" },
+    ]),
+  ], async () => {
+    // The arc does not refute the failure (required roles genuinely unfilled), so
+    // the guardrail leaves the LLM verdict untouched.
+    const byId = metricsById(
+      await runStorylineAgent(makeAgentContext(), POPULATED),
+    );
+    const story = byId.get("creative_effectiveness")!.sub_checks!.find(
+      (s) => s.check_id === "story_incomplete",
+    )!;
+    assertEquals(story.result, "failed");
+    assertEquals(story.severity, "medium");
+  }));
+
 Deno.test("placement_mismatch failure rolls up into channel_readiness (format passes)", () =>
   withChat([
     ARC_OK,
@@ -168,6 +282,41 @@ Deno.test("placement_mismatch failure rolls up into channel_readiness (format pa
     assertEquals(channel.correction_type, "edit_recommendation");
     // creative_effectiveness is unaffected by the channel-only failure.
     assertEquals(byId.get("creative_effectiveness")!.result, "true");
+  }));
+
+Deno.test("sparse input caps a placement failure to low with low confidence", () =>
+  withChat([
+    ARC_OK,
+    evalJson([
+      { check_id: "hook_missing", result: "passed", severity: "none" },
+      { check_id: "narrative_gap", result: "passed", severity: "none" },
+      { check_id: "value_prop_unclear", result: "passed", severity: "none" },
+      { check_id: "story_incomplete", result: "passed", severity: "none" },
+      { check_id: "pacing_misallocation", result: "passed", severity: "none" },
+      {
+        check_id: "placement_mismatch",
+        result: "failed",
+        severity: "high",
+        explanation: "Only one frame; the ad looks static for TikTok.",
+      },
+    ]),
+  ], async () => {
+    // 1 visual frame over a 10s ad → sparse (isSparseAnalysis), so a model-returned
+    // placement failed/high must be capped to low with the metric confidence low.
+    const ctx = makeAgentContext({
+      visual_frames: [
+        { frame_id: "f1", timestamp_ms: 0, visual_description: "Static close-up." },
+      ],
+    });
+    const byId = metricsById(await runStorylineAgent(ctx, POPULATED));
+    const channel = byId.get("channel_readiness")!;
+    const placement = channel.sub_checks!.find((s) =>
+      s.check_id === "placement_mismatch"
+    )!;
+    assertEquals(placement.result, "failed");
+    assertEquals(placement.severity, "low"); // capped from high
+    assertEquals(channel.severity, "low");
+    assertEquals(channel.confidence, "low");
   }));
 
 Deno.test("placement_mismatch severity is clamped to high", () =>

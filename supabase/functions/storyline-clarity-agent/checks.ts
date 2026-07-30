@@ -15,6 +15,7 @@
  */
 
 import type {
+  AgentContext,
   EvidenceRef,
   MetricResult,
   SeverityLevel,
@@ -27,7 +28,10 @@ import {
   passed,
   severityRank,
 } from "../shared/checks.ts";
-import type { PlatformSpec } from "./config.ts";
+import type { ArcExpectation, PlatformSpec } from "./config.ts";
+// Type-only import (erased at runtime, so no cycle with response_schemas.ts,
+// which imports the SubCheckResult builders from this file).
+import type { ArcLabeling } from "./response_schemas.ts";
 
 // ── Severity ordering ───────────────────────────────────────────────────────
 // `severityRank` comes from shared/checks.ts (Anusha's kit): `cannot_assess`
@@ -73,6 +77,95 @@ export function gateOnConfig<T>(
     return cannotAssess(checkId, name, missingReason);
   }
   return evaluate(config);
+}
+
+// ── Input-density (sparse-analysis) gate ─────────────────────────────────────
+// The analysis (frames/transcript) can be too thin to judge the ad's visuals or
+// its platform/visual fit. When it is, placement_mismatch must not turn that
+// sparsity into a loud "static / no visuals" failure — the same reason
+// creative_effectiveness abstains on the visual/arc sub-checks (see the
+// INSUFFICIENT DATA rule in prompts.ts). This deterministic gate lets agent.ts
+// cap placement severity so the two metrics stop disagreeing about sparse input.
+
+/** Floor for a dense-enough frame set: at least one frame per this many ms. */
+export const MIN_MS_PER_FRAME = 5000;
+
+/**
+ * Whether the analysis input is too sparse to trust for visual/placement judgment:
+ * the arc could not be labeled or came back low-confidence, or the frame set is thin
+ * relative to the runtime (fewer than one frame per MIN_MS_PER_FRAME). Mirrors the
+ * signal the Call-2 prompt uses to gate the creative visual/arc sub-checks.
+ */
+export function isSparseAnalysis(
+  ctx: AgentContext,
+  arc: ArcLabeling | null,
+): boolean {
+  if (arc === null || arc.overall_confidence === "low") return true;
+  const minFrames = Math.ceil(
+    ctx.video_metadata.duration_ms / MIN_MS_PER_FRAME,
+  );
+  return ctx.visual_frames.length < minFrames;
+}
+
+// ── story_incomplete over-fail reconciliation (deterministic guardrail) ──────
+// story_incomplete is LLM-judged reading the labeled arc, but its bar is fully
+// mechanical: the required arc roles must be present and (when the bucket demands
+// it) the payoff must resolve on-screen. On a generally-weak-but-structurally-
+// complete ad, the model tends to over-fail this check by importing NON-required
+// roles (problem/solution) or a general "narrative feels thin" judgment — which
+// is narrative_gap's job, not story_incomplete's. This guardrail corrects only
+// that false positive, deterministically, from Call-1's arc + the config bucket.
+
+/**
+ * Whether the labeled arc mechanically satisfies the duration-bucket expectation:
+ * every required arc role is present among the labeled frames, and — when the
+ * bucket expects the payoff to resolve on-screen — payoff_resolved_at is non-null
+ * (Call 1 sets it to the resolving frame's timestamp, or null if the story never
+ * resolves). Pure function of the arc + expectation; no model judgment. Returns
+ * false on a null arc or null expectation (nothing to prove against).
+ */
+export function arcSatisfiesExpectation(
+  arc: ArcLabeling | null,
+  expectation: ArcExpectation | null,
+): boolean {
+  if (arc === null || expectation === null) return false;
+  const rolesPresent = new Set<string>(arc.arc.map((frame) => frame.role));
+  const allRequiredFilled = expectation.expected_roles.every((role) =>
+    rolesPresent.has(role)
+  );
+  if (!allRequiredFilled) return false;
+  return expectation.expect_payoff_resolved
+    ? arc.payoff_resolved_at !== null
+    : true;
+}
+
+/**
+ * Correct an LLM story_incomplete FALSE POSITIVE against the deterministic arc
+ * math. A model-returned "failed" is flipped to passed only when BOTH hold: the
+ * analysis is not sparse (on sparse input the arc itself is untrustworthy and the
+ * LLM correctly abstains — never manufacture a pass there) AND the arc provably
+ * satisfies the expectation (arcSatisfiesExpectation). Any other verdict — a pass,
+ * a cannot_assess, or a failure the arc does NOT refute — is returned unchanged;
+ * the guardrail only ever downgrades a contradicted failure, never invents one.
+ */
+export function reconcileStoryIncomplete(
+  story: SubCheckResult,
+  arc: ArcLabeling | null,
+  expectation: ArcExpectation | null,
+  sparse: boolean,
+): SubCheckResult {
+  if (story.result !== "failed" || sparse) return story;
+  if (!arcSatisfiesExpectation(arc, expectation)) return story;
+  return {
+    check_id: story.check_id,
+    name: story.name,
+    result: "passed",
+    severity: "none",
+    explanation:
+      "Corrected to pass: the labeled arc fills every required role" +
+      " and the payoff resolves on-screen, so the ad is structurally complete;" +
+      " any residual narrative weakness is graded under narrative_gap.",
+  };
 }
 
 /**

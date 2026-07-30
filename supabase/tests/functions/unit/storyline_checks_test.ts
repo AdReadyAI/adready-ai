@@ -7,9 +7,18 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { formatNoncompliant } from "../../../functions/storyline-clarity-agent/checks.ts";
+import {
+  formatNoncompliant,
+  isSparseAnalysis,
+} from "../../../functions/storyline-clarity-agent/checks.ts";
 import type { PlatformSpec } from "../../../functions/storyline-clarity-agent/config.ts";
+import type { ArcLabeling } from "../../../functions/storyline-clarity-agent/response_schemas.ts";
 import type { VideoMetadata } from "../../../functions/shared/schemas.ts";
+import { makeAgentContext } from "../support/fixtures.ts";
+
+function arc(overall_confidence: "low" | "medium" | "high"): ArcLabeling {
+  return { arc: [], unfilled_roles: [], payoff_resolved_at: null, overall_confidence };
+}
 
 const SPEC: PlatformSpec = {
   allowed_aspect_ratios: ["9:16"],
@@ -75,4 +84,36 @@ Deno.test("format_noncompliant: medium over the hard duration limit", () => {
   const r = formatNoncompliant(meta({ duration_ms: 61000 }), SPEC);
   assertEquals(r.result, "failed");
   assertEquals(r.severity, "medium");
+});
+
+// --- isSparseAnalysis (input-density gate) ------------------------------------
+
+Deno.test("isSparseAnalysis: true when the arc could not be labeled (null)", () => {
+  assertEquals(isSparseAnalysis(makeAgentContext(), null), true);
+});
+
+Deno.test("isSparseAnalysis: true when arc overall_confidence is low", () => {
+  assertEquals(isSparseAnalysis(makeAgentContext(), arc("low")), true);
+});
+
+Deno.test("isSparseAnalysis: true when frames are too few for the runtime", () => {
+  // 1 frame over 15s needs ceil(15000/5000)=3 → sparse, even at high arc confidence.
+  const ctx = makeAgentContext({
+    video_metadata: {
+      duration_ms: 15000,
+      aspect_ratio: "9:16",
+      resolution: "1080x1920",
+      dropped_frame_markers: [],
+      corruption_detected: false,
+    },
+    visual_frames: [
+      { frame_id: "f1", timestamp_ms: 0, visual_description: "one frame" },
+    ],
+  });
+  assertEquals(isSparseAnalysis(ctx, arc("high")), true);
+});
+
+Deno.test("isSparseAnalysis: false when frames are dense and the arc is confident", () => {
+  // base fixture: 3 frames over 10s (needs 2), arc high → not sparse.
+  assertEquals(isSparseAnalysis(makeAgentContext(), arc("high")), false);
 });
