@@ -23,7 +23,9 @@ export default function UploadPage() {
   const { user } = useAuth();
   const [videos, setVideos] = useState<UploadedVideo[]>([]);
   const [productImages, setProductImages] = useState<UploadedImage[]>([]);
-  const [requestId] = useState(() => crypto.randomUUID());
+  // Groups everything uploaded in this session; CampaignForm creates one
+  // `requests` row per video and ties them together under this batchId.
+  const [batchId] = useState(() => crypto.randomUUID());
 
   function handleFilesSelected(files: File[]) {
     const validFiles = files.filter((f) => f.type.startsWith("video/"));
@@ -45,7 +47,7 @@ export default function UploadPage() {
       console.error("User not authenticated");
       return;
     }
-    const path = `${user.id}/${requestId}/video/${video.id}/${sanitizeFilename(video.file.name)}`;
+    const path = `${user.id}/${batchId}/video/${video.id}/${sanitizeFilename(video.file.name)}`;
     const { error } = await supabase.storage
       .from("uploads")
       .upload(path, video.file, { contentType: video.file.type });
@@ -94,7 +96,7 @@ export default function UploadPage() {
       console.error("User not authenticated");
       return;
     }
-    const path = `${user.id}/${requestId}/${image.kind}/${image.id}/${sanitizeFilename(image.file.name)}`;
+    const path = `${user.id}/${batchId}/${image.kind}/${image.id}/${sanitizeFilename(image.file.name)}`;
     const { error } = await supabase.storage
       .from("uploads")
       .upload(path, image.file, { contentType: image.file.type });
@@ -134,7 +136,7 @@ export default function UploadPage() {
             onImagesSelected={handleProductImagesSelected}
             onRemoveImage={removeProductImage}
           />
-          <CampaignSection videos={videos} images={productImages} requestId={requestId} />
+          <CampaignSection videos={videos} images={productImages} batchId={batchId} />
         </div>
         <Sidebar />
       </div>
