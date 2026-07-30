@@ -4,21 +4,21 @@
 export type AdvancedBriefFields = {
   brand_voice: string;
   target_audience: string;
-  required_messages: string[];
-  required_ctas: string[];
-  approved_claims: string[];
-  forbidden_claims: string[];
-  brand_guidelines: string[];
-  policy_requirements: string[];
+  required_messages: string;
+  required_ctas: string;
+  approved_claims: string;
+  forbidden_claims: string;
+  brand_guidelines: string;
+  policy_requirements: string;
 };
 
 export const EMPTY_ADVANCED_BRIEF_FIELDS: AdvancedBriefFields = {
   brand_voice: "",
   target_audience: "",
-  required_messages: [],
-  required_ctas: [],
-  approved_claims: [],
-  forbidden_claims: [],
-  brand_guidelines: [],
-  policy_requirements: [],
+  required_messages: "",
+  required_ctas: "",
+  approved_claims: "",
+  forbidden_claims: "",
+  brand_guidelines: "",
+  policy_requirements: "",
 };

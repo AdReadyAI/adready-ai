@@ -39,6 +39,7 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
   const [creativeBrief, setCreativeBrief] = useState("");
   const [selectedCampaign, setSelectedCampaign] = useState("");
   const [advancedFields, setAdvancedFields] = useState<AdvancedBriefFields>(EMPTY_ADVANCED_BRIEF_FIELDS);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -149,7 +150,7 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
 
       {mode === "create" ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="productUrl" className="block text-sm font-medium text-slate-700 mb-1">
                 Product URL
@@ -196,7 +197,19 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
             />
           </div>
 
-          <AdvancedFieldsSection value={advancedFields} onChange={setAdvancedFields} />
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen(true)}
+            className="rounded-lg border border-[#534AB7] px-6 py-2.5 text-sm font-medium text-[#534AB7] hover:bg-[#F0EFF9] transition-colors"
+          >
+            Advanced Settings
+          </button>
+          <AdvancedFieldsSection
+            isOpen={advancedOpen}
+            value={advancedFields}
+            onSave={setAdvancedFields}
+            onClose={() => setAdvancedOpen(false)}
+          />
         </div>
       ) : (
         <div>
@@ -219,7 +232,7 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
 
       {submitError && <p className="text-sm text-red-600">{submitError}</p>}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-[#9B9A97]">🔒  Your videos are secure and never shared.</p>
         <button
           type="submit"
