@@ -39,7 +39,7 @@ const CHECKS = [
 // Overall bar eases toward this cap, then a short pause simulates the
 // evaluation wrapping up before the results view takes over.
 const OVERALL_CAP = 97
-const TICK_MS = 300
+const TICK_MS = 15
 
 const PlayIcon = ({ className = '' }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
