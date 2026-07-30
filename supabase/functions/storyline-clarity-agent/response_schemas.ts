@@ -45,7 +45,11 @@ export const ArcLabelingSchema = z.object({
     }),
   ),
   unfilled_roles: z.array(z.string()),
-  payoff_resolved_at: z.string().nullable(),
+  // The model emits this as either an "MM:SS"/ms string or a numeric ms value,
+  // biased toward a number by the numeric timestamp_ms fields it reads. Accept
+  // both so a valid arc is never discarded over the timestamp's JSON type; the
+  // value is only echoed back to Call 2 and never read arithmetically.
+  payoff_resolved_at: z.union([z.string(), z.number()]).nullable(),
   overall_confidence: ConfidenceLevelSchema,
 });
 export type ArcLabeling = z.infer<typeof ArcLabelingSchema>;
