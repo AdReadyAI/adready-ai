@@ -11,6 +11,22 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }))
 
+// CampaignForm imports supabase directly for its submit handler's insert
+// call. These tests never trigger a real submit, but the module still needs
+// to import cleanly (the real client throws at import time without env
+// vars), so it's mocked here too.
+vi.mock('../../../lib/supabaseClient', () => ({
+  supabase: {
+    from: () => ({
+      insert: () => ({
+        select: () => ({
+          single: () => Promise.resolve({ data: null, error: null }),
+        }),
+      }),
+    }),
+  },
+}))
+
 function makeVideo(status: UploadedVideo['status']): UploadedVideo {
   return {
     id: crypto.randomUUID(),
