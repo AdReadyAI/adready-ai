@@ -24,7 +24,7 @@ export type UploadedImage = UploadedVideo & {
 // base letter, then replace anything else outside a safe ASCII set with "_" —
 // this is only used to build the storage path; the original name is kept
 // for display.
-function sanitizeFilename(name: string): string {
+export function sanitizeFilename(name: string): string {
   const withoutDiacritics = name.normalize("NFD").replace(/\p{Diacritic}/gu, "");
   return withoutDiacritics.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_");
 }
@@ -33,10 +33,7 @@ export default function UploadPage() {
   const { user } = useAuth();
   const [videos, setVideos] = useState<UploadedVideo[]>([]);
   const [productImages, setProductImages] = useState<UploadedImage[]>([]);
-  // Scopes storage paths for this whole upload session and groups the
-  // resulting `requests` rows together (see CampaignForm — one row per
-  // video, all sharing this batch_id).
-  const [batchId] = useState(() => crypto.randomUUID());
+  const [requestId] = useState(() => crypto.randomUUID());
 
   function handleFilesSelected(files: File[]) {
     const validFiles = files.filter((f) => f.type.startsWith("video/"));
@@ -58,7 +55,7 @@ export default function UploadPage() {
       console.error("User not authenticated");
       return;
     }
-    const path = `${user.id}/${batchId}/video/${video.id}/${sanitizeFilename(video.file.name)}`;
+    const path = `${user.id}/${requestId}/video/${video.id}/${sanitizeFilename(video.file.name)}`;
     const { error } = await supabase.storage
       .from("uploads")
       .upload(path, video.file, { contentType: video.file.type });
@@ -107,7 +104,7 @@ export default function UploadPage() {
       console.error("User not authenticated");
       return;
     }
-    const path = `${user.id}/${batchId}/${image.kind}/${image.id}/${sanitizeFilename(image.file.name)}`;
+    const path = `${user.id}/${requestId}/${image.kind}/${image.id}/${sanitizeFilename(image.file.name)}`;
     const { error } = await supabase.storage
       .from("uploads")
       .upload(path, image.file, { contentType: image.file.type });
@@ -147,7 +144,7 @@ export default function UploadPage() {
             onImagesSelected={handleProductImagesSelected}
             onRemoveImage={removeProductImage}
           />
-          <CampaignSection videos={videos} images={productImages} batchId={batchId} />
+          <CampaignSection videos={videos} images={productImages} requestId={requestId} />
         </div>
         <Sidebar />
       </div>
