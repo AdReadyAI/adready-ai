@@ -1,5 +1,7 @@
 """Unit tests for the worker processor orchestration (app/processor.py)."""
 
+from types import SimpleNamespace
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -167,7 +169,10 @@ def _wire_process_message(monkeypatch, tasks, done=None, recorder=None):
             pass
 
         def prepare(self):
-            return object()
+            # A bare object() no longer satisfies process_message(), which now
+            # reads artifact.probe_results — mirror the real Artifacts contract
+            # just enough for that access to work.
+            return SimpleNamespace(probe_results={})
 
     class FakeVideoAnalyzer:
         def __init__(self, artifact):
