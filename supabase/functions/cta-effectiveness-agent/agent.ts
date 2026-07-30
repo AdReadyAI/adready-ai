@@ -24,12 +24,14 @@ import type {
 } from "../shared/schemas.ts";
 import {
   cannotAssess,
+  clampSeverity,
   CTA_ABSENT_SEVERITY,
   ctaBuried,
   ctaLowVisibility,
   ctaMistimed,
   ctaPlatformMismatch,
   failed,
+  matchesRequiredCta,
   narrativeFromFailedChecks,
   passed,
   reconcileMetricCorrection,
@@ -139,6 +141,26 @@ export async function runCtaAgent(
   return [buildCtaClarity(ctx, config, acquisition, evaluation)];
 }
 
+/**
+ * Cap a failed effectiveness sub-check to low with a brief-match note; pass-through
+ * for a pass/cannot_assess or an already-≤low failure. Applied to cta_goal_mismatch
+ * and cta_language_weak when the ad's CTA is the one the brief mandated — the
+ * advertiser deliberately chose it, so a soft-for-conversion phrasing must not roll
+ * the metric up to high, and the two checks stop compounding on one shared fact.
+ */
+function capToBriefLow(check: SubCheckResult): SubCheckResult {
+  if (check.result !== "failed") return check;
+  if (clampSeverity(check.severity, "low") === check.severity) return check;
+  return failed(
+    check.check_id,
+    check.name,
+    "low",
+    `${check.explanation ?? ""} (Severity capped to low: the CTA matches the ` +
+      `brief's required CTA, so this phrasing is the advertiser's deliberate choice.)`
+      .trim(),
+  );
+}
+
 export function buildCtaClarity(
   ctx: AgentContext,
   config: CtaConfig,
@@ -221,12 +243,21 @@ export function buildCtaClarity(
     ctaPresent,
   );
 
+  // Brief-aware softening (see capToBriefLow): when an acquired CTA matches a
+  // required_cta, the ad used the CTA the advertiser mandated — so cap the two
+  // effectiveness sub-checks that punish soft/off-goal phrasing to low.
+  const briefMatched = acquiredCtas.some((c) =>
+    matchesRequiredCta(c.text, ctx.parsed_creative_brief.required_ctas)
+  );
+  const languageWeakFinal = briefMatched ? capToBriefLow(languageWeak) : languageWeak;
+  const goalMismatchFinal = briefMatched ? capToBriefLow(goalMismatch) : goalMismatch;
+
   const subChecks: SubCheckResult[] = [
     absent,
     buried,
     mistimed,
-    languageWeak,
-    goalMismatch,
+    languageWeakFinal,
+    goalMismatchFinal,
     noUrgency,
     destination,
     lowVis,

@@ -324,3 +324,68 @@ Deno.test("sparse: both calls malformed + unpopulated config → single cannot_a
     assertEquals(results.length, 1);
     assertEquals(results[0].result, "cannot_assess");
   }));
+
+// --- brief-aware softening (goal_mismatch / language_weak) --------------------
+
+Deno.test("brief-matched CTA caps goal_mismatch + language_weak to low", () =>
+  // PRESENT_CTA text "Try Mango Moon" matches the fixture's required_ctas.
+  withChat([
+    acq(true, PRESENT_CTA),
+    evl([
+      { check_id: "cta_absent", result: "passed", severity: "none" },
+      {
+        check_id: "cta_language_weak",
+        result: "failed",
+        severity: "medium",
+        explanation: "'Try' is soft for conversion.",
+      },
+      {
+        check_id: "cta_goal_mismatch",
+        result: "failed",
+        severity: "high",
+        explanation: "Trial-focused, not transactional.",
+      },
+      { check_id: "cta_no_urgency", result: "passed", severity: "none" },
+      { check_id: "cta_destination_unclear", result: "passed", severity: "none" },
+    ]),
+  ], async () => {
+    const [result] = await runCtaAgent(
+      makeAgentContext({ ocr_segments: [] }),
+      POPULATED,
+    );
+    const goal = sub(result, "cta_goal_mismatch");
+    const lang = sub(result, "cta_language_weak");
+    assertEquals(goal.result, "failed");
+    assertEquals(goal.severity, "low"); // capped from high
+    assertEquals(lang.severity, "low"); // capped from medium
+    assertEquals(goal.explanation!.includes("required CTA"), true);
+    assertEquals(result.severity, "low"); // metric no longer rolls up to high
+  }));
+
+Deno.test("a CTA that does not match the brief keeps its goal_mismatch severity", () =>
+  withChat([
+    acq(true, PRESENT_CTA),
+    evl([
+      { check_id: "cta_absent", result: "passed", severity: "none" },
+      { check_id: "cta_language_weak", result: "passed", severity: "none" },
+      {
+        check_id: "cta_goal_mismatch",
+        result: "failed",
+        severity: "high",
+        explanation: "Off-goal CTA type.",
+      },
+      { check_id: "cta_no_urgency", result: "passed", severity: "none" },
+      { check_id: "cta_destination_unclear", result: "passed", severity: "none" },
+    ]),
+  ], async () => {
+    const base = makeAgentContext();
+    const ctx = makeAgentContext({
+      ocr_segments: [],
+      parsed_creative_brief: {
+        ...base.parsed_creative_brief,
+        required_ctas: ["Buy the deluxe bundle immediately"],
+      },
+    });
+    const [result] = await runCtaAgent(ctx, POPULATED);
+    assertEquals(sub(result, "cta_goal_mismatch").severity, "high");
+  }));

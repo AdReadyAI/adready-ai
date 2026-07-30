@@ -278,6 +278,26 @@ function ocrRendersCta(cta: AcquiredCta, ocr: OCRSegment): boolean {
 }
 
 /**
+ * Whether an acquired CTA is the one the brief mandated: a required-CTA's words are
+ * substantially present in the acquired CTA's text. Used to soften the effectiveness
+ * penalties (cta_goal_mismatch / cta_language_weak) on a CTA the advertiser
+ * deliberately chose — a brief-mandated "Try X" should not be failed high just for
+ * being softer than "Shop now" (see buildCtaClarity).
+ */
+export function matchesRequiredCta(
+  ctaText: string,
+  requiredCtas: readonly string[],
+): boolean {
+  const ctaTokens = new Set(textTokens(ctaText));
+  return requiredCtas.some((req) => {
+    const reqTokens = textTokens(req);
+    if (reqTokens.length === 0) return false;
+    const hits = reqTokens.filter((t) => ctaTokens.has(t)).length;
+    return hits / reqTokens.length >= 0.6;
+  });
+}
+
+/**
  * cta_low_visibility — SIZE-only legibility. Reads region_size and font_size_px
  * from ocr_segments[] (contrast_ratio is not available, and the agent never
  * inspects pixels). medium when under-size, low when marginal, none when clear.

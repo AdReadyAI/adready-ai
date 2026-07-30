@@ -82,7 +82,9 @@ export function evaluationPrompt(
     "Run each of these sub-checks and report each separately: (1) cta_absent — is a CTA, explicit or implicit, " +
     'genuinely present at all? (2) cta_language_weak — is the wording specific and action-oriented ("Shop now", ' +
     '"Get 20% off") rather than passive or vague ("Check us out")? (3) cta_goal_mismatch — does the CTA\'s type ' +
-    "match what the campaign goal calls for, comparing against the brief's required CTA where given? (4) " +
+    "match what the campaign goal calls for, comparing against the brief's required CTA where given? These two " +
+    "are distinct: cta_language_weak judges the wording's strength, cta_goal_mismatch judges the CTA type against " +
+    "the goal — do not fail both for the same single observation. (4) " +
     'cta_no_urgency — does the CTA carry a time-pressure or incentive cue ("today only", "free shipping")? This ' +
     "applies only when campaign_goal is conversion; for any other goal return passed with severity none. (5) " +
     "cta_destination_unclear — would a viewer know where the CTA sends them (a website, store, or app named or " +
