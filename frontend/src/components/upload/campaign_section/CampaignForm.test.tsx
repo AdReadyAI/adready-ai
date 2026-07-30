@@ -14,14 +14,14 @@ vi.mock('react-router-dom', () => ({
 // CampaignForm imports supabase directly for its submit handler's insert
 // call. These tests never trigger a real submit, but the module still needs
 // to import cleanly (the real client throws at import time without env
-// vars), so it's mocked here too.
+// vars), so it's mocked here too. Shape matches the real call:
+// .from("requests").insert([...]).select() — no .single(), since one row
+// gets inserted per video.
 vi.mock('../../../lib/supabaseClient', () => ({
   supabase: {
     from: () => ({
       insert: () => ({
-        select: () => ({
-          single: () => Promise.resolve({ data: null, error: null }),
-        }),
+        select: () => Promise.resolve({ data: [], error: null }),
       }),
     }),
   },
@@ -51,13 +51,13 @@ function submitButton() {
 
 describe('CampaignForm validation', () => {
   it('disables submit when nothing has been filled in', () => {
-    render(<CampaignForm videos={[]} images={noImages} requestId="req-1" />)
+    render(<CampaignForm videos={[]} images={noImages} batchId="batch-1" />)
     expect(submitButton()).toBeDisabled()
   })
 
   it('stays disabled when required fields are filled but no video is done', async () => {
     const user = userEvent.setup()
-    render(<CampaignForm videos={[makeVideo('uploading')]} images={noImages} requestId="req-1" />)
+    render(<CampaignForm videos={[makeVideo('uploading')]} images={noImages} batchId="batch-1" />)
 
     await fillCreateFields(user)
 
@@ -70,7 +70,7 @@ describe('CampaignForm validation', () => {
       <CampaignForm
         videos={[makeVideo('done'), makeVideo('uploading')]}
         images={noImages}
-        requestId="req-1"
+        batchId="batch-1"
       />,
     )
 
@@ -81,7 +81,7 @@ describe('CampaignForm validation', () => {
 
   it('enables submit once required fields are filled and every video is done', async () => {
     const user = userEvent.setup()
-    render(<CampaignForm videos={[makeVideo('done')]} images={noImages} requestId="req-1" />)
+    render(<CampaignForm videos={[makeVideo('done')]} images={noImages} batchId="batch-1" />)
 
     await fillCreateFields(user)
 
@@ -90,7 +90,7 @@ describe('CampaignForm validation', () => {
 
   it('validates the existing-campaign path against the campaign selector instead', async () => {
     const user = userEvent.setup()
-    render(<CampaignForm videos={[makeVideo('done')]} images={noImages} requestId="req-1" />)
+    render(<CampaignForm videos={[makeVideo('done')]} images={noImages} batchId="batch-1" />)
 
     await user.click(screen.getByRole('button', { name: 'Use existing campaign' }))
     expect(submitButton()).toBeDisabled()
