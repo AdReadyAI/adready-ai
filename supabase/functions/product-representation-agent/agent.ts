@@ -8,6 +8,13 @@
  */
 
 import { chat, type ChatMessage } from "../shared/llm.ts";
+import {
+  cannotAssess,
+  failed as failedCheck,
+  highestFailedSeverity,
+  passed,
+  severityRank,
+} from "../shared/checks.ts";
 import type {
   AgentContext,
   ConfidenceLevel,
@@ -54,17 +61,8 @@ const SYSTEM_PROMPT =
 export const APPEARANCE_DEADLINE_MS = 3000;
 export const MIN_COVERAGE_RATIO = 0.15;
 
-const SEVERITY_RANK: Record<SeverityLevel, number> = {
-  none: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-  critical: 4,
-  cannot_assess: -1,
-};
-
 function worseSeverity(a: SeverityLevel, b: SeverityLevel): SeverityLevel {
-  return SEVERITY_RANK[b] > SEVERITY_RANK[a] ? b : a;
+  return severityRank(b) > severityRank(a) ? b : a;
 }
 
 /**
@@ -83,14 +81,11 @@ export function computeInsufficientVisibilitySubCheck(
   );
 
   if (!context.product_frames.length || !present.length) {
-    return {
-      check_id: "insufficient_visibility",
+    return cannotAssess(
+      "insufficient_visibility",
       name,
-      result: "cannot_assess",
-      severity: "cannot_assess",
-      explanation:
-        "No product frames indicate the product is visible, so screen-time coverage cannot be computed.",
-    };
+      "No product frames indicate the product is visible, so screen-time coverage cannot be computed.",
+    );
   }
 
   const firstAppearanceMs = Math.min(...present.map((f) => f.timestamp_ms));
@@ -101,15 +96,10 @@ export function computeInsufficientVisibilitySubCheck(
   const thin = coverageRatio !== null && coverageRatio < MIN_COVERAGE_RATIO;
 
   if (!late && !thin) {
-    return {
-      check_id: "insufficient_visibility",
-      name,
-      result: "passed",
-      severity: "none",
-    };
+    return passed("insufficient_visibility", name);
   }
 
-  const severity: SeverityLevel = late && thin ? "high" : "medium";
+  const severity: "high" | "medium" = late && thin ? "high" : "medium";
   const reasons = [
     late
       ? `first appears at ${firstAppearanceMs}ms (after the ${APPEARANCE_DEADLINE_MS}ms deadline)`
@@ -121,13 +111,12 @@ export function computeInsufficientVisibilitySubCheck(
       : "",
   ].filter(Boolean).join(" and ");
 
-  return {
-    check_id: "insufficient_visibility",
+  return failedCheck(
+    "insufficient_visibility",
     name,
-    result: "failed",
     severity,
-    explanation: `Product ${reasons}.`,
-  };
+    `Product ${reasons}.`,
+  );
 }
 
 type RawFinding = {
@@ -289,10 +278,7 @@ function reconcile(
   if (!problem) return { result: "true", severity: "none" };
   let sev: SeverityLevel = severity;
   if (sev === "none") {
-    sev = failed.reduce<SeverityLevel>(
-      (worst, s) => worseSeverity(worst, s.severity),
-      "none",
-    );
+    sev = highestFailedSeverity(subChecks);
     if (sev === "none" || sev === "cannot_assess") sev = "low";
   }
   return { result: "false", severity: sev };

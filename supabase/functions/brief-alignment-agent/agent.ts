@@ -7,6 +7,7 @@
  */
 
 import { chat, type ChatMessage } from "../shared/llm.ts";
+import { highestFailedSeverity } from "../shared/checks.ts";
 import type {
   AgentContext,
   ConfidenceLevel,
@@ -174,19 +175,6 @@ function sanitizeSubChecks(
   return out;
 }
 
-const SEVERITY_RANK: Record<SeverityLevel, number> = {
-  none: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-  critical: 4,
-  cannot_assess: -1,
-};
-
-function worseSeverity(a: SeverityLevel, b: SeverityLevel): SeverityLevel {
-  return SEVERITY_RANK[b] > SEVERITY_RANK[a] ? b : a;
-}
-
 /** A metric carries a real correction when a fix type or fix text is present. */
 function hasCorrection(
   correctionType: MetricResult["correction_type"],
@@ -222,10 +210,7 @@ function reconcile(
   if (!problem) return { result: "true", severity: "none" };
   let sev: SeverityLevel = severity;
   if (sev === "none") {
-    sev = failed.reduce<SeverityLevel>(
-      (worst, s) => worseSeverity(worst, s.severity),
-      "none",
-    );
+    sev = highestFailedSeverity(subChecks);
     if (sev === "none" || sev === "cannot_assess") sev = "low";
   }
   return { result: "false", severity: sev };
