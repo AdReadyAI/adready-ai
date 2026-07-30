@@ -12,6 +12,7 @@ import {
   ctaLowVisibility,
   ctaMistimed,
   ctaPlatformMismatch,
+  matchesRequiredCta,
 } from "../../../functions/cta-effectiveness-agent/checks.ts";
 import type {
   CtaTiming,
@@ -222,4 +223,50 @@ Deno.test("cta_platform_mismatch: passed when phrasing is clean", () => {
       .result,
     "passed",
   );
+});
+
+Deno.test("cta_low_visibility: message names the specific small element, not the whole CTA", () => {
+  // Primary CTA text is large; only the URL is under-size. The failure should name
+  // the URL and note the rest is fine, rather than "the whole CTA is too small".
+  const bigPrimary = ocr({
+    ocr_id: "big",
+    text: "Shop now",
+    region_size: 2500,
+    font_size_px: 42,
+  });
+  const smallUrl = ocr({
+    ocr_id: "url",
+    text: "glowup.com",
+    region_size: 2500,
+    font_size_px: 16,
+  });
+  const r = ctaLowVisibility(
+    [cta({ text: "Shop now at glowup.com" })],
+    [bigPrimary, smallUrl],
+    VIS,
+  );
+  assertEquals(r.result, "failed");
+  assertEquals(r.severity, "medium");
+  assertEquals(r.explanation!.includes("glowup.com"), true);
+  assertEquals(r.explanation!.includes("16px"), true);
+  assertEquals(r.explanation!.includes("rest of the CTA is adequately sized"), true);
+});
+
+// --- matchesRequiredCta -------------------------------------------------------
+
+Deno.test("matchesRequiredCta: true when the required CTA's words are present", () => {
+  assertEquals(
+    matchesRequiredCta("Try Mango Moon today at mangomoon dot com", [
+      "Try Mango Moon",
+    ]),
+    true,
+  );
+});
+
+Deno.test("matchesRequiredCta: false for an unrelated CTA", () => {
+  assertEquals(matchesRequiredCta("Buy now instantly", ["Try Mango Moon"]), false);
+});
+
+Deno.test("matchesRequiredCta: false when the brief lists no required CTA", () => {
+  assertEquals(matchesRequiredCta("Shop now", []), false);
 });

@@ -347,6 +347,7 @@ export function ctaLowVisibility(
       const measured = rendered.length > 0 ? rendered : temporal;
 
       let worst: SeverityLevel = "none";
+      const offenders: OCRSegment[] = [];
       for (const o of measured) {
         const region = o.region_size!;
         const font = o.font_size_px!;
@@ -355,19 +356,32 @@ export function ctaLowVisibility(
           font < thresholds.min_font_size_px
         ) {
           worst = maxSeverity(worst, "medium");
+          offenders.push(o);
         } else if (
           region < thresholds.marginal_region_size ||
           font < thresholds.marginal_font_size_px
         ) {
           worst = maxSeverity(worst, "low");
+          offenders.push(o);
         }
       }
       if (worst === "medium" || worst === "low") {
+        // Name the specific under-size element (usually a secondary one like a URL)
+        // instead of implying the whole CTA is illegible — the primary CTA may be
+        // large. Note when the rest of the CTA is fine.
+        const smallest = offenders.reduce((a, b) =>
+          b.font_size_px! < a.font_size_px! ? b : a
+        );
+        const restOk = measured.length > offenders.length
+          ? "; the rest of the CTA is adequately sized"
+          : "";
         return failed(
           LOW_VIS.id,
           LOW_VIS.name,
           worst,
-          "CTA text is too small to register legibly.",
+          `The CTA element "${smallest.text}" is below the legible-size ` +
+            `threshold (${smallest.font_size_px}px, ` +
+            `${Math.round(smallest.region_size! * 100)}% of frame)${restOk}.`,
         );
       }
       return passed(LOW_VIS.id, LOW_VIS.name);
