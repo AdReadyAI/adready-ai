@@ -69,8 +69,11 @@ const LLM_CHECKS = {
 };
 
 /**
- * channel_readiness LLM sub-check: placement/audience appropriateness (tone,
- * message, pacing, use-case fit for the platform and target audience). It
+ * channel_readiness LLM sub-check: placement/audience appropriateness — the
+ * platform's format and style conventions, the viewing context, and whether the
+ * content fits (vs. alienates) the target audience. Scoped deliberately to
+ * placement-level fit: internal craft (hook, pacing, narrative, value prop) is
+ * creative_effectiveness's job (sub-checks 1–5) and is NOT re-graded here. It
  * complements the deterministic format_noncompliant technical check. Not
  * config-gated — it degrades to cannot_assess only when the evaluation call is
  * unavailable or the model abstains (e.g. no audience brief to judge against).
@@ -215,8 +218,10 @@ export function buildChannelReadiness(
       confidence: evaluation?.confidence ?? "medium",
       evidence: derived?.evidence,
       explanation: placement.explanation,
+      // Channel-fit correction only — pacing/hook/narrative are creative_effectiveness's
+      // to correct, so this row does not suggest craft edits.
       suggested_correction:
-        "Adjust the creative's tone, message, or pacing to fit the placement and the target audience.",
+        "Adjust the creative's tone and message to fit the placement and the target audience.",
       correction_type: "edit_recommendation",
     };
   } else if (
