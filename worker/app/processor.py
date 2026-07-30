@@ -28,7 +28,12 @@ def process_message(cur, msg_id, payload):
 
         quality_result = artifact.probe_results.get("quality")
         if quality_result is not None:
-            db.persist_quality_frames(quality_result.flags)
+            try:
+                db.persist_quality_frames(quality_result.flags)
+            except Exception:
+                logger.exception(
+                    "[job %s] failed to persist quality frames", msg_id
+                )
 
         results, errors = _run_analysis(db, analyzer)
 
