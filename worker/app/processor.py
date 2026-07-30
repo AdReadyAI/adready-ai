@@ -25,6 +25,11 @@ def process_message(cur, msg_id, payload):
 
         analyzer = VideoAnalyzer(artifact)
         db = Supabase(cur=cur, request_id=request_id)
+
+        quality_result = artifact.probe_results.get("quality")
+        if quality_result is not None:
+            db.persist_quality_frames(quality_result.flags)
+
         results, errors = _run_analysis(db, analyzer)
 
         db.persist_results(results, errors)
