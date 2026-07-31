@@ -100,6 +100,13 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-07-30** — `CampaignForm` now parses the creative brief on blur via
+  `supabase/functions/parse-creative-brief` edge function, auto-populates the
+  new `AdvancedFieldsSection` component with AI-filled field badges and
+  undo controls, and persists one `parsed_creative_briefs` row per batch on
+  submit (with the `destination_platform` dropdown). Migration
+  `024_rekey_parsed_creative_briefs_to_batch.sql` rekeys the table on
+  `batch_id` and adds missing grants/INSERT policy.
 - **2026-07-27** — Renamed this branch's `011_add_batch_id.sql`/
   `012_enqueue_on_request_insert.sql` to `022_*`/`023_*` — `main` had
   independently claimed `011`–`021` for its own tables while this branch
