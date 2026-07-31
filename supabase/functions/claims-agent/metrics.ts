@@ -1,11 +1,12 @@
 /**
- * metrics.ts — The pure, deterministic post-processing layer: no DB access,
- * no LLM calls, no I/O. Takes already-fetched claims/findings and produces
- * the two schema-validated MetricResults, plus the anti-hallucination guard
- * that runs on compliance findings before synthesis sees them.
+ * metrics.ts — The pure, deterministic post-processing layer: no DB
+ * access, no LLM calls, no I/O. Takes already-computed claims/findings
+ * from checks.ts and produces the two schema-validated MetricResults.
  *
- * Never needs to change when swapping out any tool in ./tools/ -- these
- * functions only see already-computed data.
+ * Severity/confidence helpers are kept local (not imported from a shared
+ * module) since shared/index.ts's barrel doesn't currently export
+ * equivalents -- small enough (a handful of one-liners) that duplicating
+ * them here is simpler than depending on an unconfirmed shared API.
  */
 
 import type {
@@ -14,74 +15,58 @@ import type {
   OCRSegment,
   ParsedCreativeBrief,
   SubCheckResult,
-} from "../shared/schemas.ts";
+} from "../shared/index.ts";
 import type {
-  ClaimCategory,
   ComplianceFinding,
   DerivedClaim,
-  EvidenceByCategory,
   SeverityScore,
   SubstantiationFinding,
   TriageResult,
-  VerifiableClaim,
-} from "./types.ts";
-import {
-  bucketConfidence,
-  mapSeverityScore,
-  msToTimestamp,
-  truncate,
-  worstSeverityScore,
-} from "./utils.ts";
+} from "./checks.ts";
 
-// Anti-hallucination guard
+/* -------------------------------------------------------------------------- */
+/* Local severity/confidence helpers                                         */
+/* -------------------------------------------------------------------------- */
 
-const UNVERIFIED_CONFIDENCE_CAP = 0.3;
-
-/**
- * Cross-checks every non-empty policy_excerpt against the regulatory
- * evidence actually retrieved for that claim's category. If the excerpt
- * isn't found verbatim (case-insensitive), it's dropped and confidence is
- * capped -- the safety net against a model inventing a plausible-sounding
- * regulation.
- */
-export function verifyPolicyExcerpts(
-  findings: ComplianceFinding[],
-  claims: VerifiableClaim[],
-  evidence: EvidenceByCategory,
-): ComplianceFinding[] {
-  const categoryByClaimId = new Map<string, ClaimCategory>(
-    claims.map((c) => [c.claim_id, c.category]),
-  );
-
-  return findings.map((finding) => {
-    if (!finding.policy_excerpt) {
-      return { ...finding, excerpt_verified: true };
-    }
-
-    const category = categoryByClaimId.get(finding.claim_id);
-    const chunks = category ? evidence[category] ?? [] : [];
-    const excerptLower = finding.policy_excerpt.toLowerCase();
-    const verified = chunks.some((chunk) =>
-      chunk.text.toLowerCase().includes(excerptLower)
-    );
-
-    if (verified) {
-      return { ...finding, excerpt_verified: true };
-    }
-
-    return {
-      ...finding,
-      policy_excerpt: "",
-      excerpt_verified: false,
-      confidence_score: Math.min(
-        finding.confidence_score,
-        UNVERIFIED_CONFIDENCE_CAP,
-      ),
-    };
-  });
+function msToTimestamp(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${
+    String(seconds).padStart(2, "0")
+  }`;
 }
 
-//product_truth
+function mapSeverityScore(score: SeverityScore): MetricResult["severity"] {
+  const table: Record<SeverityScore, MetricResult["severity"]> = {
+    0: "none",
+    1: "low",
+    2: "medium",
+    3: "high",
+    4: "critical",
+  };
+  return table[score];
+}
+
+function worstSeverityScore(scores: SeverityScore[]): SeverityScore {
+  return scores.length ? (Math.max(...scores) as SeverityScore) : 0;
+}
+
+function bucketConfidence(
+  score: number,
+): NonNullable<MetricResult["confidence"]> {
+  if (score >= 0.8) return "high";
+  if (score >= 0.5) return "medium";
+  return "low";
+}
+
+function truncate(text: string, max = 60): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+/* -------------------------------------------------------------------------- */
+/* product_truth                                                              */
+/* -------------------------------------------------------------------------- */
 
 export function evaluateProductTruth(
   claims: DerivedClaim[],
@@ -102,8 +87,7 @@ export function evaluateProductTruth(
   });
 
   // A flagged claim can occur more than once in the ad -- surface every
-  // instance as evidence, not just one, so the correction covers every
-  // place the claim actually appears.
+  // instance as evidence, not just one.
   const evidence: EvidenceRef[] = findings
     .filter((f) => f.severity > 0)
     .flatMap((f): EvidenceRef[] => {
@@ -120,7 +104,6 @@ export function evaluateProductTruth(
     (worst, f) => (!worst || f.severity > worst.severity ? f : worst),
     null,
   );
-
   const worstScore = worstSeverityScore(findings.map((f) => f.severity));
   const severity = mapSeverityScore(worstScore);
   const failed = worstScore > 0;
@@ -153,7 +136,9 @@ export function evaluateProductTruth(
   };
 }
 
-//policy_compliance
+/* -------------------------------------------------------------------------- */
+/* policy_compliance                                                          */
+/* -------------------------------------------------------------------------- */
 
 export function evaluatePolicyCompliance(
   claims: DerivedClaim[],
@@ -166,8 +151,6 @@ export function evaluatePolicyCompliance(
   const evidence: EvidenceRef[] = [];
 
   // Deterministic, ad-wide check: does a required disclaimer exist at all?
-  // Independent of any single claim, so it isn't something the per-claim
-  // compliance agent judges.
   const disclaimerSeg = ocr.find((s) =>
     s.text.toLowerCase().includes("disclaimer") ||
     s.text.toLowerCase().includes("results may vary")
@@ -221,8 +204,8 @@ export function evaluatePolicyCompliance(
         });
       }
       if (finding.policy_excerpt) {
-        // NOTE: EvidenceRef.type has no "regulatory_guidance" option yet in shared/schemas.ts
-        //  mapped to "metadata" as a placeholder until that enum is extended.
+        // NOTE: EvidenceRef.type has no "regulatory_guidance" option in
+        // shared/schemas.ts -- mapped to "metadata" as a placeholder.
         evidence.push({
           type: "metadata",
           text: finding.policy_excerpt,

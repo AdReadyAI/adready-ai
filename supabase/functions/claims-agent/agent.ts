@@ -1,73 +1,45 @@
 /**
- * claims-agent/agent.ts — Claims Accuracy Agent orchestration.
+ * agent.ts — Claims Accuracy Agent orchestration.
  *
- * Owns the full pipeline: load context, extract claim candidates, triage,
- * retrieve evidence, substantiate + check compliance (each in ONE batched
- * call across every claim), run the anti-hallucination guard, then
- * synthesize into schema-validated MetricResults.
+ * Loads context (shared/context.ts), runs the four checks in checks.ts
+ * (each ONE batched call across every claim), retrieves evidence via
+ * rag.ts (once per unique category), then synthesizes into
+ * schema-validated MetricResults via metrics.ts and shared/validation.ts.
  */
 
-import { MetricResultSchema } from "../shared/schemas.ts";
-import type { MetricResult } from "../shared/schemas.ts";
-
+import { loadAgentContext, validateMetricResults } from "../shared/index.ts";
+import type { AgentRunRequest, MetricResult } from "../shared/index.ts";
 import {
-  evaluatePolicyCompliance,
-  evaluateProductTruth,
-  verifyPolicyExcerpts,
-} from "./metrics.ts";
-import { getAgentContext } from "./tools/context.ts";
-import { deriveClaimCandidates } from "./tools/claims-extraction.ts";
-import { triageClaims } from "./tools/claims-triage.ts";
-import { retrieveEvidence } from "./tools/evidence-retriever.ts";
-import { substantiateClaims } from "./tools/claims-substantiation.ts";
-import { checkCompliance } from "./tools/compliance-check.ts";
-import type { EvidenceByCategory, VerifiableClaim } from "./types.ts";
-import { uniqueCategories } from "./utils.ts";
-
-export type ClaimsAgentDependencies = {
-  getAgentContext: typeof getAgentContext;
-  deriveClaimCandidates: typeof deriveClaimCandidates;
-  triageClaims: typeof triageClaims;
-  retrieveEvidence: typeof retrieveEvidence;
-  substantiateClaims: typeof substantiateClaims;
-  checkCompliance: typeof checkCompliance;
-  verifyPolicyExcerpts: typeof verifyPolicyExcerpts;
-  evaluateProductTruth: typeof evaluateProductTruth;
-  evaluatePolicyCompliance: typeof evaluatePolicyCompliance;
-};
-
-export const claimsAgentDependencies: ClaimsAgentDependencies = {
-  getAgentContext,
-  deriveClaimCandidates,
-  triageClaims,
-  retrieveEvidence,
-  substantiateClaims,
   checkCompliance,
+  extractClaims,
+  substantiateClaims,
+  triageClaims,
   verifyPolicyExcerpts,
-  evaluateProductTruth,
-  evaluatePolicyCompliance,
-};
+} from "./checks.ts";
+import type { EvidenceByCategory, VerifiableClaim } from "./checks.ts";
+import { evaluatePolicyCompliance, evaluateProductTruth } from "./metrics.ts";
+import { retrieveEvidence, uniqueCategories } from "./rag.ts";
 
 /**
  * Runs the Claims Accuracy Agent end-to-end for a single request.
+ *
+ * `userId` is required -- shared/context.ts authorizes the request against
+ * it before loading any related data (see that file's header).
  */
 export async function runClaimsAgent(
-  requestId: string,
-  deps: ClaimsAgentDependencies = claimsAgentDependencies,
+  request: AgentRunRequest,
+  { userId }: { userId: string },
 ): Promise<MetricResult[]> {
-  const context = await deps.getAgentContext(requestId);
+  const context = await loadAgentContext(request.request_id, { userId });
 
-  // Extract claim candidates (single batched pass).
-  const candidates = await deps.deriveClaimCandidates(
+  // Extract claim candidates (already a single batched pass, dedupes repeats).
+  const candidates = await extractClaims(
     context.transcript_segments,
     context.ocr_segments,
   );
 
   // Triage ALL candidates in one batched call.
-  const triage = await deps.triageClaims(
-    candidates,
-    context.parsed_creative_brief,
-  );
+  const triage = await triageClaims(candidates, context.parsed_creative_brief);
 
   const verifiableClaims: VerifiableClaim[] = candidates
     .map((claim) => {
@@ -83,18 +55,15 @@ export async function runClaimsAgent(
   const productEvidence: EvidenceByCategory = {};
   const regulatoryEvidence: EvidenceByCategory = {};
   for (const category of categories) {
-    productEvidence[category] = await deps.retrieveEvidence(
-      category,
-      "product",
-    );
-    regulatoryEvidence[category] = await deps.retrieveEvidence(
+    productEvidence[category] = await retrieveEvidence(category, "product");
+    regulatoryEvidence[category] = await retrieveEvidence(
       category,
       "regulatory",
     );
   }
 
   // Substantiate ALL verifiable claims in one batched call.
-  const substantiationFindings = await deps.substantiateClaims(
+  const substantiationFindings = await substantiateClaims(
     verifiableClaims,
     productEvidence,
     context.parsed_creative_brief,
@@ -102,24 +71,25 @@ export async function runClaimsAgent(
   );
 
   // Check compliance for ALL verifiable claims in one batched call.
-  const rawComplianceFindings = await deps.checkCompliance(
+  const rawComplianceFindings = await checkCompliance(
     verifiableClaims,
     regulatoryEvidence,
     context.ocr_segments,
     context.parsed_creative_brief,
   );
 
-  // Anti-hallucination guard — always runs.
-  const complianceFindings = deps.verifyPolicyExcerpts(
+  // Anti-hallucination guard -- always runs.
+  const complianceFindings = verifyPolicyExcerpts(
     rawComplianceFindings,
     verifiableClaims,
     regulatoryEvidence,
   );
 
-  // Synthesis
+  // Synthesis (pure, deterministic), then the shared semantic validator
+  // (result/severity consistency, no duplicate metrics) before returning.
   const results: MetricResult[] = [
-    deps.evaluateProductTruth(candidates, triage, substantiationFindings),
-    deps.evaluatePolicyCompliance(
+    evaluateProductTruth(candidates, triage, substantiationFindings),
+    evaluatePolicyCompliance(
       candidates,
       context.ocr_segments,
       complianceFindings,
@@ -127,5 +97,5 @@ export async function runClaimsAgent(
     ),
   ];
 
-  return MetricResultSchema.array().parse(results);
+  return validateMetricResults(results);
 }
