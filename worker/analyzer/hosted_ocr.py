@@ -50,7 +50,10 @@ def _normalize_workflow_response(
     workflow_output = response[0]
     if not isinstance(workflow_output, dict):
         raise TypeError("workflow output")
-    predictions = workflow_output["predictions"]
+    prediction_output = workflow_output["predictions"]
+    if not isinstance(prediction_output, dict):
+        raise TypeError("prediction output")
+    predictions = prediction_output["predictions"]
     if not isinstance(predictions, list):
         raise TypeError("predictions")
 
@@ -85,6 +88,16 @@ def _normalize_workflow_response(
             )
         )
     return tuple(readings)
+
+
+def _unwrap_workflow_outputs(payload: object) -> list[object]:
+    """Retain only Workflow outputs from the hosted response envelope."""
+    if not isinstance(payload, dict):
+        raise TypeError("hosted response")
+    outputs = payload["outputs"]
+    if not isinstance(outputs, list):
+        raise TypeError("outputs")
+    return outputs
 
 
 class RoboflowEasyOcrWorkflow(Protocol):
@@ -168,10 +181,17 @@ class RoboflowEasyOcrWorkflowClient:
         if 400 <= response.status_code <= 499:
             raise PermanentError("Roboflow EasyOCR rejected the request")
         try:
-            return response.json()
+            payload = response.json()
         except ValueError:
             # JSON decoder errors can embed fragments of the provider body.
             raise PermanentError(_UNSUPPORTED_RESPONSE_MESSAGE) from None
+        try:
+            return _unwrap_workflow_outputs(payload)
+        except (KeyError, TypeError):
+            # Drop the decoded envelope so provider metadata is not retained by
+            # the safe error raised after this exception handler exits.
+            payload = None
+        raise PermanentError(_UNSUPPORTED_RESPONSE_MESSAGE)
 
 
 class RoboflowEasyOcrAdapter:

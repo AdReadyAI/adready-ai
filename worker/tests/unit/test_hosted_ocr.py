@@ -27,25 +27,31 @@ class RecordedEasyOcrWorkflow:
         return [
             {
                 "text": "  SALE  ",
-                "predictions": [
-                    {
-                        "x": 60.0,
-                        "y": 20.0,
-                        "width": 80.0,
-                        "height": 20.0,
-                        "confidence": 0.91,
-                        "class": "  SALE  ",
-                        "class_id": 0,
+                "predictions": {
+                    "image": {
+                        "width": None,
+                        "height": None,
                     },
-                    {
-                        "x": 150.0,
-                        "y": 50.0,
-                        "width": 40.0,
-                        "height": 20.0,
-                        "class": "New\nLine",
-                        "class_id": 0,
-                    },
-                ],
+                    "predictions": [
+                        {
+                            "x": 60.0,
+                            "y": 20.0,
+                            "width": 80.0,
+                            "height": 20.0,
+                            "confidence": 0.91,
+                            "class": "  SALE  ",
+                            "class_id": 0,
+                        },
+                        {
+                            "x": 150.0,
+                            "y": 50.0,
+                            "width": 40.0,
+                            "height": 20.0,
+                            "class": "New\nLine",
+                            "class_id": 0,
+                        },
+                    ],
+                },
             }
         ]
 
@@ -64,6 +70,27 @@ def test_hosted_easyocr_normalizes_recorded_prediction(tmp_path) -> None:
         scale=0.5,
         encoded_bytes=len(b"recorded-jpeg"),
         provenance=(OcrCandidateProvenance.PERIODIC,),
+    )
+
+    readings = RoboflowEasyOcrAdapter(
+        workflow=RecordedEasyOcrWorkflow(),
+    ).recognize(candidate)
+
+    assert readings == (
+        RawOcrReading(
+            source_frame_index=7,
+            timestamp_s=1.75,
+            text="  SALE  ",
+            rectangle=(0.1, 0.1, 0.4, 0.2),
+            confidence=0.91,
+        ),
+        RawOcrReading(
+            source_frame_index=7,
+            timestamp_s=1.75,
+            text="New\nLine",
+            rectangle=(0.65, 0.4, 0.2, 0.2),
+            confidence=None,
+        ),
     )
 
 
@@ -94,7 +121,15 @@ def test_hosted_easyocr_rejects_non_finite_prediction_numbers(
                 "class": "SALE",
             }
             prediction[field] = value
-            return [{"text": "SALE", "predictions": [prediction]}]
+            return [
+                {
+                    "text": "SALE",
+                    "predictions": {
+                        "image": {"width": None, "height": None},
+                        "predictions": [prediction],
+                    },
+                }
+            ]
 
     candidate_path = tmp_path / "candidate.jpg"
     candidate_path.write_bytes(b"recorded-jpeg")
@@ -115,27 +150,6 @@ def test_hosted_easyocr_rejects_non_finite_prediction_numbers(
         match="Roboflow EasyOCR returned an unsupported response",
     ):
         RoboflowEasyOcrAdapter(workflow=NonFiniteWorkflow()).recognize(candidate)
-
-    readings = RoboflowEasyOcrAdapter(
-        workflow=RecordedEasyOcrWorkflow(),
-    ).recognize(candidate)
-
-    assert readings == (
-        RawOcrReading(
-            source_frame_index=7,
-            timestamp_s=1.75,
-            text="  SALE  ",
-            rectangle=(0.1, 0.1, 0.4, 0.2),
-            confidence=0.91,
-        ),
-        RawOcrReading(
-            source_frame_index=7,
-            timestamp_s=1.75,
-            text="New\nLine",
-            rectangle=(0.65, 0.4, 0.2, 0.2),
-            confidence=None,
-        ),
-    )
 
 
 def test_hosted_easyocr_rejects_unsupported_response_without_payload_leak(
@@ -303,6 +317,47 @@ def test_hosted_easyocr_rejects_undecodable_success_response_safely() -> None:
     assert "private-undecodable-response" not in str(error.value)
     assert "private-api-key" not in str(error.value)
     assert "private-image-bytes" not in str(error.value)
+
+
+def test_hosted_easyocr_unwraps_only_workflow_outputs() -> None:
+    """The HTTP boundary discards hosted response metadata immediately."""
+
+    class RecordedResponse:
+        """Return the envelope observed from the live hosted endpoint."""
+
+        status_code = 200
+
+        def json(self) -> object:
+            return {
+                "outputs": [
+                    {
+                        "text": "SALE",
+                        "predictions": [],
+                    }
+                ],
+                "profiler_trace": ["private-provider-profile"],
+            }
+
+    class RecordedSession:
+        """Return one successful recorded response without a network call."""
+
+        def post(self, url, *, json, timeout):
+            return RecordedResponse()
+
+    client = RoboflowEasyOcrWorkflowClient(
+        api_key="private-api-key",
+        workspace_id="private-workspace",
+        workflow_id="private-easyocr",
+        timeout_seconds=12.5,
+        session=RecordedSession(),
+    )
+
+    assert client.infer(b"private-image-bytes") == [
+        {
+            "text": "SALE",
+            "predictions": [],
+        }
+    ]
 
 
 _ROBOFLOW_OCR_ENV_KEYS = (
