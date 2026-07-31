@@ -1,4 +1,4 @@
-"""Run the pinned EAST graph without affecting non-OCR worker features."""
+"""Run the pinned EAST graph for detector-only text-region evidence."""
 
 from functools import lru_cache
 import hashlib

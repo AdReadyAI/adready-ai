@@ -6,14 +6,14 @@ import cv2
 import numpy as np
 import pytest
 
-from analyzer.fixed_rate_ocr_pipeline import FixedRateOcrAnalysis
-from analyzer.frame_sampling.probes.ocr_candidates import (
+from analyzer.ocr.pipeline import FixedRateOcrAnalysis
+from analyzer.ocr.candidates import (
     OcrCandidate,
     OcrCandidateProvenance,
 )
-from analyzer.ocr_completion import OcrCompletionCoordinator
-from analyzer.ocr_consolidation import OcrSegment
-from analyzer.ocr_frame_artifacts import LocalOcrFrameArtifactStore
+from analyzer.ocr.completion import OcrCompletionCoordinator
+from analyzer.ocr.consolidation import OcrSegment
+from analyzer.ocr.frame_artifacts import LocalOcrFrameArtifactStore
 
 
 pytestmark = pytest.mark.unit

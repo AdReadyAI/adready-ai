@@ -7,7 +7,7 @@ from typing import TypeVar
 
 from psycopg2.extras import Json
 
-from analyzer.ocr_completion import OcrCompletionCoordinator
+from analyzer.ocr.completion import OcrCompletionCoordinator
 from analyzer.types import VideoMetadata
 from app.errors import PermanentError
 

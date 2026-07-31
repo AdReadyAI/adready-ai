@@ -5,14 +5,20 @@ import math
 
 import cv2
 
-from analyzer.frame_sampling.probes.ocr_candidates import (
+from analyzer.ocr.candidates import (
     OcrCandidate,
     OcrCandidateProvenance,
     OcrCandidateStore,
 )
 from analyzer.frame_sampling.probes.text import TextSegment
-from analyzer.ocr_consolidation import OcrSegment, consolidate_readings
-from analyzer.ocr_recognition import OcrAdapter, RawOcrReading
+from analyzer.ocr.consolidation import OcrSegment, consolidate_readings
+from analyzer.ocr.routing import (
+    OcrCandidateMode,
+    OcrRoutingDecision,
+    route_ocr_candidates,
+)
+from analyzer.ocr.similarity import compare_candidate_visuals
+from analyzer.ocr.recognition import OcrAdapter, RawOcrReading
 from analyzer.types import VideoMetadata
 from app.errors import PermanentError
 
@@ -23,6 +29,7 @@ class FixedRateOcrAnalysis:
 
     segments: tuple[OcrSegment, ...]
     representative_candidates: tuple[OcrCandidate, ...]
+    routing: OcrRoutingDecision | None = None
 
 
 class FixedRateOcrPipeline:
@@ -30,8 +37,13 @@ class FixedRateOcrPipeline:
 
     _PERIOD_SECONDS = 0.25
 
-    def __init__(self, adapter: OcrAdapter) -> None:
+    def __init__(
+        self,
+        adapter: OcrAdapter,
+        requested_mode: OcrCandidateMode = OcrCandidateMode.FIXED_4FPS,
+    ) -> None:
         self._adapter = adapter
+        self._requested_mode = requested_mode
 
     def run(
         self,
@@ -40,8 +52,14 @@ class FixedRateOcrPipeline:
         metadata: VideoMetadata,
         work_dir: str,
         text_segments: tuple[TextSegment, ...] = (),
+        cascade_failure_reason: str | None = None,
     ) -> FixedRateOcrAnalysis:
         """Decode the Ad Creative independently and return consolidated evidence."""
+        valid_text_segments = (
+            ()
+            if cascade_failure_reason is not None
+            else text_segments
+        )
         source_rate = min(metadata.fps, 1 / self._PERIOD_SECONDS)
         periodic_count = math.ceil(metadata.duration_s * source_rate)
         candidate_store = OcrCandidateStore(
@@ -54,8 +72,13 @@ class FixedRateOcrPipeline:
                 video_path=video_path,
                 metadata=metadata,
                 candidate_store=candidate_store,
+                text_segments=valid_text_segments,
             )
-            return self._analyze(candidates, text_segments)
+            return self._analyze(
+                candidates,
+                valid_text_segments,
+                cascade_failure_reason,
+            )
         except Exception:
             # A failed OCR Run must not leave temporary source candidates in
             # the shared job workspace for a later retry to misinterpret.
@@ -68,8 +91,9 @@ class FixedRateOcrPipeline:
         video_path: str,
         metadata: VideoMetadata,
         candidate_store: OcrCandidateStore,
+        text_segments: tuple[TextSegment, ...],
     ) -> tuple[OcrCandidate, ...]:
-        """Select complete source frames at fixed timestamp boundaries."""
+        """Store complete frames needed by fixed and projected OCR routes."""
         capture = cv2.VideoCapture(video_path)
         if not capture.isOpened():
             raise PermanentError(
@@ -78,6 +102,24 @@ class FixedRateOcrPipeline:
 
         next_periodic_timestamp = 0.0
         final_source: tuple[int, float, object] | None = None
+        representative_sources: dict[
+            int,
+            tuple[OcrCandidateProvenance, ...],
+        ] = {}
+        for segment in text_segments:
+            # TextProbe owns detection and tracking; this OCR-local translation
+            # carries only its existing selection provenance into shadow routing.
+            provenance = tuple(
+                OcrCandidateProvenance(source)
+                for source in segment.candidate_sources
+            )
+            existing = representative_sources.get(
+                segment.representative_frame_index,
+                (),
+            )
+            representative_sources[segment.representative_frame_index] = tuple(
+                dict.fromkeys(existing + provenance)
+            )
         try:
             index = 0
             while True:
@@ -89,20 +131,28 @@ class FixedRateOcrPipeline:
                 # True presentation timestamps remain a later decoder upgrade.
                 timestamp = index / metadata.fps
                 final_source = (index, timestamp, frame)
-                if timestamp + 1e-9 < next_periodic_timestamp:
+                periodic = timestamp + 1e-9 >= next_periodic_timestamp
+                provenance = representative_sources.get(index, ())
+                if not periodic and not provenance:
                     index += 1
                     continue
 
-                # One decoded source frame covers every schedule boundary it
-                # crosses; sparse media must not create duplicate OCR calls.
-                while next_periodic_timestamp <= timestamp + 1e-9:
-                    next_periodic_timestamp += self._PERIOD_SECONDS
+                if periodic:
+                    # One decoded source frame covers every schedule boundary it
+                    # crosses; sparse media must not create duplicate OCR calls.
+                    while next_periodic_timestamp <= timestamp + 1e-9:
+                        next_periodic_timestamp += self._PERIOD_SECONDS
+                    provenance = tuple(
+                        dict.fromkeys(
+                            provenance + (OcrCandidateProvenance.PERIODIC,)
+                        )
+                    )
                 candidate_store.admit(
                     index=index,
                     timestamp=timestamp,
                     source_frame=frame,
                     model_input=None,
-                    provenance=(OcrCandidateProvenance.PERIODIC,),
+                    provenance=provenance,
                 )
                 index += 1
         finally:
@@ -132,15 +182,23 @@ class FixedRateOcrPipeline:
         self,
         candidates: tuple[OcrCandidate, ...],
         text_segments: tuple[TextSegment, ...],
+        cascade_failure_reason: str | None,
     ) -> FixedRateOcrAnalysis:
         """Recognize, consolidate, and deduplicate representative frames."""
+        routing = route_ocr_candidates(
+            requested_mode=self._requested_mode,
+            candidates=candidates,
+            text_segments=text_segments,
+            compare_candidates=compare_candidate_visuals,
+            cascade_failure_reason=cascade_failure_reason,
+        )
         readings: list[RawOcrReading] = []
         candidates_by_index = {
             candidate.index: candidate
             for candidate in candidates
         }
 
-        for candidate in candidates:
+        for candidate in routing.selected_candidates:
             # Adapter results are already compact and normalized, so complete
             # provider payloads never enter consolidation or persistence.
             readings.extend(self._adapter.recognize(candidate))
@@ -161,6 +219,7 @@ class FixedRateOcrPipeline:
         return FixedRateOcrAnalysis(
             segments=segments,
             representative_candidates=tuple(representative_candidates),
+            routing=routing,
         )
 
     @classmethod

@@ -3,12 +3,13 @@ import os
 import assemblyai as aai
 import httpx
 
-from analyzer.fixed_rate_ocr_pipeline import (
+from analyzer.ocr.pipeline import (
     FixedRateOcrAnalysis,
     FixedRateOcrPipeline,
 )
 from analyzer.frame_sampling.probes.text import TextProbeResult
-from analyzer.ocr_recognition import OcrAdapter
+from analyzer.ocr.routing import OcrCandidateMode
+from analyzer.ocr.recognition import OcrAdapter
 from analyzer.types import Artifacts
 from config.connection import get_aai_transcriber
 from app.errors import PermanentError, TransientError
@@ -36,9 +37,11 @@ class VideoAnalyzer:
         self,
         artifacts: Artifacts,
         ocr_adapter: OcrAdapter | None = None,
+        ocr_candidate_mode: OcrCandidateMode = OcrCandidateMode.FIXED_4FPS,
     ):
         self.artifacts = artifacts
         self.ocr_adapter = ocr_adapter
+        self.ocr_candidate_mode = ocr_candidate_mode
         self.transcriber = get_aai_transcriber()
 
     @analysis_task("transcription")
@@ -105,11 +108,23 @@ class VideoAnalyzer:
             if isinstance(text_result, TextProbeResult)
             else ()
         )
-        return FixedRateOcrPipeline(self.ocr_adapter).run(
+        cascade_failure_reason = (
+            "text_detection_unavailable"
+            if (
+                self.ocr_candidate_mode is not OcrCandidateMode.FIXED_4FPS
+                and not isinstance(text_result, TextProbeResult)
+            )
+            else None
+        )
+        return FixedRateOcrPipeline(
+            self.ocr_adapter,
+            requested_mode=self.ocr_candidate_mode,
+        ).run(
             video_path=self.artifacts.video_path,
             metadata=self.artifacts.video_metadata,
             work_dir=self.artifacts.work_dir,
             text_segments=text_segments,
+            cascade_failure_reason=cascade_failure_reason,
         )
 
 

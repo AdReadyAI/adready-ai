@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from analyzer.ocr_consolidation import OcrSegment
+from analyzer.ocr.consolidation import OcrSegment
 
 
 @dataclass(frozen=True)

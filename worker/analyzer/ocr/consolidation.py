@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from analyzer.ocr_recognition import RawOcrReading
+from analyzer.ocr.recognition import RawOcrReading
 
 
 @dataclass(frozen=True)

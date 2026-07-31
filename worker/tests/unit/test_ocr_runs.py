@@ -5,8 +5,8 @@ import pytest
 pytestmark = pytest.mark.unit
 
 from analyzer.types import VideoMetadata  # noqa: E402
-from analyzer.ocr_completion import OcrCompletion  # noqa: E402
-from analyzer.ocr_result import OcrResultSegment  # noqa: E402
+from analyzer.ocr.completion import OcrCompletion  # noqa: E402
+from analyzer.ocr.result import OcrResultSegment  # noqa: E402
 from app.errors import PermanentError  # noqa: E402
 from app.ocr_runs import OcrRunLifecycle  # noqa: E402
 

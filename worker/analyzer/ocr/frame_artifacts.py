@@ -7,7 +7,7 @@ import re
 import shutil
 from typing import Protocol
 
-from analyzer.frame_sampling.probes.ocr_candidates import OcrCandidate
+from analyzer.ocr.candidates import OcrCandidate
 
 
 @dataclass(frozen=True)

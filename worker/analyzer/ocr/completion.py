@@ -2,12 +2,12 @@
 
 from dataclasses import dataclass
 
-from analyzer.fixed_rate_ocr_pipeline import FixedRateOcrAnalysis
-from analyzer.ocr_frame_artifacts import (
+from analyzer.ocr.pipeline import FixedRateOcrAnalysis
+from analyzer.ocr.frame_artifacts import (
     OcrFrameArtifact,
     OcrFrameArtifactStore,
 )
-from analyzer.ocr_result import OcrResultSegment, to_ocr_result_segments
+from analyzer.ocr.result import OcrResultSegment, to_ocr_result_segments
 
 
 @dataclass(frozen=True)

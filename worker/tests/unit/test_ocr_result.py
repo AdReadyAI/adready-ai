@@ -2,8 +2,8 @@
 
 import pytest
 
-from analyzer.ocr_consolidation import OcrSegment
-from analyzer.ocr_result import to_ocr_result_segments
+from analyzer.ocr.consolidation import OcrSegment
+from analyzer.ocr.result import to_ocr_result_segments
 
 
 pytestmark = pytest.mark.unit

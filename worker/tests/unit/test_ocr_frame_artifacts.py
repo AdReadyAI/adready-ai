@@ -6,11 +6,11 @@ import cv2
 import numpy as np
 import pytest
 
-from analyzer.frame_sampling.probes.ocr_candidates import (
+from analyzer.ocr.candidates import (
     OcrCandidate,
     OcrCandidateProvenance,
 )
-from analyzer.ocr_frame_artifacts import LocalOcrFrameArtifactStore
+from analyzer.ocr.frame_artifacts import LocalOcrFrameArtifactStore
 
 
 pytestmark = pytest.mark.unit

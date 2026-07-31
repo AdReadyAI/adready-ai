@@ -5,7 +5,7 @@ import os
 import numpy as np
 import pytest
 
-from analyzer.frame_sampling.probes.ocr_candidates import (
+from analyzer.ocr.candidates import (
     OcrCandidateCapacityError,
     OcrCandidateProvenance,
     OcrCandidateStore,

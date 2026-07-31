@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import pytest
 
-from analyzer.frame_sampling.probes import east
+from analyzer.text_detection import east
 
 pytestmark = pytest.mark.unit
 

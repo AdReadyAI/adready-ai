@@ -12,7 +12,7 @@ from analyzer.frame_sampling.base import (
     get_probe_classes,
 )
 from analyzer.frame_sampling.context import FrameContext
-from analyzer.frame_sampling.probes.east import EastTextRegionDetector
+from analyzer.text_detection.east import EastTextRegionDetector
 from analyzer.frame_sampling.probes.text import TextProbe
 from analyzer.frame_sampling.store import FrameStore
 from app.errors import PermanentError

@@ -6,10 +6,11 @@ import httpx
 import numpy as np
 import pytest
 
-import analyzer.fixed_rate_ocr_pipeline as ocr_pipeline
+import analyzer.ocr.pipeline as ocr_pipeline
 import analyzer.video_analyzer as video_analyzer
 from analyzer.frame_sampling.probes.text import TextProbeResult, TextSegment
-from analyzer.ocr_recognition import (
+from analyzer.ocr.routing import OcrCandidateMode
+from analyzer.ocr.recognition import (
     DeterministicOcrAdapter,
     DeterministicOcrObservation,
 )
@@ -289,6 +290,60 @@ def test_ocr_runs_fixed_pipeline_with_optional_text_segments(
     assert result.segments[0].source_text_segment_ids == (
         "text_segment_0001",
     )
+
+
+def test_ocr_active_mode_falls_back_when_text_detection_is_unavailable(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """The OCR boundary converts a missing TextProbe result into fixed fallback."""
+    monkeypatch.setattr(
+        video_analyzer,
+        "get_aai_transcriber",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        ocr_pipeline.cv2,
+        "VideoCapture",
+        lambda video_path: _FakeCapture(
+            (
+                np.zeros((100, 200, 3), dtype=np.uint8),
+                np.ones((100, 200, 3), dtype=np.uint8),
+            )
+        ),
+    )
+    artifacts = Artifacts(
+        job_id="request-1",
+        storage_ref="uploads/review/creative.mp4",
+        video_path="synthetic.mp4",
+        audio_path="synthetic.wav",
+        frames=(),
+        video_metadata=VideoMetadata(
+            duration_s=0.3,
+            fps=4.0,
+            width=200,
+            height=100,
+            size_bytes=1_000,
+        ),
+        work_dir=str(tmp_path),
+        probe_results={},
+    )
+    adapter = DeterministicOcrAdapter(observations_by_frame={})
+
+    result = VideoAnalyzer(
+        artifacts,
+        ocr_adapter=adapter,
+        ocr_candidate_mode=OcrCandidateMode.CASCADE_ACTIVE,
+    ).ocr()
+
+    assert result.routing.requested_mode is OcrCandidateMode.CASCADE_ACTIVE
+    assert result.routing.effective_mode is OcrCandidateMode.FIXED_4FPS
+    assert result.routing.fallback_applied is True
+    assert result.routing.fallback_reason == "text_detection_unavailable"
+    assert [
+        candidate.index
+        for candidate in result.routing.selected_candidates
+    ] == [0, 1]
 
 
 

@@ -2,11 +2,11 @@
 
 import pytest
 
-from analyzer.frame_sampling.probes.ocr_candidates import (
+from analyzer.ocr.candidates import (
     OcrCandidate,
     OcrCandidateProvenance,
 )
-from analyzer.ocr_recognition import (
+from analyzer.ocr.recognition import (
     DeterministicOcrAdapter,
     DeterministicOcrObservation,
 )

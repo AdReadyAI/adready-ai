@@ -2,8 +2,8 @@
 
 import pytest
 
-from analyzer.ocr_consolidation import consolidate_readings
-from analyzer.ocr_recognition import RawOcrReading
+from analyzer.ocr.consolidation import consolidate_readings
+from analyzer.ocr.recognition import RawOcrReading
 
 
 pytestmark = pytest.mark.unit

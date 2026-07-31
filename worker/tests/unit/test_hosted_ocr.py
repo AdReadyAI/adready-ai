@@ -5,16 +5,16 @@ import requests
 
 pytestmark = pytest.mark.unit
 
-from analyzer.frame_sampling.probes.ocr_candidates import (  # noqa: E402
+from analyzer.ocr.candidates import (  # noqa: E402
     OcrCandidate,
     OcrCandidateProvenance,
 )
-from analyzer.hosted_ocr import (  # noqa: E402
+from analyzer.ocr.roboflow import (  # noqa: E402
     RoboflowEasyOcrAdapter,
     RoboflowEasyOcrWorkflowClient,
     build_roboflow_easyocr_adapter_from_env,
 )
-from analyzer.ocr_recognition import RawOcrReading  # noqa: E402
+from analyzer.ocr.recognition import RawOcrReading  # noqa: E402
 from app.errors import PermanentError, TransientError  # noqa: E402
 
 

@@ -9,13 +9,13 @@ import psycopg2
 from psycopg2.extras import Json
 import pytest
 
-import analyzer.fixed_rate_ocr_pipeline as ocr_pipeline
+import analyzer.ocr.pipeline as ocr_pipeline
 import analyzer.video_analyzer as video_analyzer_module
 import app.processor as processor
 from analyzer.frame_sampling.probes.text import TextProbeResult, TextSegment
-from analyzer.ocr_completion import OcrCompletionCoordinator
-from analyzer.ocr_frame_artifacts import LocalOcrFrameArtifactStore
-from analyzer.ocr_recognition import (
+from analyzer.ocr.completion import OcrCompletionCoordinator
+from analyzer.ocr.frame_artifacts import LocalOcrFrameArtifactStore
+from analyzer.ocr.recognition import (
     DeterministicOcrAdapter,
     DeterministicOcrObservation,
 )

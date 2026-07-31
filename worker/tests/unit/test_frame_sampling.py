@@ -24,7 +24,7 @@ from analyzer.frame_sampling.probes.adaptive import (
     AdaptiveSampler,
     AdaptiveSamplerResult,
 )
-from analyzer.frame_sampling.probes.east import (
+from analyzer.text_detection.east import (
     EastTextRegionDetector,
     EastUnavailableError,
 )
@@ -487,7 +487,7 @@ def test_unavailable_east_does_not_disable_unrelated_probe(
     monkeypatch,
 ):
     """An OCR-local model failure leaves other sampler analyses operational."""
-    import analyzer.frame_sampling.probes.east as east
+    import analyzer.text_detection.east as east
 
     sampler = _sampler(tmp_path)
     text_probe = next(

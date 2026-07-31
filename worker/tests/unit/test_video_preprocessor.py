@@ -10,7 +10,7 @@ import requests
 pytestmark = pytest.mark.unit
 
 import analyzer.video_preprocessor as vp  # noqa: E402
-from analyzer.frame_sampling.probes.ocr_candidates import (  # noqa: E402
+from analyzer.ocr.candidates import (  # noqa: E402
     OcrCandidateCapacityError,
 )
 from analyzer.types import VideoMetadata  # noqa: E402

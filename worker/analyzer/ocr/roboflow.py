@@ -8,8 +8,8 @@ from typing import Protocol
 
 import requests
 
-from analyzer.frame_sampling.probes.ocr_candidates import OcrCandidate
-from analyzer.ocr_recognition import RawOcrReading
+from analyzer.ocr.candidates import OcrCandidate
+from analyzer.ocr.recognition import RawOcrReading
 from app.errors import PermanentError, TransientError
 
 

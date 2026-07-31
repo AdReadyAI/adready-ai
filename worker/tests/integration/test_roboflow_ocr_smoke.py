@@ -6,11 +6,11 @@ import cv2
 import numpy as np
 import pytest
 
-from analyzer.frame_sampling.probes.ocr_candidates import (
+from analyzer.ocr.candidates import (
     OcrCandidate,
     OcrCandidateProvenance,
 )
-from analyzer.hosted_ocr import build_roboflow_easyocr_adapter_from_env
+from analyzer.ocr.roboflow import build_roboflow_easyocr_adapter_from_env
 
 
 pytestmark = [

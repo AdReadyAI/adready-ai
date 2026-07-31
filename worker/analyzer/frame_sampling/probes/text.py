@@ -15,7 +15,7 @@ from analyzer.frame_sampling.base import (
 )
 from analyzer.frame_sampling.context import FrameContext
 from analyzer.frame_sampling.deferred import Candidate, DeferredModelProbe
-from analyzer.frame_sampling.probes.text_candidates import (
+from analyzer.text_detection.candidates import (
     TextCandidate,
     TextCandidateProvenance,
     TextCandidateStats,

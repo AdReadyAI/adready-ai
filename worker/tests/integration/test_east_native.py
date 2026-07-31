@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import pytest
 
-from analyzer.frame_sampling.probes.east import EastTextRegionDetector
+from analyzer.text_detection.east import EastTextRegionDetector
 
 pytestmark = [
     pytest.mark.integration,
