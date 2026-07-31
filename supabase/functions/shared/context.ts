@@ -1,0 +1,124 @@
+/**
+ * Shared, request-scoped input loader for every evaluation agent.
+ *
+ * This is the authorization boundary for service-role reads: callers must pass
+ * the authenticated user's ID, and the requested record must belong to them
+ * before any related context is loaded.
+ */
+import { createSupabaseServiceClient } from "./clients.ts";
+import { AgentContextSchema } from "./schemas.ts";
+import type { AgentContext } from "./schemas.ts";
+
+export type LoadAgentContextOptions = {
+  userId: string;
+};
+
+function required<T>(value: T | null | undefined, name: string): T {
+  if (value === null || value === undefined) {
+    throw new Error(`${name} was not found for this request.`);
+  }
+  return value;
+}
+
+/**
+ * Loads and validates the common DB-backed input for one agent invocation.
+ *
+ * Agent-specific logic belongs in the calling agent. This function only
+ * authorizes the request owner, reads common source tables, and returns the
+ * canonical `AgentContext` after runtime validation.
+ */
+export async function loadAgentContext(
+  requestId: string,
+  { userId }: LoadAgentContextOptions,
+): Promise<AgentContext> {
+  if (!userId) {
+    throw new Error("Authenticated user is required to load agent context.");
+  }
+
+  const supabase = createSupabaseServiceClient();
+  const { data: request, error: requestError } = await supabase
+    .from("requests")
+    .select("request_id, campaign_goal")
+    .eq("request_id", requestId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (requestError) throw requestError;
+  required(request, "Request");
+
+  const { data: processing, error: processingError } = await supabase
+    .from("video_processing")
+    .select("id, task_name")
+    .eq("request_id", requestId);
+  if (processingError) throw processingError;
+  const transcriptionId = processing?.find((row) =>
+    row.task_name === "transcription"
+  )?.id;
+
+  const [
+    briefResponse,
+    metadataResponse,
+    productContextResponse,
+    transcriptResponse,
+    ocrResponse,
+    visualResponse,
+    productFramesResponse,
+    logoFramesResponse,
+  ] = await Promise.all([
+    supabase.from("parsed_creative_briefs").select("*").eq(
+      "request_id",
+      requestId,
+    ).maybeSingle(),
+    supabase.from("video_metadata").select("*").eq("request_id", requestId)
+      .maybeSingle(),
+    supabase.from("product_context").select("*").eq("request_id", requestId)
+      .maybeSingle(),
+    transcriptionId
+      ? supabase.from("transcript_segments").select(
+        "segment_id, start_ms, end_ms, text, speaker",
+      ).eq("processing_id", transcriptionId)
+      : Promise.resolve({ data: [], error: null }),
+    supabase.from("ocr_segments").select(
+      "ocr_id, frame_ids, start_ms, end_ms, text, on_screen_duration_ms, region_size, font_size_px",
+    ).eq("request_id", requestId),
+    supabase.from("visual_frames").select(
+      "frame_id, timestamp_ms, image_url, visual_description, people, color_palette, background, camera_movement, technical_flags",
+    ).eq("request_id", requestId),
+    supabase.from("product_frames").select(
+      "frame_id, timestamp_ms, location, confidence_score, prominence, focus_quality, framing, usage_context",
+    ).eq("request_id", requestId),
+    supabase.from("logo_frames").select(
+      "frame_id, timestamp_ms, location, confidence_score, prominence, reference_match",
+    ).eq("request_id", requestId),
+  ]);
+
+  for (
+    const response of [
+      briefResponse,
+      metadataResponse,
+      productContextResponse,
+      transcriptResponse,
+      ocrResponse,
+      visualResponse,
+      productFramesResponse,
+      logoFramesResponse,
+    ]
+  ) {
+    if (response.error) throw response.error;
+  }
+
+  const brief = required(briefResponse.data, "Parsed creative brief");
+
+  return AgentContextSchema.parse({
+    request_id: requestId,
+    campaign_goal: required(request, "Request").campaign_goal ?? "unknown",
+    destination_platform: brief.destination_platform,
+    parsed_creative_brief: brief,
+    video_metadata: required(metadataResponse.data, "Video metadata"),
+    transcript_segments: transcriptResponse.data ?? [],
+    ocr_segments: ocrResponse.data ?? [],
+    visual_frames: visualResponse.data ?? [],
+    product_frames: productFramesResponse.data ?? [],
+    logo_frames: logoFramesResponse.data ?? [],
+    product_context: productContextResponse.data ?? undefined,
+  });
+}
