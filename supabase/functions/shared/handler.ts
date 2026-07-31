@@ -71,7 +71,7 @@ export function createEdgeHandler<T>(
       console.error(`[${name}] Handler error:`, res);
       return err(
         "INTERNAL_ERROR",
-        res instanceof Error ? res.message : "Unexpected server error",
+        "Unexpected server error",
         500,
       );
     }
