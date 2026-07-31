@@ -5,14 +5,11 @@ import {
 
 import type { AgentRunRequest, MetricResult } from "../shared/schemas.ts";
 
-import {
-  loadVisualQualityContext,
-  persistVisualQualityResult,
-} from "./repository.ts";
-
 import { auditVisualQuality } from "./visual-audit.ts";
 
 import { evaluateProductionReadiness } from "./metrics.ts";
+
+import { loadAgentContext, persistMetricResults } from "../shared/index.ts";
 
 export const VisualQualityAgentRequestSchema = AgentRunRequestSchema;
 
@@ -35,14 +32,14 @@ export async function runVisualQualityAgent(
   request: VisualQualityAgentRequest,
   options: VisualQualityAgentRunOptions = {},
 ): Promise<MetricResult> {
-  const context = await loadVisualQualityContext(
+  const context = await loadAgentContext(
     request.request_id,
-    options.userId,
+    {
+      userId: options.userId!,
+    },
   );
 
-  const visualFindings = await auditVisualQuality(
-    context,
-  );
+  const visualFindings = await auditVisualQuality(context);
 
   const result = MetricResultSchema.parse(
     evaluateProductionReadiness(
@@ -51,9 +48,9 @@ export async function runVisualQualityAgent(
     ),
   );
 
-  await persistVisualQualityResult(
+  await persistMetricResults(
     context.request_id,
-    result,
+    [result],
   );
 
   return result;

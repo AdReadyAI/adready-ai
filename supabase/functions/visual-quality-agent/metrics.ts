@@ -2,52 +2,58 @@ import type {
   AgentContext,
   EvidenceRef,
   MetricResult,
+  SeverityLevel,
+  SubCheckResult,
 } from "../shared/schemas.ts";
+
+import {
+  cannotAssess,
+  evidence,
+  failed,
+  highestFailedSeverity,
+  passed,
+} from "../shared/index.ts";
 
 import type { VisualAuditFinding } from "./visual-audit.ts";
 
-type SeverityScore = 0 | 1 | 2 | 3 | 4;
-
-type ProductionCheckResult =
-  | "passed"
-  | "failed"
-  | "cannot_assess";
-
-type ProductionReadinessCheck = {
-  check_id:
-    | "video_corruption"
-    | "dropped_frames"
-    | "ai_artifacts"
-    | "poor_framing_lighting"
-    | "jarring_transitions"
-    | "illegible_text";
-
-  name: string;
-
-  result: ProductionCheckResult;
-
-  severityScore: SeverityScore;
-
-  confidence_score: number;
-
-  explanation?: string;
-
-  evidence?: EvidenceRef;
+/** A sub-check plus the metadata rollupChecks/schemas.ts don't carry. */
+type CheckOutcome = {
+  check: SubCheckResult;
+  confidenceScore: number;
+  evidenceRef?: EvidenceRef;
 };
 
-type ProductionReadinessChecks = {
-  video_corruption: ProductionReadinessCheck;
-
-  dropped_frames: ProductionReadinessCheck;
-
-  ai_artifacts: ProductionReadinessCheck;
-
-  poor_framing_lighting: ProductionReadinessCheck;
-
-  jarring_transitions: ProductionReadinessCheck;
-
-  illegible_text: ProductionReadinessCheck;
+const VISUAL_FINDING_SEVERITY: Record<
+  number,
+  Exclude<SeverityLevel, "none" | "cannot_assess">
+> = {
+  1: "low",
+  2: "medium",
+  3: "high",
+  4: "critical",
 };
+
+/**
+ * Rolls up sub-checks, treating "any cannot_assess" as its own outcome when
+ * nothing has failed. Unlike the shared `rollupChecks`, a single cannot_assess
+ * check is enough to produce a "cannot_assess" result here, as long as no
+ * check has failed (failed always takes precedence).
+ */
+function rollupWithCannotAssess(
+  checks: SubCheckResult[],
+): { result: MetricResult["result"]; severity: SeverityLevel } {
+  const failedSeverity = highestFailedSeverity(checks);
+  if (failedSeverity !== "none") {
+    return { result: "false", severity: failedSeverity };
+  }
+
+  const hasCannotAssess = checks.some((c) => c.result === "cannot_assess");
+  if (hasCannotAssess) {
+    return { result: "cannot_assess", severity: "cannot_assess" };
+  }
+
+  return { result: "true", severity: "none" };
+}
 
 /**
  * Evaluates all six production-readiness checks
@@ -57,499 +63,206 @@ export function evaluateProductionReadiness(
   context: AgentContext,
   visualFindings: VisualAuditFinding[],
 ): MetricResult {
-  const checks = evaluateProductionChecks(
-    context,
-    visualFindings,
+  const outcomes = evaluateProductionChecks(context, visualFindings);
+
+  const subChecks = outcomes.map((o) => o.check);
+  const failedChecks = subChecks.filter((c) => c.result === "failed");
+  const cannotAssessChecks = subChecks.filter((c) =>
+    c.result === "cannot_assess"
   );
 
-  const allChecks = Object.values(checks);
+  const { result, severity } = rollupWithCannotAssess(subChecks);
 
-  const failedChecks = allChecks.filter(
-    (check) =>
-      check.result ===
-        "failed",
-  );
-
-  const cannotAssessChecks = allChecks.filter(
-    (check) =>
-      check.result ===
-        "cannot_assess",
-  );
-
-  const result: MetricResult["result"] = failedChecks.length > 0
-    ? "false"
-    : cannotAssessChecks.length > 0
-    ? "cannot_assess"
-    : "true";
-
-  const highestSeverity = failedChecks.reduce(
-    (
-      highest,
-      check,
-    ) =>
-      Math.max(
-        highest,
-        check.severityScore,
-      ),
-    0,
-  );
-
-  const severity: MetricResult["severity"] = result ===
-      "cannot_assess"
-    ? "cannot_assess"
-    : result === "true"
-    ? "none"
-    : severityFromScore(
-      highestSeverity,
-    );
-
-  const confidenceValues = allChecks
-    .filter(
-      (check) =>
-        check.result !==
-          "cannot_assess",
-    )
-    .map(
-      (check) => check.confidence_score,
-    );
+  const confidenceValues = outcomes
+    .filter((o) => o.check.result !== "cannot_assess")
+    .map((o) => o.confidenceScore);
 
   const averageConfidence = confidenceValues.length > 0
-    ? confidenceValues.reduce(
-      (
-        sum,
-        confidence,
-      ) => sum + confidence,
-      0,
-    ) /
-      confidenceValues.length
+    ? confidenceValues.reduce((sum, c) => sum + c, 0) / confidenceValues.length
     : 0;
 
-  const confidence = result ===
-      "cannot_assess"
-    ? averageConfidence >= 0.8
-      ? "high"
-      : averageConfidence >= 0.5
-      ? "medium"
-      : "low"
-    : averageConfidence >= 0.8
+  const confidence = averageConfidence >= 0.8
     ? "high"
     : averageConfidence >= 0.5
     ? "medium"
     : "low";
 
-  const evidence = allChecks
-    .filter(
-      (check) =>
-        check.evidence !==
-          undefined,
-    )
-    .map(
-      (check) => check.evidence!,
-    );
+  const evidences = outcomes.flatMap((o) =>
+    o.evidenceRef ? [o.evidenceRef] : []
+  );
 
   return {
     metric_id: "production_readiness",
-
     agent: "visual_quality",
-
     metric_name: "Production Readiness",
-
     question: "Is the video technically and visually ready for production?",
-
     result,
-
     severity,
-
     confidence,
-
-    evidence: evidence.length > 0 ? evidence : undefined,
-
-    explanation: buildExplanation(
-      result,
-      failedChecks,
-      cannotAssessChecks,
-    ),
-
+    evidence: evidences.length > 0 ? evidences : undefined,
+    explanation: buildExplanation(result, failedChecks, cannotAssessChecks),
     suggested_correction: failedChecks.length > 0
       ? "Review and correct the failed production-readiness checks before launch."
       : undefined,
-
     correction_type: failedChecks.length > 0 ? "technical_fix" : undefined,
-
-    sub_checks: allChecks.map(
-      (check) => ({
-        check_id: check.check_id,
-
-        name: check.name,
-
-        result: check.result,
-
-        severity: check.result ===
-            "cannot_assess"
-          ? "cannot_assess"
-          : severityFromScore(
-            check.severityScore,
-          ),
-
-        explanation: check.explanation,
-      }),
-    ),
+    sub_checks: subChecks,
   };
 }
 
 function evaluateProductionChecks(
   context: AgentContext,
   visualFindings: VisualAuditFinding[],
-): ProductionReadinessChecks {
-  const findingsById = new Map(
-    visualFindings.map(
-      (finding) => [
-        finding.check_id,
-        finding,
-      ],
-    ),
-  );
+): CheckOutcome[] {
+  const findingsById = new Map(visualFindings.map((f) => [f.check_id, f]));
 
-  const aiArtifacts = findingsById.get(
-    "ai_artifacts",
-  );
+  const aiArtifacts = findingsById.get("ai_artifacts");
+  const poorFramingLighting = findingsById.get("poor_framing_lighting");
+  const jarringTransitions = findingsById.get("jarring_transitions");
 
-  const poorFramingLighting = findingsById.get(
-    "poor_framing_lighting",
-  );
-
-  const jarringTransitions = findingsById.get(
-    "jarring_transitions",
-  );
-
-  if (
-    !aiArtifacts ||
-    !poorFramingLighting ||
-    !jarringTransitions
-  ) {
-    throw new Error(
-      "Visual audit did not return all required visual checks.",
-    );
+  if (!aiArtifacts || !poorFramingLighting || !jarringTransitions) {
+    throw new Error("Visual audit did not return all required visual checks.");
   }
 
-  return {
-    video_corruption: evaluateVideoCorruption(
-      context,
-    ),
-
-    dropped_frames: evaluateDroppedFrames(
-      context,
-    ),
-
-    ai_artifacts: findingToCheck(
-      aiArtifacts,
-      "AI Artifacts Audit",
-    ),
-
-    poor_framing_lighting: findingToCheck(
-      poorFramingLighting,
-      "Framing and Lighting Check",
-    ),
-
-    jarring_transitions: findingToCheck(
-      jarringTransitions,
-      "Transition Continuity Check",
-    ),
-
-    illegible_text: evaluateTextLegibility(
-      context,
-    ),
-  };
+  return [
+    evaluateVideoCorruption(context),
+    evaluateDroppedFrames(context),
+    findingToOutcome(aiArtifacts, "AI Artifacts Audit"),
+    findingToOutcome(poorFramingLighting, "Framing and Lighting Check"),
+    findingToOutcome(jarringTransitions, "Transition Continuity Check"),
+    evaluateTextLegibility(context),
+  ];
 }
 
-function evaluateVideoCorruption(
-  context: AgentContext,
-): ProductionReadinessCheck {
-  const corruptionDetected = context.video_metadata
-    .corruption_detected;
+function evaluateVideoCorruption(context: AgentContext): CheckOutcome {
+  const corruptionDetected = context.video_metadata.corruption_detected;
 
-  if (
-    corruptionDetected ===
-      undefined
-  ) {
+  if (corruptionDetected === undefined) {
     return {
-      check_id: "video_corruption",
-
-      name: "Video corruption",
-
-      result: "cannot_assess",
-
-      severityScore: 0,
-
-      confidence_score: 0,
-
-      explanation:
+      check: cannotAssess(
+        "video_corruption",
+        "Video corruption",
         "Video corruption status cannot be determined because the metadata does not contain a corruption detection result.",
+      ),
+      confidenceScore: 0,
     };
   }
 
-  if (
-    corruptionDetected
-  ) {
+  if (corruptionDetected) {
     return {
-      check_id: "video_corruption",
-
-      name: "Video corruption",
-
-      result: "failed",
-
-      severityScore: 4,
-
-      confidence_score: 1,
-
-      explanation: "Video corruption was detected in the video metadata.",
+      check: failed(
+        "video_corruption",
+        "Video corruption",
+        "critical",
+        "Video corruption was detected in the video metadata.",
+      ),
+      confidenceScore: 1,
     };
   }
 
   return {
-    check_id: "video_corruption",
-
-    name: "Video corruption",
-
-    result: "passed",
-
-    severityScore: 0,
-
-    confidence_score: 1,
-
-    explanation: "No video corruption was detected.",
+    check: passed("video_corruption", "Video corruption"),
+    confidenceScore: 1,
   };
 }
 
-function evaluateDroppedFrames(
-  context: AgentContext,
-): ProductionReadinessCheck {
-  const count = context.video_metadata
-    .dropped_frame_markers
-    .length;
+function evaluateDroppedFrames(context: AgentContext): CheckOutcome {
+  const count = context.video_metadata.dropped_frame_markers.length;
 
   if (count === 0) {
     return {
-      check_id: "dropped_frames",
-
-      name: "Dropped frames",
-
-      result: "passed",
-
-      severityScore: 0,
-
-      confidence_score: 1,
-
-      explanation: "No dropped frames were detected.",
+      check: passed("dropped_frames", "Dropped frames"),
+      confidenceScore: 1,
     };
   }
 
-  const severity: SeverityScore = count >= 10 ? 3 : count >= 5 ? 2 : 1;
+  const severity = count >= 10 ? "high" : count >= 5 ? "medium" : "low";
 
   return {
-    check_id: "dropped_frames",
-
-    name: "Dropped frames",
-
-    result: "failed",
-
-    severityScore: severity,
-
-    confidence_score: 1,
-
-    explanation: `${count} dropped frame marker(s) were detected.`,
+    check: failed(
+      "dropped_frames",
+      "Dropped frames",
+      severity,
+      `${count} dropped frame marker(s) were detected.`,
+    ),
+    confidenceScore: 1,
   };
 }
 
-function findingToCheck(
+function findingToOutcome(
   finding: VisualAuditFinding,
   name: string,
-): ProductionReadinessCheck {
-  const severity = finding.severity;
-
-  const evidence: EvidenceRef | undefined = finding.evidence_text.trim()
-    ? {
-      type: "visual",
-
-      text: finding.evidence_text,
-
-      timestamp: timestampToString(
-        finding.evidence_timestamp_ms,
-      ),
-    }
+): CheckOutcome {
+  const evidenceRef = finding.evidence_text.trim()
+    ? evidence(
+      "visual",
+      finding.evidence_text,
+      finding.evidence_timestamp_ms ?? undefined,
+    )
     : undefined;
 
-  return {
-    check_id: finding.check_id,
+  const check = finding.severity === 0
+    ? passed(finding.check_id, name)
+    : failed(
+      finding.check_id,
+      name,
+      VISUAL_FINDING_SEVERITY[finding.severity],
+      finding.explanation,
+    );
 
-    name,
-
-    result: severity === 0 ? "passed" : "failed",
-
-    severityScore: severity,
-
-    confidence_score: finding.confidence_score,
-
-    explanation: finding.explanation,
-
-    evidence,
-  };
+  return { check, confidenceScore: finding.confidence_score, evidenceRef };
 }
 
-function evaluateTextLegibility(
-  context: AgentContext,
-): ProductionReadinessCheck {
-  if (
-    context.ocr_segments.length ===
-      0
-  ) {
+function evaluateTextLegibility(context: AgentContext): CheckOutcome {
+  if (context.ocr_segments.length === 0) {
     return {
-      check_id: "illegible_text",
-
-      name: "Illegible text",
-
-      result: "cannot_assess",
-
-      severityScore: 0,
-
-      confidence_score: 0,
-
-      explanation:
+      check: cannotAssess(
+        "illegible_text",
+        "Illegible text",
         "Text legibility cannot be determined because no OCR segments are available.",
+      ),
+      confidenceScore: 0,
     };
   }
 
-  const potentiallyIllegible = context.ocr_segments.some(
-    (segment) => {
-      if (
-        segment.font_size_px !==
-          undefined
-      ) {
-        return (
-          segment.font_size_px <
-            12
-        );
-      }
+  const potentiallyIllegible = context.ocr_segments.some((segment) => {
+    if (segment.font_size_px !== undefined) return segment.font_size_px < 12;
+    if (segment.region_size !== undefined) return segment.region_size < 0.01;
+    return false;
+  });
 
-      if (
-        segment.region_size !==
-          undefined
-      ) {
-        return (
-          segment.region_size <
-            0.01
-        );
-      }
-
-      return false;
-    },
-  );
-
-  if (
-    potentiallyIllegible
-  ) {
+  if (potentiallyIllegible) {
     return {
-      check_id: "illegible_text",
-
-      name: "Illegible text",
-
-      result: "failed",
-
-      severityScore: 2,
-
-      confidence_score: 0.7,
-
-      explanation:
+      check: failed(
+        "illegible_text",
+        "Illegible text",
+        "medium",
         "Some on-screen text may be too small or occupy too little screen area to be reliably legible.",
+      ),
+      confidenceScore: 0.7,
     };
   }
 
   return {
-    check_id: "illegible_text",
-
-    name: "Illegible text",
-
-    result: "passed",
-
-    severityScore: 0,
-
-    confidence_score: 0.7,
-
-    explanation:
-      "No potentially illegible text was detected from the available OCR metadata.",
+    check: passed("illegible_text", "Illegible text"),
+    confidenceScore: 0.7,
   };
-}
-
-function severityFromScore(
-  score: number,
-): MetricResult["severity"] {
-  if (score >= 4) {
-    return "critical";
-  }
-
-  if (score === 3) {
-    return "high";
-  }
-
-  if (score === 2) {
-    return "medium";
-  }
-
-  if (score === 1) {
-    return "low";
-  }
-
-  return "none";
-}
-
-function timestampToString(
-  timestampMs: number | null,
-): string {
-  if (
-    timestampMs ===
-      null
-  ) {
-    return "";
-  }
-
-  const totalSeconds = Math.floor(
-    timestampMs / 1000,
-  );
-
-  const minutes = Math.floor(
-    totalSeconds / 60,
-  );
-
-  const seconds = totalSeconds % 60;
-
-  return `${String(minutes).padStart(2, "0")}:${
-    String(seconds).padStart(2, "0")
-  }`;
 }
 
 function buildExplanation(
   result: MetricResult["result"],
-  failedChecks: ProductionReadinessCheck[],
-  cannotAssessChecks: ProductionReadinessCheck[],
+  failedChecks: SubCheckResult[],
+  cannotAssessChecks: SubCheckResult[],
 ): string {
-  if (
-    result === "true"
-  ) {
+  if (result === "true") {
     return "All production-readiness checks passed.";
   }
 
-  if (
-    result === "cannot_assess"
-  ) {
-    if (
-      cannotAssessChecks.length ===
-        1
-    ) {
+  if (result === "cannot_assess") {
+    if (cannotAssessChecks.length === 1) {
       return `Production readiness could not be fully assessed because "${
         cannotAssessChecks[0].name
       }" could not be assessed.`;
     }
-
     return `Production readiness could not be fully assessed because ${cannotAssessChecks.length} check(s) could not be assessed.`;
   }
 
