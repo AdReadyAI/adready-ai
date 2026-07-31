@@ -1,6 +1,6 @@
 /** Final public-output validation for all agents. */
 import { MetricResultSchema } from "./schemas.ts";
-import type { MetricResult, SeverityLevel, SubCheckResult } from "./schemas.ts";
+import type { MetricResult, SubCheckResult } from "./schemas.ts";
 
 function assertMetricSemantics(
   result: Pick<MetricResult, "metric_id" | "result" | "severity">,
