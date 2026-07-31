@@ -1,24 +1,17 @@
 /**
- * tools/evidence-retriever.ts — Retrieves evidence chunks for a claim
- * category from either the product store or the regulatory store.
+ * rag.ts — Evidence retrieval for substantiation and compliance.
  *
- * Called once per UNIQUE category present in the ad (see uniqueCategories()
- * in utils.ts), not once per claim -- claims that share a category share
- * retrieval results.
+ * Retrieves once per UNIQUE category present in the ad (see
+ * uniqueCategories() below), not once per claim -- claims that share a
+ * category share retrieval results.
  *
  * Currently returns fixed chunks instead of querying a real vector store --
  * there's no embeddings client or pgvector table wired up yet. When that's
- * built (the AgenticRetriever from the design doc: query formulation,
- * top-k=4, iterative reformulation, dedupe), this function body is what
- * changes; the EvidenceRetriever signature and everything downstream stays
- * the same.
+ * built (query formulation, top-k, iterative reformulation, dedupe), only
+ * retrieveEvidence()'s body changes; everything downstream stays the same.
  */
 
-import type {
-  ClaimCategory,
-  EvidenceChunk,
-  EvidenceRetriever,
-} from "../types.ts";
+import type { ClaimCategory, EvidenceChunk, TriageResult } from "./checks.ts";
 
 const PRODUCT_STORE: Partial<Record<ClaimCategory, EvidenceChunk[]>> = {
   health_or_medical_claim: [
@@ -60,7 +53,22 @@ const REGULATORY_STORE: Partial<Record<ClaimCategory, EvidenceChunk[]>> = {
 
 const STORES = { product: PRODUCT_STORE, regulatory: REGULATORY_STORE };
 
-export const retrieveEvidence: EvidenceRetriever = async (category, store) => {
-  await new Promise((resolve) => setTimeout(resolve, 100)); // simulate network latency
+export async function retrieveEvidence(
+  category: ClaimCategory,
+  store: "product" | "regulatory",
+): Promise<EvidenceChunk[]> {
+  await new Promise((resolve) => setTimeout(resolve, 100)); // simulate async retrieval
   return STORES[store][category] ?? [];
-};
+}
+
+/**
+ * Unique verifiable-claim categories present in a triage pass, in stable
+ * order -- the retrieval fan-out list.
+ */
+export function uniqueCategories(triage: TriageResult[]): ClaimCategory[] {
+  const seen = new Set<ClaimCategory>();
+  for (const t of triage) {
+    if (t.is_verifiable_claim && t.category) seen.add(t.category);
+  }
+  return [...seen];
+}

@@ -118,12 +118,27 @@
  *   ]
  */
 
-import { createEdgeHandler, ok } from "../shared/index.ts";
+import { createEdgeHandler, err, ok } from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
+
 import { runClaimsAgent } from "./agent.ts";
 
-createEdgeHandler("claims-agent", AgentRunRequestSchema, async (_req, ctx) => {
-  const { request_id } = ctx.body;
+createEdgeHandler(
+  "claims-agent",
+  AgentRunRequestSchema,
+  async (_req, ctx) => {
+    try {
+      return ok(await runClaimsAgent(ctx.body, { userId: ctx.user.id }));
+    } catch (error) {
+      console.error("CLAIMS_ACCURACY_FAILED:", error);
 
-  return ok(await runClaimsAgent(request_id));
-});
+      return err(
+        "CLAIMS_ACCURACY_FAILED",
+        error instanceof Error
+          ? error.message
+          : "Unexpected claims accuracy failure",
+        500,
+      );
+    }
+  },
+);
