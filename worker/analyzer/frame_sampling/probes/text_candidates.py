@@ -1,4 +1,4 @@
-"""Disk-backed source candidates owned exclusively by OCR Media Processing."""
+"""Disk-backed candidates owned by detector-only TextProbe processing."""
 
 from dataclasses import dataclass
 from enum import StrEnum
@@ -13,12 +13,12 @@ from analyzer.frame_sampling.candidate_storage import (
 )
 
 
-class OcrCandidateCapacityError(RuntimeError):
-    """Required periodic OCR coverage cannot fit within configured limits."""
+class TextCandidateCapacityError(RuntimeError):
+    """Required periodic text-detection coverage exceeds configured limits."""
 
 
-class OcrCandidateProvenance(StrEnum):
-    """Signals that select one source frame for OCR recognition."""
+class TextCandidateProvenance(StrEnum):
+    """Signals that select one source frame for text-region detection."""
 
     PERIODIC = "periodic"
     EDGE_CHANGE = "edge_change"
@@ -26,8 +26,8 @@ class OcrCandidateProvenance(StrEnum):
 
 
 @dataclass(frozen=True)
-class OcrCandidate:
-    """Metadata and disk location for one OCR source frame."""
+class TextCandidate:
+    """One disk-backed source frame awaiting text-region detection."""
 
     index: int
     timestamp: float
@@ -37,12 +37,12 @@ class OcrCandidate:
     encoded_dimensions: tuple[int, int]
     scale: float
     encoded_bytes: int
-    provenance: tuple[OcrCandidateProvenance, ...]
+    provenance: tuple[TextCandidateProvenance, ...]
 
 
 @dataclass(frozen=True)
-class OcrCandidateStats:
-    """OCR candidate admission, drop, and eviction totals."""
+class TextCandidateStats:
+    """Text candidate admission, drop, and eviction totals."""
 
     accepted_count: int = 0
     accepted_bytes: int = 0
@@ -52,30 +52,31 @@ class OcrCandidateStats:
     evicted_bytes: int = 0
 
 
-class OcrCandidateStore:
-    """Protect bounded periodic OCR coverage in an OCR-owned directory."""
+class TextCandidateStore:
+    """Protect bounded periodic EAST coverage in a text-owned directory."""
 
     def __init__(
         self,
+        *,
         work_dir: str,
+        reserved_periodic_count: int = 0,
         max_candidates: int = 600,
         max_bytes: int = 1_000_000_000,
-        reserved_periodic_count: int = 0,
     ) -> None:
         self._storage = DiskCandidateStorage(
             work_dir=work_dir,
-            directory_prefix="ocr-candidates-",
-            required_provenance=OcrCandidateProvenance.PERIODIC.value,
+            directory_prefix="text-candidates-",
+            required_provenance=TextCandidateProvenance.PERIODIC.value,
             required_count=reserved_periodic_count,
             max_candidates=max_candidates,
             max_bytes=max_bytes,
         )
 
     @property
-    def stats(self) -> OcrCandidateStats:
-        """Return an immutable OCR-domain view of current storage totals."""
+    def stats(self) -> TextCandidateStats:
+        """Return an immutable text-domain view of current storage totals."""
         stats = self._storage.stats
-        return OcrCandidateStats(
+        return TextCandidateStats(
             accepted_count=stats.accepted_count,
             accepted_bytes=stats.accepted_bytes,
             dropped_count=stats.dropped_count,
@@ -91,9 +92,9 @@ class OcrCandidateStore:
         timestamp: float,
         source_frame: np.ndarray,
         model_input: Any,
-        provenance: tuple[OcrCandidateProvenance, ...],
-    ) -> OcrCandidate | None:
-        """Encode one source frame and return OCR-owned candidate evidence."""
+        provenance: tuple[TextCandidateProvenance, ...],
+    ) -> TextCandidate | None:
+        """Encode one source frame and return text-owned candidate evidence."""
         try:
             candidate = self._storage.admit(
                 index=index,
@@ -103,28 +104,28 @@ class OcrCandidateStore:
                 provenance=tuple(source.value for source in provenance),
             )
         except CandidateStorageCapacityError as exc:
-            raise OcrCandidateCapacityError(
-                "periodic OCR coverage exceeds candidate capacity"
+            raise TextCandidateCapacityError(
+                "Periodic text-detection coverage exceeds candidate capacity"
             ) from exc
-        return self._to_ocr_candidate(candidate) if candidate else None
+        return self._to_text_candidate(candidate) if candidate else None
 
-    def candidates(self) -> tuple[OcrCandidate, ...]:
-        """Return deterministic OCR candidates in source-frame order."""
+    def candidates(self) -> tuple[TextCandidate, ...]:
+        """Return deterministic text candidates in source-frame order."""
         return tuple(
-            self._to_ocr_candidate(candidate)
+            self._to_text_candidate(candidate)
             for candidate in self._storage.candidates()
         )
 
     def cleanup(self) -> None:
-        """Remove every temporary OCR candidate owned by this run."""
+        """Remove every temporary text candidate owned by this run."""
         self._storage.cleanup()
 
     @staticmethod
-    def _to_ocr_candidate(
+    def _to_text_candidate(
         candidate: StoredFrameCandidate,
-    ) -> OcrCandidate:
-        """Translate private storage data into the OCR candidate interface."""
-        return OcrCandidate(
+    ) -> TextCandidate:
+        """Translate private storage data into the TextProbe interface."""
+        return TextCandidate(
             index=candidate.index,
             timestamp=candidate.timestamp,
             model_input=candidate.model_input,
@@ -134,7 +135,7 @@ class OcrCandidateStore:
             scale=candidate.scale,
             encoded_bytes=candidate.encoded_bytes,
             provenance=tuple(
-                OcrCandidateProvenance(source)
+                TextCandidateProvenance(source)
                 for source in candidate.provenance
             ),
         )

@@ -75,8 +75,10 @@ def test_configured_probe_uses_and_cleans_complete_periodic_path(tmp_path):
     assert list(tmp_path.glob("ocr-candidates-*")) == []
 
 
-def test_provider_failure_reuses_periodic_candidates_then_cleans_up(tmp_path):
-    """Fallback retains reserved JPEGs without decoding the Ad Creative again."""
+def test_provider_failure_cleans_candidates_without_creating_ocr_fallback(
+    tmp_path,
+):
+    """EAST failure leaves fixed-rate fallback to the independent OCR path."""
     class FailingTextRegionDetector:
         """Deterministic provider failure at the detector adapter seam."""
 
@@ -116,9 +118,7 @@ def test_provider_failure_reuses_periodic_candidates_then_cleans_up(tmp_path):
     with pytest.raises(RuntimeError, match="provider unavailable"):
         probe.finalize()
 
-    manifest = frame_store.manifest()
-    assert [frame.timestamp for frame in manifest] == [0.0, 0.25]
-    assert all(frame.tags == ("periodic",) for frame in manifest)
+    assert frame_store.manifest() == []
     assert list(tmp_path.glob("ocr-candidates-*")) == []
 
 
@@ -159,12 +159,12 @@ def test_unexpected_collection_failure_cleans_existing_candidates(tmp_path):
     )
 
     probe.process(first_context)
-    assert len(list(tmp_path.glob("ocr-candidates-*"))) == 1
+    assert len(list(tmp_path.glob("text-candidates-*"))) == 1
 
     with pytest.raises(AttributeError):
         probe.process(corrupt_context)
 
-    assert list(tmp_path.glob("ocr-candidates-*")) == []
+    assert list(tmp_path.glob("text-candidates-*")) == []
 
 
 def test_first_frame_text_produces_segment_and_representative(tmp_path):

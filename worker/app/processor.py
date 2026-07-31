@@ -14,6 +14,24 @@ from app.ocr_runs import OcrRunLifecycle
 from app.supabase import Supabase
 
 
+def _build_ocr_adapter():
+    """Return the configured OCR adapter when provider wiring is available.
+
+    OCR remains disabled by default so an OCR Run cannot appear complete before
+    the worker has an explicitly configured recognition dependency.
+    """
+    return None
+
+
+def _build_ocr_completion_coordinator():
+    """Return OCR persistence backed by durable artifact storage when configured.
+
+    Per-message work directories are intentionally excluded here because their
+    cleanup would leave immutable OCR Results pointing at deleted evidence.
+    """
+    return None
+
+
 
 def process_message(cur, msg_id, payload):
     payload = _parse_payload(msg_id, payload)
@@ -24,13 +42,17 @@ def process_message(cur, msg_id, payload):
         preprocessor = VideoPreprocessor(payload, work_dir)
         artifact = preprocessor.prepare()
 
-        analyzer = VideoAnalyzer(artifact)
+        analyzer = VideoAnalyzer(
+            artifact,
+            ocr_adapter=_build_ocr_adapter(),
+        )
         db = Supabase(cur=cur, request_id=request_id)
         ocr_lifecycle = OcrRunLifecycle(
             cur=cur,
             request_id=request_id,
             source_bucket=payload.bucket,
             source_path=payload.video_path,
+            completion_coordinator=_build_ocr_completion_coordinator(),
         )
         analyzer = _OcrLifecycleAnalyzer(
             analyzer,
@@ -65,13 +87,14 @@ class _OcrLifecycleAnalyzer:
     def analysis_tasks(self):
         """Return the existing registry with only its OCR callable wrapped."""
         tasks = self.analyzer.analysis_tasks()
-        hosted_ocr = tasks.get("ocr")
-        if hosted_ocr is None:
+        run_ocr_analysis = tasks.get("ocr")
+        if run_ocr_analysis is None:
             return tasks
 
         def run_ocr():
             """Execute registered OCR through its durable lifecycle boundary."""
-            return self.lifecycle.execute(hosted_ocr, self.video_metadata)
+            self.lifecycle.execute(run_ocr_analysis, self.video_metadata)
+            return None
 
         # Preserve the task identity used by the existing retry logger.
         run_ocr._analysis_task = "ocr"

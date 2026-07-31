@@ -280,11 +280,11 @@ def test_sample_frames_delegates_to_frame_sampler(tmp_path, monkeypatch):
     )
 
 
-def test_sample_frames_promotes_only_ocr_capacity_failure(
+def test_sample_frames_does_not_promote_ocr_failure_from_text_probe(
     tmp_path,
     monkeypatch,
 ):
-    """Required OCR coverage rejects the Ad Creative; optional errors do not."""
+    """OCR failures cannot originate from the independent TextProbe path."""
     meta = VideoMetadata(1.0, 30.0, 1920, 1080, 1)
     sampler = MagicMock()
     sampler.run.return_value = ["frame"]
@@ -295,10 +295,6 @@ def test_sample_frames_promotes_only_ocr_capacity_failure(
             "periodic OCR coverage exceeds candidate capacity"
         )
     }
-    with pytest.raises(PermanentError, match="periodic OCR coverage"):
-        _pre(tmp_path)._sample_frames("v.mp4", meta)
-
-    sampler.probe_errors = {"quality": RuntimeError("optional failure")}
     assert _pre(tmp_path)._sample_frames("v.mp4", meta) == ["frame"]
 
 

@@ -15,15 +15,15 @@ from analyzer.frame_sampling.base import (
 )
 from analyzer.frame_sampling.context import FrameContext
 from analyzer.frame_sampling.deferred import Candidate, DeferredModelProbe
-from analyzer.frame_sampling.probes.ocr_candidates import (
-    OcrCandidate,
-    OcrCandidateProvenance,
-    OcrCandidateStats,
-    OcrCandidateStore,
+from analyzer.frame_sampling.probes.text_candidates import (
+    TextCandidate,
+    TextCandidateProvenance,
+    TextCandidateStats,
+    TextCandidateStore,
 )
 
 
-TextCandidate = Candidate | OcrCandidate
+TextProbeCandidate = Candidate | TextCandidate
 
 
 @dataclass(frozen=True)
@@ -59,9 +59,9 @@ class _OpenTextSegment:
     last_seen_s: float
     last_detection: TextDetection
     representative_detection: TextDetection
-    representative: TextCandidate
+    representative: TextProbeCandidate
     candidate_sources: tuple[str, ...]
-    observations: list[tuple[TextDetection, TextCandidate]]
+    observations: list[tuple[TextDetection, TextProbeCandidate]]
     pending_absence_s: float | None = None
     missed_observations: int = 0
     timing_uncertainty_s: float = 0.0
@@ -72,8 +72,8 @@ class TextProbeResult(ProbeResult):
     """Public TextProbe result returned through sampler probe results."""
 
     text_segments: list[TextSegment] = field(default_factory=list)
-    candidate_stats: OcrCandidateStats = field(
-        default_factory=OcrCandidateStats
+    candidate_stats: TextCandidateStats = field(
+        default_factory=TextCandidateStats
     )
 
 
@@ -112,7 +112,7 @@ class TextProbe(DeferredModelProbe):
         self._candidate_sources: dict[int, tuple[str, ...]] = {}
         self._open_segments: list[_OpenTextSegment] = []
         self._text_segments: list[TextSegment] = []
-        self._ocr_candidate_store: OcrCandidateStore | None = None
+        self._text_candidate_store: TextCandidateStore | None = None
         self._next_periodic_timestamp = 0.0
 
     def configure(self, setup: ProbeSetup) -> None:
@@ -124,14 +124,14 @@ class TextProbe(DeferredModelProbe):
         periodic_count = math.ceil(
             setup.video_metadata.duration_s * source_rate
         )
-        self._ocr_candidate_store = OcrCandidateStore(
+        self._text_candidate_store = TextCandidateStore(
             work_dir=setup.work_dir,
             reserved_periodic_count=periodic_count,
         )
 
     def process(self, ctx: FrameContext) -> None:
-        """Collect configured OCR candidates without retaining source pixels."""
-        if self._ocr_candidate_store is None:
+        """Collect text-detection candidates without retaining source pixels."""
+        if self._text_candidate_store is None:
             super().process(ctx)
             return
 
@@ -143,17 +143,17 @@ class TextProbe(DeferredModelProbe):
                 return
 
             provenance = tuple(
-                OcrCandidateProvenance(source)
+                TextCandidateProvenance(source)
                 for source in self._candidate_sources.get(ctx.index, ())
             )
             if periodic:
                 provenance = tuple(
                     dict.fromkeys(
                         provenance
-                        + (OcrCandidateProvenance.PERIODIC,)
+                        + (TextCandidateProvenance.PERIODIC,)
                     )
                 )
-            self._ocr_candidate_store.admit(
+            self._text_candidate_store.admit(
                 index=ctx.index,
                 timestamp=ctx.timestamp,
                 source_frame=ctx.frame,
@@ -161,17 +161,17 @@ class TextProbe(DeferredModelProbe):
                 provenance=provenance,
             )
         except Exception:
-            self._ocr_candidate_store.cleanup()
+            self._text_candidate_store.cleanup()
             self._candidate_sources.clear()
             raise
 
     def finalize(self) -> TextProbeResult:
-        """Infer configured OCR candidates and remove temporary source files."""
-        if self._ocr_candidate_store is None:
+        """Infer text candidates and remove their temporary source files."""
+        if self._text_candidate_store is None:
             return super().finalize()
 
         try:
-            candidates = self._ocr_candidate_store.candidates()
+            candidates = self._text_candidate_store.candidates()
             for start in range(0, len(candidates), self._BATCH_SIZE):
                 batch = candidates[start : start + self._BATCH_SIZE]
                 results = self._batch_infer(
@@ -180,18 +180,8 @@ class TextProbe(DeferredModelProbe):
                 for candidate, result in zip(batch, results):
                     self._emit(candidate, result)
             return self._result()
-        except Exception:
-            # Preserve the fixed-rate recall path for later OCR fallback
-            # without decoding the Ad Creative a second time.
-            for candidate in self._ocr_candidate_store.candidates():
-                if (
-                    OcrCandidateProvenance.PERIODIC
-                    in candidate.provenance
-                ):
-                    self._keep(candidate, ("periodic",))
-            raise
         finally:
-            self._ocr_candidate_store.cleanup()
+            self._text_candidate_store.cleanup()
             self._candidate_sources.clear()
 
     def _gate(self, ctx: FrameContext) -> bool:
@@ -225,11 +215,11 @@ class TextProbe(DeferredModelProbe):
 
     def _emit(
         self,
-        candidate: TextCandidate,
+        candidate: TextProbeCandidate,
         result: list[TextDetection],
     ) -> None:
         """Update matched regions and retain absence evidence per open region."""
-        if isinstance(candidate, OcrCandidate):
+        if isinstance(candidate, TextCandidate):
             candidate_sources = tuple(
                 source.value for source in candidate.provenance
             )
@@ -309,9 +299,9 @@ class TextProbe(DeferredModelProbe):
             for position, segment in enumerate(self._text_segments, start=1)
         ]
         candidate_stats = (
-            self._ocr_candidate_store.stats
-            if self._ocr_candidate_store is not None
-            else OcrCandidateStats()
+            self._text_candidate_store.stats
+            if self._text_candidate_store is not None
+            else TextCandidateStats()
         )
         return TextProbeResult(
             text_segments=self._text_segments,
@@ -320,11 +310,11 @@ class TextProbe(DeferredModelProbe):
 
     def _keep(
         self,
-        candidate: TextCandidate,
+        candidate: TextProbeCandidate,
         tags: tuple[str, ...],
     ) -> None:
-        """Persist OCR representatives from either memory or candidate JPEG."""
-        if not isinstance(candidate, OcrCandidate):
+        """Persist text representatives from memory or disk-backed candidates."""
+        if not isinstance(candidate, TextCandidate):
             super()._keep(candidate, tags)
             return
         if self._store is None:

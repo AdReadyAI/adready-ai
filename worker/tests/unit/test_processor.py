@@ -159,6 +159,36 @@ def test_with_retry_does_not_retry_permanent_error():
     assert calls["n"] == 1
 
 
+def test_ocr_wrapper_consumes_owned_completion_without_affecting_other_tasks():
+    """Atomic OCR completion must not enter generic task-result persistence."""
+
+    class Analyzer:
+        """Expose one OCR task and one unrelated analysis task."""
+
+        def analysis_tasks(self):
+            return {
+                "ocr": lambda: "fixed-rate-analysis",
+                "transcription": lambda: "transcript-result",
+            }
+
+    class Lifecycle:
+        """Return an OCR-owned completion after consuming fixed-rate analysis."""
+
+        def execute(self, run_ocr, metadata):
+            assert run_ocr() == "fixed-rate-analysis"
+            return "ocr-completion"
+
+    wrapped = processor._OcrLifecycleAnalyzer(
+        Analyzer(),
+        Lifecycle(),
+        VideoMetadata(1.0, 20.0, 200, 100, 1_000),
+    )
+    tasks = wrapped.analysis_tasks()
+
+    assert tasks["ocr"]() is None
+    assert tasks["transcription"]() == "transcript-result"
+
+
 # ---------------------------------------------------------------------------
 # process_message()
 # ---------------------------------------------------------------------------
@@ -180,8 +210,8 @@ def _wire_process_message(monkeypatch, tasks, done=None, recorder=None):
             return type("PreparedArtifacts", (), {"video_metadata": metadata})()
 
     class FakeVideoAnalyzer:
-        def __init__(self, artifact):
-            pass
+        def __init__(self, artifact, *, ocr_adapter=None):
+            self.ocr_adapter = ocr_adapter
 
         def analysis_tasks(self):
             return tasks
@@ -201,12 +231,19 @@ def _wire_process_message(monkeypatch, tasks, done=None, recorder=None):
     class FakeOcrRunLifecycle:
         """Keep legacy processor tests focused on their existing behavior."""
 
-        def __init__(self, cur, request_id, source_bucket, source_path):
-            pass
+        def __init__(
+            self,
+            cur,
+            request_id,
+            source_bucket,
+            source_path,
+            completion_coordinator,
+        ):
+            """Accept the optional OCR-owned completion dependency."""
 
-        def execute(self, hosted_ocr, metadata):
+        def execute(self, run_ocr, metadata):
             """Delegate through the OCR boundary without changing task results."""
-            return hosted_ocr()
+            return run_ocr()
 
     monkeypatch.setattr(processor, "VideoPreprocessor", FakePreprocessor)
     monkeypatch.setattr(processor, "VideoAnalyzer", FakeVideoAnalyzer)
@@ -260,6 +297,8 @@ def test_process_message_with_all_stub_tasks_does_not_crash(monkeypatch):
 def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
     """Media Processing adds durable lifecycle only around the OCR analysis."""
     execution_events = []
+    expected_ocr_adapter = object()
+    expected_completion_coordinator = object()
     metadata = VideoMetadata(
         duration_s=10.0,
         fps=30.0,
@@ -281,13 +320,15 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
     class FakeVideoAnalyzer:
         """Expose one OCR task and one unaffected non-OCR task."""
 
-        def __init__(self, artifact):
+        def __init__(self, artifact, *, ocr_adapter):
             self.artifact = artifact
+            assert ocr_adapter is expected_ocr_adapter
+            execution_events.append("ocr-adapter-configured")
 
         def analysis_tasks(self):
             """Return the worker-owned analysis registry."""
             return {
-                "ocr": lambda: execution_events.append("hosted-ocr"),
+                "ocr": lambda: execution_events.append("ocr-analysis"),
                 "transcription": lambda: execution_events.append("transcription"),
             }
 
@@ -307,18 +348,37 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
     class FakeOcrRunLifecycle:
         """Expose whether the processor routes OCR through its owned slice."""
 
-        def __init__(self, cur, request_id, source_bucket, source_path):
+        def __init__(
+            self,
+            cur,
+            request_id,
+            source_bucket,
+            source_path,
+            completion_coordinator,
+        ):
+            assert completion_coordinator is expected_completion_coordinator
+            execution_events.append("ocr-completion-configured")
             execution_events.append("ocr-lifecycle-created")
 
-        def execute(self, hosted_ocr, prepared_metadata):
-            """Record the OCR boundary before delegating to hosted OCR."""
+        def execute(self, run_ocr, prepared_metadata):
+            """Record the OCR boundary before delegating to analysis."""
             assert prepared_metadata is metadata
             execution_events.append("ocr-lifecycle")
-            return hosted_ocr()
+            return run_ocr()
 
     monkeypatch.setattr(processor, "VideoPreprocessor", FakePreprocessor)
     monkeypatch.setattr(processor, "VideoAnalyzer", FakeVideoAnalyzer)
     monkeypatch.setattr(processor, "Supabase", FakeSupabase)
+    monkeypatch.setattr(
+        processor,
+        "_build_ocr_adapter",
+        lambda: expected_ocr_adapter,
+    )
+    monkeypatch.setattr(
+        processor,
+        "_build_ocr_completion_coordinator",
+        lambda: expected_completion_coordinator,
+    )
     monkeypatch.setattr(
         processor,
         "OcrRunLifecycle",
@@ -329,8 +389,10 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
     processor.process_message(cur=object(), msg_id=9, payload=VALID_PAYLOAD)
 
     assert set(execution_events) == {
+        "ocr-adapter-configured",
+        "ocr-completion-configured",
         "ocr-lifecycle-created",
         "ocr-lifecycle",
-        "hosted-ocr",
+        "ocr-analysis",
         "transcription",
     }

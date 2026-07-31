@@ -5,6 +5,8 @@ import pytest
 pytestmark = pytest.mark.unit
 
 from analyzer.types import VideoMetadata  # noqa: E402
+from analyzer.ocr_completion import OcrCompletion  # noqa: E402
+from analyzer.ocr_result import OcrResultSegment  # noqa: E402
 from app.errors import PermanentError  # noqa: E402
 from app.ocr_runs import OcrRunLifecycle  # noqa: E402
 
@@ -20,14 +22,14 @@ class CompletedRunCursor:
         return ("ocr-run-1", "completed")
 
 
-def test_completed_redelivery_does_not_repeat_hosted_ocr() -> None:
+def test_completed_redelivery_does_not_repeat_ocr_analysis() -> None:
     """A completed OCR Run is reused without repeating billable OCR work."""
-    hosted_ocr_called = False
+    ocr_called = False
 
-    def hosted_ocr():
-        """Make an accidental hosted OCR invocation observable to the test."""
-        nonlocal hosted_ocr_called
-        hosted_ocr_called = True
+    def run_ocr():
+        """Make an accidental OCR invocation observable to the test."""
+        nonlocal ocr_called
+        ocr_called = True
         return object()
 
     lifecycle = OcrRunLifecycle(
@@ -44,35 +46,45 @@ def test_completed_redelivery_does_not_repeat_hosted_ocr() -> None:
         size_bytes=1_000,
     )
 
-    result = lifecycle.execute(hosted_ocr, metadata)
+    result = lifecycle.execute(run_ocr, metadata)
 
     assert result is None
-    assert hosted_ocr_called is False
+    assert ocr_called is False
 
 
-def test_processing_run_executes_hosted_ocr_once() -> None:
-    """A new or resumed processing run returns its hosted OCR result."""
-    hosted_result = object()
-    hosted_ocr_calls = 0
+def test_ocr_analysis_requires_durable_completion() -> None:
+    """An OCR analysis cannot complete without immutable Result storage."""
 
-    def hosted_ocr():
-        """Return a stable sentinel while exposing duplicate provider calls."""
-        nonlocal hosted_ocr_calls
-        hosted_ocr_calls += 1
-        return hosted_result
+    class MissingCompletionCursor:
+        """Expose the durable failure caused by incomplete OCR wiring."""
 
-    class ProcessingRunCursor:
-        """Database-boundary double returning one in-progress OCR Run."""
+        def __init__(self):
+            self.status = "processing"
+            self.write_count = 0
+            self.error = None
 
         def execute(self, sql, params=None):
-            """Accept lifecycle statements without asserting their SQL shape."""
+            """Model creation, timing provenance, then configuration failure."""
+            self.write_count += 1
+            if self.write_count == 3:
+                self.status = "failed"
+                self.error = params[0]
 
         def fetchone(self):
-            """Return the durable run identity and processing lifecycle state."""
-            return ("ocr-run-2", "processing")
+            """Return one processing OCR Run."""
+            return ("ocr-run-2", self.status)
+
+    cursor = MissingCompletionCursor()
+    ocr_calls = 0
+
+    def run_ocr():
+        """Return analysis while exposing duplicate recognition attempts."""
+        nonlocal ocr_calls
+        ocr_calls += 1
+        return object()
 
     lifecycle = OcrRunLifecycle(
-        cur=ProcessingRunCursor(),
+        cur=cursor,
         request_id="22222222-2222-2222-2222-222222222222",
         source_bucket="uploads",
         source_path="review/new-creative.mp4",
@@ -85,53 +97,18 @@ def test_processing_run_executes_hosted_ocr_once() -> None:
         size_bytes=2_000,
     )
 
-    result = lifecycle.execute(hosted_ocr, metadata)
+    with pytest.raises(
+        RuntimeError,
+        match="OCR completion is not configured",
+    ):
+        lifecycle.execute(run_ocr, metadata)
 
-    assert result is hosted_result
-    assert hosted_ocr_calls == 1
-
-
-def test_successful_hosted_ocr_completes_the_durable_run() -> None:
-    """Successful hosted OCR leaves the associated durable run completed."""
-
-    class DurableRunCursor:
-        """Database-boundary double exposing the run state after each write."""
-
-        def __init__(self):
-            self.status = "processing"
-            self.write_count = 0
-
-        def execute(self, sql, params=None):
-            """Model the durable state transition without inspecting SQL text."""
-            self.write_count += 1
-            if self.write_count > 1:
-                self.status = "completed"
-
-        def fetchone(self):
-            """Return the current durable run identity and lifecycle state."""
-            return ("ocr-run-3", self.status)
-
-    cursor = DurableRunCursor()
-    lifecycle = OcrRunLifecycle(
-        cur=cursor,
-        request_id="33333333-3333-3333-3333-333333333333",
-        source_bucket="uploads",
-        source_path="review/successful-creative.mp4",
-    )
-    metadata = VideoMetadata(
-        duration_s=6.0,
-        fps=30.0,
-        width=1920,
-        height=1080,
-        size_bytes=3_000,
-    )
-
-    lifecycle.execute(lambda: object(), metadata)
-
-    assert cursor.status == "completed"
+    assert ocr_calls == 1
+    assert cursor.status == "failed"
+    assert cursor.error == "RuntimeError: OCR completion is not configured"
 
 
-def test_hosted_ocr_failure_marks_run_failed_and_reraises() -> None:
+def test_ocr_analysis_failure_marks_run_failed_and_reraises() -> None:
     """An operational OCR failure is durable and remains visible upstream."""
 
     class FailedRunCursor:
@@ -151,8 +128,8 @@ def test_hosted_ocr_failure_marks_run_failed_and_reraises() -> None:
             """Return the current durable run identity and lifecycle state."""
             return ("ocr-run-4", self.status)
 
-    def failed_hosted_ocr():
-        """Represent a provider failure that the processor must still receive."""
+    def failed_ocr_analysis():
+        """Represent an OCR failure that the processor must still receive."""
         raise RuntimeError("provider unavailable")
 
     cursor = FailedRunCursor()
@@ -171,12 +148,12 @@ def test_hosted_ocr_failure_marks_run_failed_and_reraises() -> None:
     )
 
     with pytest.raises(RuntimeError, match="provider unavailable"):
-        lifecycle.execute(failed_hosted_ocr, metadata)
+        lifecycle.execute(failed_ocr_analysis, metadata)
 
     assert cursor.status == "failed"
 
 
-def test_creative_over_sixty_seconds_fails_before_hosted_ocr() -> None:
+def test_creative_over_sixty_seconds_fails_before_ocr_analysis() -> None:
     """OCR rejects an oversized Ad Creative before billable provider work."""
 
     class DurationFailureCursor:
@@ -196,12 +173,12 @@ def test_creative_over_sixty_seconds_fails_before_hosted_ocr() -> None:
             """Return the current durable run identity and lifecycle state."""
             return ("ocr-run-5", self.status)
 
-    hosted_ocr_called = False
+    ocr_called = False
 
-    def hosted_ocr():
+    def run_ocr():
         """Expose any provider call made before duration validation."""
-        nonlocal hosted_ocr_called
-        hosted_ocr_called = True
+        nonlocal ocr_called
+        ocr_called = True
         return object()
 
     cursor = DurationFailureCursor()
@@ -220,24 +197,24 @@ def test_creative_over_sixty_seconds_fails_before_hosted_ocr() -> None:
     )
 
     with pytest.raises(PermanentError, match="60 seconds"):
-        lifecycle.execute(hosted_ocr, metadata)
+        lifecycle.execute(run_ocr, metadata)
 
-    assert hosted_ocr_called is False
+    assert ocr_called is False
     assert cursor.status == "failed"
 
 
-def test_cfr_fallback_is_recorded_before_hosted_ocr() -> None:
+def test_cfr_fallback_is_recorded_before_ocr_analysis() -> None:
     """Current frame-index timing is made explicit before provider work."""
 
     class TimingRunCursor:
-        """Database-boundary double exposing timing provenance to hosted OCR."""
+        """Database-boundary double exposing timing provenance to OCR."""
 
         def __init__(self):
             self.write_count = 0
             self.timing = None
 
         def execute(self, sql, params=None):
-            """Capture the lifecycle write between creation and hosted OCR."""
+            """Capture the lifecycle write before OCR analysis."""
             self.write_count += 1
             if self.write_count == 2:
                 self.timing = params[:2]
@@ -247,13 +224,13 @@ def test_cfr_fallback_is_recorded_before_hosted_ocr() -> None:
             return ("ocr-run-6", "processing")
 
     cursor = TimingRunCursor()
-    timing_seen_by_hosted_ocr = None
+    timing_seen_by_ocr = None
 
-    def hosted_ocr():
-        """Observe timing provenance at the external-provider boundary."""
-        nonlocal timing_seen_by_hosted_ocr
-        timing_seen_by_hosted_ocr = cursor.timing
-        return object()
+    def run_ocr():
+        """Observe timing provenance at the OCR analysis boundary."""
+        nonlocal timing_seen_by_ocr
+        timing_seen_by_ocr = cursor.timing
+        return None
 
     lifecycle = OcrRunLifecycle(
         cur=cursor,
@@ -269,12 +246,12 @@ def test_cfr_fallback_is_recorded_before_hosted_ocr() -> None:
         size_bytes=6_000,
     )
 
-    lifecycle.execute(hosted_ocr, metadata)
+    lifecycle.execute(run_ocr, metadata)
 
-    assert timing_seen_by_hosted_ocr == ("constant_frame_rate", 29.97)
+    assert timing_seen_by_ocr == ("constant_frame_rate", 29.97)
 
 
-def test_hosted_failure_persists_only_a_safe_summary() -> None:
+def test_ocr_failure_persists_only_a_safe_summary() -> None:
     """Durable OCR errors exclude provider details and signed source URLs."""
 
     class SafeErrorCursor:
@@ -319,11 +296,11 @@ def test_hosted_failure_persists_only_a_safe_summary() -> None:
     with pytest.raises(RuntimeError):
         lifecycle.execute(sensitive_provider_failure, metadata)
 
-    assert cursor.error == "RuntimeError: hosted OCR failed"
+    assert cursor.error == "RuntimeError: OCR analysis failed"
 
 
-def test_zero_fps_fails_before_hosted_ocr() -> None:
-    """Invalid CFR timing metadata cannot reach the hosted OCR provider."""
+def test_zero_fps_fails_before_ocr_analysis() -> None:
+    """Invalid CFR timing metadata cannot reach OCR analysis."""
 
     class TimingFailureCursor:
         """Database-boundary double exposing the invalid-timing run state."""
@@ -342,12 +319,12 @@ def test_zero_fps_fails_before_hosted_ocr() -> None:
             """Return one newly processing OCR Run."""
             return ("ocr-run-8", self.status)
 
-    hosted_ocr_called = False
+    ocr_called = False
 
-    def hosted_ocr():
+    def run_ocr():
         """Expose any provider call made with invalid timing metadata."""
-        nonlocal hosted_ocr_called
-        hosted_ocr_called = True
+        nonlocal ocr_called
+        ocr_called = True
         return object()
 
     cursor = TimingFailureCursor()
@@ -366,9 +343,9 @@ def test_zero_fps_fails_before_hosted_ocr() -> None:
     )
 
     with pytest.raises(PermanentError, match="frame rate"):
-        lifecycle.execute(hosted_ocr, metadata)
+        lifecycle.execute(run_ocr, metadata)
 
-    assert hosted_ocr_called is False
+    assert ocr_called is False
     assert cursor.status == "failed"
 
 
@@ -413,6 +390,87 @@ def test_empty_ocr_result_leaves_run_processing_for_redelivery() -> None:
     assert cursor.status == "processing"
 
 
+def test_lifecycle_prepares_and_atomically_persists_ocr_analysis() -> None:
+    """The lifecycle privately supplies its run identity during completion."""
+
+    class CompletionCursor:
+        """Database-boundary double exposing atomic result completion."""
+
+        def __init__(self) -> None:
+            self.write_count = 0
+            self.atomic_completion_called = False
+
+        def execute(self, sql, params=None):
+            """Model run creation, timing provenance, and atomic completion."""
+            self.write_count += 1
+            if self.write_count == 3:
+                self.atomic_completion_called = True
+
+        def fetchone(self):
+            """Return the run identity first and completion outcome last."""
+            if self.write_count == 1:
+                return ("ocr-run-completion", "processing")
+            return (True,)
+
+    class FakeCompletionCoordinator:
+        """Prepare a stable evaluator result without local file I/O."""
+
+        def __init__(self) -> None:
+            self.received = None
+
+        def prepare(self, *, ocr_run_id, analysis):
+            """Capture the private handoff and return prepared OCR evidence."""
+            self.received = (ocr_run_id, analysis)
+            return OcrCompletion(
+                artifacts=(),
+                result_segments=(
+                    OcrResultSegment(
+                        ocr_id="ocr_segment_0001",
+                        frame_ids=("ocr-run-completion-frame-000005",),
+                        start_ms=0,
+                        end_ms=250,
+                        text="SALE",
+                        on_screen_duration_ms=250,
+                        region_size=8.0,
+                        font_size_px=None,
+                    ),
+                ),
+            )
+
+    cursor = CompletionCursor()
+    coordinator = FakeCompletionCoordinator()
+    analysis = object()
+    ocr_calls = 0
+
+    def run_ocr():
+        """Prove the analyzer callable remains zero-argument."""
+        nonlocal ocr_calls
+        ocr_calls += 1
+        return analysis
+
+    lifecycle = OcrRunLifecycle(
+        cur=cursor,
+        request_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        source_bucket="uploads",
+        source_path="review/result.mp4",
+        completion_coordinator=coordinator,
+    )
+    metadata = VideoMetadata(
+        duration_s=1.0,
+        fps=20.0,
+        width=200,
+        height=100,
+        size_bytes=1_000,
+    )
+
+    result = lifecycle.execute(run_ocr, metadata)
+
+    assert ocr_calls == 1
+    assert coordinator.received == ("ocr-run-completion", analysis)
+    assert cursor.atomic_completion_called is True
+    assert result.result_segments[0].text == "SALE"
+
+
 @pytest.mark.parametrize(
     "fps",
     [
@@ -421,8 +479,8 @@ def test_empty_ocr_result_leaves_run_processing_for_redelivery() -> None:
         pytest.param(float("-inf"), id="negative-infinity"),
     ],
 )
-def test_non_finite_fps_fails_before_hosted_ocr(fps: float) -> None:
-    """Non-finite CFR metadata cannot reach the hosted OCR provider."""
+def test_non_finite_fps_fails_before_ocr_analysis(fps: float) -> None:
+    """Non-finite CFR metadata cannot reach OCR analysis."""
 
     class NonFiniteTimingCursor:
         """Database-boundary double exposing invalid-timing failure."""
@@ -441,12 +499,12 @@ def test_non_finite_fps_fails_before_hosted_ocr(fps: float) -> None:
             """Return one newly processing OCR Run."""
             return ("ocr-run-10", self.status)
 
-    hosted_ocr_called = False
+    ocr_called = False
 
-    def hosted_ocr():
+    def run_ocr():
         """Expose any provider call made with non-finite timing metadata."""
-        nonlocal hosted_ocr_called
-        hosted_ocr_called = True
+        nonlocal ocr_called
+        ocr_called = True
         return object()
 
     cursor = NonFiniteTimingCursor()
@@ -465,7 +523,7 @@ def test_non_finite_fps_fails_before_hosted_ocr(fps: float) -> None:
     )
 
     with pytest.raises(PermanentError, match="finite frame rate"):
-        lifecycle.execute(hosted_ocr, metadata)
+        lifecycle.execute(run_ocr, metadata)
 
-    assert hosted_ocr_called is False
+    assert ocr_called is False
     assert cursor.status == "failed"

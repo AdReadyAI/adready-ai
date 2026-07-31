@@ -3,6 +3,12 @@ import os
 import assemblyai as aai
 import httpx
 
+from analyzer.fixed_rate_ocr_pipeline import (
+    FixedRateOcrAnalysis,
+    FixedRateOcrPipeline,
+)
+from analyzer.frame_sampling.probes.text import TextProbeResult
+from analyzer.ocr_recognition import OcrAdapter
 from analyzer.types import Artifacts
 from config.connection import get_aai_transcriber
 from app.errors import PermanentError, TransientError
@@ -12,7 +18,6 @@ from analyzer.output_models import (
     TranscriptionResult,
     ObjectDetectionResult,
     ContextResult,
-    OcrResult
 )
 
 
@@ -27,10 +32,13 @@ def analysis_task(name: str):
 
 
 class VideoAnalyzer:
-    def __init__(self, artifacts: Artifacts):
+    def __init__(
+        self,
+        artifacts: Artifacts,
+        ocr_adapter: OcrAdapter | None = None,
+    ):
         self.artifacts = artifacts
-
-        
+        self.ocr_adapter = ocr_adapter
         self.transcriber = get_aai_transcriber()
 
     @analysis_task("transcription")
@@ -84,8 +92,25 @@ class VideoAnalyzer:
         
 
     @analysis_task("ocr")
-    def ocr(self) -> OcrResult:
-            pass
+    def ocr(self) -> FixedRateOcrAnalysis | None:
+        """Run independent fixed-rate OCR when an adapter is configured."""
+        if self.ocr_adapter is None:
+            # Ticket #6 supplies the production hosted adapter. Until then,
+            # leaving the result empty keeps the durable OCR Run resumable.
+            return None
+
+        text_result = self.artifacts.probe_results.get("text")
+        text_segments = (
+            tuple(text_result.text_segments)
+            if isinstance(text_result, TextProbeResult)
+            else ()
+        )
+        return FixedRateOcrPipeline(self.ocr_adapter).run(
+            video_path=self.artifacts.video_path,
+            metadata=self.artifacts.video_metadata,
+            work_dir=self.artifacts.work_dir,
+            text_segments=text_segments,
+        )
 
 
     @analysis_task("object_detection")

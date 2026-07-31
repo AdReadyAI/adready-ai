@@ -8,9 +8,6 @@ import requests
 from analyzer.types import Artifacts, Frame, VideoMetadata
 from analyzer.frame_sampling import FrameSampler
 from analyzer.frame_sampling.base import ProbeResult
-from analyzer.frame_sampling.probes.ocr_candidates import (
-    OcrCandidateCapacityError,
-)
 from app.errors import PermanentError, TransientError
 from app.schemas import JobPayload
 from config.connection import get_storage_session
@@ -193,9 +190,6 @@ class VideoPreprocessor:
             logo_paths=self.job_payload.logo_paths,
         )
         frames = sampler.run()
-        text_error = sampler.probe_errors.get("text")
-        if isinstance(text_error, OcrCandidateCapacityError):
-            raise PermanentError(str(text_error)) from text_error
         self._probe_results = sampler.probe_results
         return frames
 

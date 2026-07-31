@@ -1,9 +1,13 @@
 """Durable lifecycle coordination contained within the OCR analysis slice."""
 
 from collections.abc import Callable
+from dataclasses import asdict
 import math
 from typing import TypeVar
 
+from psycopg2.extras import Json
+
+from analyzer.ocr_completion import OcrCompletionCoordinator
 from analyzer.types import VideoMetadata
 from app.errors import PermanentError
 
@@ -12,7 +16,7 @@ OcrResultT = TypeVar("OcrResultT")
 
 
 class OcrRunLifecycle:
-    """Create or resume one durable OCR Run around hosted OCR execution."""
+    """Create or resume one durable OCR Run around OCR analysis."""
 
     def __init__(
         self,
@@ -20,19 +24,21 @@ class OcrRunLifecycle:
         request_id: str,
         source_bucket: str,
         source_path: str,
+        completion_coordinator: OcrCompletionCoordinator | None = None,
     ):
         """Retain only the trusted identity and source needed by OCR."""
         self.cur = cur
         self.request_id = request_id
         self.source_bucket = source_bucket
         self.source_path = source_path
+        self.completion_coordinator = completion_coordinator
 
     def execute(
         self,
-        hosted_ocr: Callable[[], OcrResultT],
+        run_ocr: Callable[[], OcrResultT],
         metadata: VideoMetadata,
     ) -> OcrResultT | None:
-        """Reuse completed work or execute hosted OCR for a processing run."""
+        """Reuse completed work or execute OCR for a processing run."""
         self.cur.execute(
             """
             INSERT INTO ocr_runs (
@@ -53,13 +59,13 @@ class OcrRunLifecycle:
         )
         ocr_run_id, status = self.cur.fetchone()
 
-        # Durable completion is authoritative on redelivery, so hosted OCR must
+        # Durable completion is authoritative on redelivery, so OCR must
         # not be repeated even when the queue delivers the request again.
         if status == "completed":
             return None
 
         if metadata.duration_s > 60:
-            # The OCR provider limit belongs to this analysis slice; rejecting
+            # The OCR duration limit belongs to this analysis slice; rejecting
             # here leaves shared preprocessing and non-OCR analyses unchanged.
             self._mark_failed(ocr_run_id)
             raise PermanentError("OCR supports Ad Creatives up to 60 seconds")
@@ -77,7 +83,7 @@ class OcrRunLifecycle:
             raise PermanentError("OCR requires a positive frame rate")
 
         # The current decoder derives timestamps from frame index and FPS.
-        # Persist that fallback explicitly before any hosted OCR work begins.
+        # Persist that fallback explicitly before OCR analysis begins.
         self.cur.execute(
             """
             UPDATE ocr_runs
@@ -94,11 +100,11 @@ class OcrRunLifecycle:
         )
 
         try:
-            result = hosted_ocr()
+            result = run_ocr()
         except Exception as error:
-            # Preserve the provider exception for the existing processor while
+            # Preserve the analysis exception for the existing processor while
             # durable storage receives only a non-sensitive operational summary.
-            safe_error = f"{type(error).__name__}: hosted OCR failed"
+            safe_error = f"{type(error).__name__}: OCR analysis failed"
             self._mark_failed(ocr_run_id, safe_error)
             raise
 
@@ -107,16 +113,41 @@ class OcrRunLifecycle:
         if result is None:
             return None
 
-        self.cur.execute(
-            """
-            UPDATE ocr_runs
-            SET status = 'completed',
-                updated_at = now()
-            WHERE ocr_run_id = %s;
-            """,
-            (ocr_run_id,),
-        )
-        return result
+        if self.completion_coordinator is None:
+            # In-memory analysis is not a completed OCR Result: durable frame
+            # evidence and atomic result rows are required by the OCR contract.
+            error = RuntimeError("OCR completion is not configured")
+            self._mark_failed(
+                ocr_run_id,
+                "RuntimeError: OCR completion is not configured",
+            )
+            raise error
+
+        try:
+            completion = self.completion_coordinator.prepare(
+                ocr_run_id=str(ocr_run_id),
+                analysis=result,
+            )
+            self.cur.execute(
+                "SELECT complete_ocr_run(%s, %s::jsonb);",
+                (
+                    ocr_run_id,
+                    Json(
+                        [
+                            asdict(segment)
+                            for segment in completion.result_segments
+                        ]
+                    ),
+                ),
+            )
+            result_created = self.cur.fetchone()[0]
+        except Exception as error:
+            # Artifact and result details remain outside durable failures;
+            # only a short operational category is safe to persist.
+            safe_error = f"{type(error).__name__}: OCR completion failed"
+            self._mark_failed(ocr_run_id, safe_error)
+            raise
+        return completion if result_created else None
 
     def _mark_failed(
         self,
