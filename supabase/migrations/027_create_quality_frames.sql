@@ -14,4 +14,17 @@ create table public.quality_frames (
   primary key (request_id, frame_id)
 );
 
+grant select on public.quality_frames to authenticated;
+
 alter table public.quality_frames enable row level security;
+
+create policy "users read own quality frames"
+  on public.quality_frames
+  for select
+  to authenticated
+  using (
+    request_id in (
+      select request_id from public.requests
+      where user_id = auth.uid()
+    )
+  );
