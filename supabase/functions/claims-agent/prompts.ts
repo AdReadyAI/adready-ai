@@ -99,7 +99,6 @@ Respond with ONLY a JSON array, no markdown fences, no prose before or after. Ex
 
 export function buildSubstantiationUserPrompt(
   claims: VerifiableClaim[],
-  evidence: EvidenceByCategory,
   brief: ParsedCreativeBrief,
   productContext: ProductContext | undefined,
 ): string {
@@ -111,15 +110,15 @@ export function buildSubstantiationUserPrompt(
       JSON.stringify(brief.forbidden_claims)
     }`,
     `Product page / context: ${productContext?.raw_text ?? "(not provided)"}`,
+    `Additional approved product claims: ${
+      JSON.stringify(productContext?.claims ?? [])
+    }`,
+    `Known contraindications: ${
+      JSON.stringify(productContext?.contraindications ?? [])
+    }`,
     "",
-    "Claims to evaluate, with retrieved product evidence for their category:",
-    ...claims.map((c) => {
-      const chunks = evidence[c.category] ?? [];
-      const evidenceText = chunks.length
-        ? chunks.map((e) => `    - ${e.text}`).join("\n")
-        : "    (no product evidence retrieved for this category)";
-      return `  - ${c.claim_id} [${c.category}]: "${c.text}"\n${evidenceText}`;
-    }),
+    "Claims to evaluate:",
+    ...claims.map((c) => `  - ${c.claim_id} [${c.category}]: "${c.text}"`),
   ].join("\n");
 }
 
