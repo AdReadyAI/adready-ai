@@ -35,6 +35,12 @@ def process_message(cur, msg_id, payload):
                     "[job %s] failed to persist quality frames", msg_id
                 )
 
+        scene_result = artifact.probe_results.get("scene")
+        try:
+            db.persist_video_metadata(artifact.video_metadata, scene_result)
+        except Exception:
+            logger.exception("[job %s] failed to persist video metadata", msg_id)
+
         results, errors = _run_analysis(db, analyzer)
 
         db.persist_results(results, errors)

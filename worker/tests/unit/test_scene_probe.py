@@ -16,7 +16,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from analyzer.frame_sampling.probes.scene import SceneProbe, SceneProbeResult
 from analyzer.frame_sampling.context import FrameContext
-from config.settings import SCENE_CONTENT_SCALE
+from config.settings import (
+    SCENE_CONTENT_SCALE,
+    DYNAMISM_MOSTLY_STATIC_MAX,
+    DYNAMISM_MODERATE_MAX,
+)
 
 
 class TestSceneProbe(unittest.TestCase):
@@ -122,6 +126,64 @@ class TestSceneProbe(unittest.TestCase):
         self.assertEqual(len(result.shots), 2)
         self.assertEqual(result.shots[0].end_index, 11)
         self.assertEqual(result.shots[1].start_index, 12)
+
+    def test_dynamism_mostly_static_for_near_zero_content(self):
+        self.stats.metrics_exist.return_value = True
+        # Well below DYNAMISM_MOSTLY_STATIC_MAX after dividing by SCENE_CONTENT_SCALE.
+        self.stats.get_metrics.return_value = [0.01 * SCENE_CONTENT_SCALE]
+
+        for i in range(10):
+            self.probe.process(self._ctx(i))
+
+        result = self.probe.finalize()
+
+        self.assertEqual(result.dynamism, "mostly_static")
+
+    def test_dynamism_dynamic_for_high_content(self):
+        self.stats.metrics_exist.return_value = True
+        # Comfortably above DYNAMISM_MODERATE_MAX * SCENE_CONTENT_SCALE, and
+        # above SCENE_CONTENT_SCALE itself so content_val clamps to 1.0.
+        high_value = (DYNAMISM_MODERATE_MAX * SCENE_CONTENT_SCALE) + SCENE_CONTENT_SCALE
+        self.stats.get_metrics.return_value = [high_value]
+
+        for i in range(10):
+            self.probe.process(self._ctx(i))
+
+        result = self.probe.finalize()
+
+        self.assertEqual(result.dynamism, "dynamic")
+
+    def test_dynamism_excludes_cut_frame_content_val(self):
+        low_value = 0.01 * SCENE_CONTENT_SCALE
+        high_value = 10.0 * SCENE_CONTENT_SCALE
+
+        for i in range(10):
+            if i == 4:
+                self.content.process_frame.return_value = [4]
+                self.stats.get_metrics.return_value = [high_value]
+            else:
+                self.content.process_frame.return_value = []
+                self.stats.get_metrics.return_value = [low_value]
+            self.stats.metrics_exist.return_value = True
+            self.probe.process(self._ctx(i))
+
+        result = self.probe.finalize()
+
+        # The huge value at the cut frame must not be counted, so the result
+        # stays based only on the low-content_val non-cut frames.
+        self.assertIn(result.dynamism, ("mostly_static", "moderate"))
+
+    def test_dynamism_none_when_all_frames_are_cuts(self):
+        self.stats.metrics_exist.return_value = True
+        self.stats.get_metrics.return_value = [50.0]
+
+        for i in range(5):
+            self.content.process_frame.return_value = [i]
+            self.probe.process(self._ctx(i))
+
+        result = self.probe.finalize()
+
+        self.assertIsNone(result.dynamism)
 
 
 if __name__ == "__main__":

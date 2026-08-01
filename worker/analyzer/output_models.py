@@ -3,6 +3,8 @@ from typing import ClassVar, Generic, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict
 
 
+
+
 # ---------------------------------------------------------------------------
 # General "video_processing" table models
 # ---------------------------------------------------------------------------
@@ -103,13 +105,43 @@ class LogoFrameResult(TaskResult[LogoFrameRow]):
 
 
 # ==============================================
-#  context  ->  context_results
+#  context  ->  visual_frames
 # ==============================================
 
-class ContextRow(TaskRow):
-    pass
+class PeopleInfo(BaseModel):
+    count: int
+    apparent_ages: list[str] = []
+    apparent_presentation: list[str] = []
+    activity: str
+    clothing_style: str
 
-class ContextResult(TaskResult[ContextRow]):
-    table: ClassVar[str] = "context_results" #Table name should be updated to the actual name
+class ColorPalette(BaseModel):
+    dominant_colors: list[str] = []
+    lighting_quality: str
+
+class SceneBackground(BaseModel):
+    location_type: str
+    mood: str
+
+TechnicalFlag = Literal[
+    "ai_artifacts", "poor_framing_lighting", "jarring_transitions", "illegible_text"
+]
+
+class VisualFrameRow(TaskRow):
+    frame_id: str
+    timestamp_ms: int
+    image_url: str | None = None
+    action: str | None = None
+    framing_composition: str | None = None
+    people: PeopleInfo | None = None
+    color_palette: ColorPalette | None = None
+    background: SceneBackground | None = None
+    technical_flags: list[TechnicalFlag] = []
+    shot_index: int | None = None
+    is_shot_start: bool = False
+    is_fade: bool = False
+
+class VisualFrameResult(TaskResult[VisualFrameRow]):
+    table: ClassVar[str] = "visual_frames"
 
 

@@ -59,6 +59,9 @@ export async function loadAgentContext(
   const logoDetectionId = processing?.find((row) =>
     row.task_name === "logo_detection"
   )?.id;
+  const contextId = processing?.find((row) =>
+    row.task_name === "context"
+  )?.id;
 
   const [
     briefResponse,
@@ -69,6 +72,7 @@ export async function loadAgentContext(
     visualResponse,
     productFramesResponse,
     logoFramesResponse,
+    qualityFramesResponse,
   ] = await Promise.all([
     supabase.from("parsed_creative_briefs").select("*").eq(
       "request_id",
@@ -86,9 +90,11 @@ export async function loadAgentContext(
     supabase.from("ocr_segments").select(
       "ocr_id, frame_ids, start_ms, end_ms, text, on_screen_duration_ms, region_size, font_size_px",
     ).eq("request_id", requestId),
-    supabase.from("visual_frames").select(
-      "frame_id, timestamp_ms, image_url, visual_description, people, color_palette, background, camera_movement, technical_flags",
-    ).eq("request_id", requestId),
+    contextId
+      ? supabase.from("visual_frames").select(
+        "frame_id, timestamp_ms, image_url, action, framing_composition, people, color_palette, background, technical_flags, shot_index, is_shot_start, is_fade",
+      ).eq("processing_id", contextId)
+      : Promise.resolve({ data: [], error: null }),
     productDetectionId
       ? supabase.from("product_frames").select(
         "frame_id, timestamp_ms, location, confidence_score, prominence, focus_quality, framing",
@@ -99,6 +105,9 @@ export async function loadAgentContext(
         "frame_id, timestamp_ms, location, confidence_score, prominence, reference_match",
       ).eq("processing_id", logoDetectionId)
       : Promise.resolve({ data: [], error: null }),
+    supabase.from("quality_frames").select(
+      "frame_id, timestamp_ms, reasons, sharpness, crushed_frac, blown_frac, mean_luma, contrast, grain, blockiness, temporal_delta",
+    ).eq("request_id", requestId),
   ]);
 
   for (
@@ -111,6 +120,7 @@ export async function loadAgentContext(
       visualResponse,
       productFramesResponse,
       logoFramesResponse,
+      qualityFramesResponse,
     ]
   ) {
     if (response.error) throw response.error;
@@ -129,6 +139,7 @@ export async function loadAgentContext(
     visual_frames: visualResponse.data ?? [],
     product_frames: productFramesResponse.data ?? [],
     logo_frames: logoFramesResponse.data ?? [],
+    quality_frames: qualityFramesResponse.data ?? [],
     product_context: productContextResponse.data ?? undefined,
   });
 }

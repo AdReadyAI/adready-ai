@@ -1,13 +1,22 @@
+import bisect
 import inspect
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import assemblyai as aai
 import httpx
 
 from analyzer.types import Artifacts, Frame
 from analyzer import detection_heuristics as dh
 from analyzer.object_detector import Detection, ReferenceDetector
+from analyzer.visual_captioner import VisualCaptioner
 from config.connection import get_aai_transcriber
-from config.settings import LOGO_DETECTION_LOW_CONFIDENCE, PRODUCT_DETECTION_CONFIDENCE
+from config.settings import (
+    LOGO_DETECTION_LOW_CONFIDENCE,
+    PRODUCT_DETECTION_CONFIDENCE,
+    VISUAL_CAPTION_MAX_WORKERS,
+)
+from config.settings import logger
 from app.errors import PermanentError, TransientError
 
 from analyzer.output_models import (
@@ -17,7 +26,8 @@ from analyzer.output_models import (
     LogoFrameRow,
     ProductFrameResult,
     ProductFrameRow,
-    ContextResult,
+    VisualFrameResult,
+    VisualFrameRow,
     OcrResult
 )
 
@@ -153,10 +163,80 @@ class VideoAnalyzer:
         )
 
     @analysis_task("context")
-    def context(self) -> ContextResult:
-        pass
+    def context(self) -> VisualFrameResult:
+        keyframes = [f for f in self.artifacts.frames if "keyframe" in f.tags]
+        if not keyframes:
+            return VisualFrameResult(rows=[])
 
-  
+        scene_result = self.artifacts.probe_results.get("scene")
+        shots = scene_result.shots if scene_result else []
+        fps = self.artifacts.video_metadata.fps or 0.0
+
+        shot_starts = [s.start_index for s in shots]
+        fade_indices = {round(f * fps) for f in (scene_result.fades if scene_result else [])}
+        shot_has_fade = [
+            any(idx in fade_indices for idx in range(s.start_index, s.end_index + 1))
+            for s in shots
+        ]
+
+        def shot_info(frame_index: int) -> tuple[int | None, bool, bool]:
+            """Returns (shot_index, is_shot_start, is_fade) for one frame index."""
+            i = bisect.bisect_right(shot_starts, frame_index) - 1
+            if i < 0 or not (shots[i].start_index <= frame_index <= shots[i].end_index):
+                return None, False, False
+            return i, frame_index == shots[i].start_index, shot_has_fade[i]
+
+        captioner = VisualCaptioner()
+        with ThreadPoolExecutor(max_workers=VISUAL_CAPTION_MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(
+                    captioner.caption, frame.path, is_shot_start=shot_info(frame.index)[1]
+                ): frame
+                for frame in keyframes
+            }
+            rows = []
+            for future in as_completed(futures):
+                frame = futures[future]
+                shot_index, is_shot_start, is_fade = shot_info(frame.index)
+                try:
+                    caption = future.result()
+                except (TransientError, PermanentError):
+                    logger.exception(
+                        "Captioning failed for frame %s, keeping row with empty caption fields",
+                        frame.index,
+                    )
+                    rows.append(VisualFrameRow(
+                        frame_id=dh.frame_id("v", frame),
+                        timestamp_ms=dh.timestamp_ms(frame),
+                        image_url=None,
+                        action=None,
+                        framing_composition=None,
+                        people=None,
+                        color_palette=None,
+                        background=None,
+                        technical_flags=[],
+                        shot_index=shot_index,
+                        is_shot_start=is_shot_start,
+                        is_fade=is_fade,
+                    ))
+                    continue
+                rows.append(VisualFrameRow(
+                    frame_id=dh.frame_id("v", frame),
+                    timestamp_ms=dh.timestamp_ms(frame),
+                    image_url=None,
+                    action=caption.action,
+                    framing_composition=caption.framing_composition,
+                    people=caption.people,
+                    color_palette=caption.color_palette,
+                    background=caption.background,
+                    technical_flags=caption.technical_flags,
+                    shot_index=shot_index,
+                    is_shot_start=is_shot_start,
+                    is_fade=is_fade,
+                ))
+
+        rows.sort(key=lambda r: r.timestamp_ms)
+        return VisualFrameResult(rows=rows)
 
     def analysis_tasks(self):
         return {

@@ -6,19 +6,22 @@ from pydantic import ValidationError
 pytestmark = pytest.mark.unit
 
 from analyzer.output_models import (
-    ContextResult,
-    ContextRow,
+    ColorPalette,
     LogoFrameResult,
     LogoFrameRow,
     OcrItem,
     OcrResult,
+    PeopleInfo,
     ProductFrameResult,
     ProductFrameRow,
+    SceneBackground,
     TaskFailure,
     TaskRow,
     TaskSuccess,
     TranscriptionResult,
     TranscriptSegment,
+    VisualFrameResult,
+    VisualFrameRow,
 )
 
 
@@ -100,7 +103,7 @@ def test_transcript_segment_requires_mandatory_fields():
         (OcrResult, "ocr_items"),
         (ProductFrameResult, "product_frames"),
         (LogoFrameResult, "logo_frames"),
-        (ContextResult, "context_results"),
+        (VisualFrameResult, "visual_frames"),
     ],
 )
 def test_result_envelope_table_names(result_cls, expected_table):
@@ -124,14 +127,14 @@ def test_result_envelope_accepts_empty_rows():
 # ---------------------------------------------------------------------------
 # Placeholder row models
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("row_cls", [OcrItem, ContextRow])
+@pytest.mark.parametrize("row_cls", [OcrItem])
 def test_placeholder_rows_have_no_fields(row_cls):
     assert row_cls.model_fields == {}
     # Constructs with no arguments.
     assert row_cls() is not None
 
 
-@pytest.mark.parametrize("row_cls", [OcrItem, ContextRow])
+@pytest.mark.parametrize("row_cls", [OcrItem])
 def test_placeholder_rows_reject_unknown_field(row_cls):
     with pytest.raises(ValidationError):
         row_cls(anything="x")
@@ -185,6 +188,73 @@ def test_logo_frame_row_rejects_bad_reference_match():
             confidence_score=0.9,
             prominence="small_corner",
             reference_match="not_a_real_value",
+        )
+
+
+# ---------------------------------------------------------------------------
+# VisualFrameRow
+# ---------------------------------------------------------------------------
+def test_visual_frame_row_valid_construction_all_fields():
+    row = VisualFrameRow(
+        frame_id="v_000010",
+        timestamp_ms=1000,
+        image_url="https://example.com/frame.jpg",
+        action="person picks up product",
+        framing_composition="close-up",
+        people=PeopleInfo(
+            count=1,
+            apparent_ages=["adult"],
+            apparent_presentation=["feminine"],
+            activity="holding product",
+            clothing_style="casual",
+        ),
+        color_palette=ColorPalette(
+            dominant_colors=["blue", "white"],
+            lighting_quality="bright",
+        ),
+        background=SceneBackground(location_type="kitchen", mood="cozy"),
+        technical_flags=["ai_artifacts", "illegible_text"],
+        shot_index=2,
+        is_shot_start=True,
+        is_fade=False,
+    )
+    assert row.frame_id == "v_000010"
+    assert row.people.count == 1
+    assert row.color_palette.lighting_quality == "bright"
+    assert row.background.location_type == "kitchen"
+    assert row.technical_flags == ["ai_artifacts", "illegible_text"]
+
+
+def test_visual_frame_row_valid_construction_required_only():
+    row = VisualFrameRow(frame_id="v_000010", timestamp_ms=1000, action="pan across shelf")
+    assert row.image_url is None
+    assert row.framing_composition is None
+    assert row.people is None
+    assert row.color_palette is None
+    assert row.background is None
+    assert row.technical_flags == []
+    assert row.shot_index is None
+    assert row.is_shot_start is False
+    assert row.is_fade is False
+
+
+def test_visual_frame_row_rejects_bad_technical_flag():
+    with pytest.raises(ValidationError):
+        VisualFrameRow(
+            frame_id="v_000010",
+            timestamp_ms=1000,
+            action="pan across shelf",
+            technical_flags=["not_a_real_flag"],
+        )
+
+
+def test_visual_frame_row_rejects_unknown_field():
+    with pytest.raises(ValidationError):
+        VisualFrameRow(
+            frame_id="v_000010",
+            timestamp_ms=1000,
+            action="pan across shelf",
+            processing_id="proc-1",
         )
 
 

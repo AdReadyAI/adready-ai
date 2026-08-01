@@ -1,15 +1,25 @@
+import math
 from contextlib import contextmanager
 
 from psycopg2.extras import Json
 
 from analyzer.frame_sampling.probes.quality import QualityFlag
+from analyzer.frame_sampling.probes.scene import SceneProbeResult
 from analyzer.output_models import TaskResult
+from analyzer.types import VideoMetadata
 
 
 def _adapt(value):
     if isinstance(value, (dict, list)):
         return Json(value)
     return value
+
+
+def _aspect_ratio(width: int, height: int) -> str:
+    if width <= 0 or height <= 0:
+        return "unknown"
+    divisor = math.gcd(width, height)
+    return f"{width // divisor}:{height // divisor}"
 
 
 class Supabase:
@@ -80,6 +90,47 @@ class Supabase:
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                 """,
                 values,
+            )
+
+    def persist_video_metadata(
+        self, metadata: VideoMetadata, scene_result: SceneProbeResult | None
+    ) -> None:
+        """Upsert (not insert) this request's video_metadata row: a retried/
+        redelivered job reruns preprocessing in full and must overwrite the
+        previous row rather than fail or duplicate it.
+        """
+        pacing = scene_result.pacing if scene_result else {}
+        with self.transaction():
+            self.cur.execute(
+                """
+                INSERT INTO video_metadata (
+                    request_id, duration_ms, aspect_ratio, resolution,
+                    shot_count, cuts_per_second, avg_shot_s, min_shot_s, max_shot_s,
+                    dynamism
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (request_id) DO UPDATE SET
+                    duration_ms = EXCLUDED.duration_ms,
+                    aspect_ratio = EXCLUDED.aspect_ratio,
+                    resolution = EXCLUDED.resolution,
+                    shot_count = EXCLUDED.shot_count,
+                    cuts_per_second = EXCLUDED.cuts_per_second,
+                    avg_shot_s = EXCLUDED.avg_shot_s,
+                    min_shot_s = EXCLUDED.min_shot_s,
+                    max_shot_s = EXCLUDED.max_shot_s,
+                    dynamism = EXCLUDED.dynamism;
+                """,
+                (
+                    self.request_id,
+                    round(metadata.duration_s * 1000),
+                    _aspect_ratio(metadata.width, metadata.height),
+                    f"{metadata.width}x{metadata.height}",
+                    pacing.get("shot_count"),
+                    pacing.get("cuts_per_second"),
+                    pacing.get("avg_shot_s"),
+                    pacing.get("min_shot_s"),
+                    pacing.get("max_shot_s"),
+                    scene_result.dynamism if scene_result else None,
+                ),
             )
 
     def completed_analyzers(self) -> set[str]:

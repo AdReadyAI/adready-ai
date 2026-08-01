@@ -22,6 +22,13 @@ RETRY_BASE_DELAY = 5
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# Vision model for captioning — unvalidated starting point, tune once real outputs can be reviewed.
+OPENROUTER_VISION_MODEL = os.getenv("OPENROUTER_VISION_MODEL", "google/gemini-2.5-flash")
+OPENROUTER_VISION_TIMEOUT = 30
+# matches FrameSampler's analysis long-side cap
+VISUAL_CAPTION_LONG_SIDE = 384
+# unvalidated starting point — tune once real OpenRouter rate limits are known
+VISUAL_CAPTION_MAX_WORKERS = 4
 
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 
@@ -43,6 +50,12 @@ ADAPTIVE_MAX_GAP_S = 2.0
 SCENE_CUT_THRESHOLD = 27.0  
 SCENE_CONTENT_SCALE = 100.0    # Still not sure about the exact value wasn't able to find anything on line
 SCENE_MIN_SHOT_FRAMES = 12
+
+# Dynamism thresholds on avg content_val (0-1, excluding shot-boundary
+# frames) — unvalidated starting points, tune against real ad footage once
+# flagged videos can be reviewed (same spirit as QUALITY_*/FOCUS_* above).
+DYNAMISM_MOSTLY_STATIC_MAX = 0.15
+DYNAMISM_MODERATE_MAX = 0.45
 
 
 # QualityProbe (Layer-A) thresholds — unvalidated starting points, tune against

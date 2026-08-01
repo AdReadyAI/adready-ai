@@ -58,6 +58,16 @@ should primarily use structured fields.
 * **`dropped_frame_markers`**: Integer array - timestamps where dropped frames or
   stutter were detected.
 * **`corruption_detected`**: Boolean, optional - file-level media integrity flag.
+* **`shot_count`**: Integer, optional - number of detected shots/cuts across the
+  video.
+* **`cuts_per_second`**: Number, optional - cut frequency, a deterministic
+  pacing signal.
+* **`avg_shot_s`** / **`min_shot_s`** / **`max_shot_s`**: Number, optional -
+  shot-length statistics in seconds.
+* **`dynamism`**: `"mostly_static" | "moderate" | "dynamic"`, optional - coarse
+  per-video motion signal derived from frame-to-frame content change,
+  excluding cut frames. Replaces per-frame `camera_movement` (a single still
+  frame can't reliably show motion).
 
 ### Transcript Segments
 
@@ -92,15 +102,23 @@ evidence they used.
 * **`frame_id`**: String.
 * **`timestamp_ms`**: Integer.
 * **`image_url`**: String, optional - stored frame asset URL if available.
-* **`visual_description`**: String - concise description of visible action,
-  environment, product, logo, text, and notable quality issues.
+* **`action`**: String, optional - what is happening right now in this frame
+  (the main visible action or activity); may be absent if captioning failed
+  for that frame.
+* **`framing_composition`**: String, optional - shot type/composition
+  (close-up, medium, wide, subject placement).
 * **`people`**: Object, optional - count, apparent age descriptors,
   presentation descriptors, activity, and clothing style.
 * **`color_palette`**: Object, optional - dominant colors and lighting quality.
 * **`background`**: Object, optional - location type and mood.
-* **`camera_movement`**: `"static" | "pan" | "zoom" | "handheld"`, optional.
-* **`technical_flags`**: String array - visual artifacts, bad transitions,
-  framing problems, or other notable quality issues.
+* **`technical_flags`**: String array, values from a fixed vocabulary -
+  `"ai_artifacts" | "poor_framing_lighting" | "jarring_transitions" |
+  "illegible_text"`.
+* **`shot_index`**: Integer, optional - index into the video's detected shots
+  this frame belongs to.
+* **`is_shot_start`**: Boolean - whether this frame is the first frame of its
+  shot (immediately after a cut).
+* **`is_fade`**: Boolean - whether this frame's shot contains a detected fade.
 
 ### Product Frames
 
@@ -131,6 +149,26 @@ Logo visibility is frame-based and may overlap with product frames.
 * **`reference_match`**:
   `"matches_reference" | "differs_from_reference" | "cannot_determine"`,
   optional.
+
+### Quality Frames
+
+Deterministic, CV-detected frame-level quality evidence — complementary to
+(not a replacement for) `technical_flags` on Visual Frames, which are
+VLM-judged.
+
+* **`frame_id`**: String.
+* **`timestamp_ms`**: Integer.
+* **`reasons`**: String array - why this frame was flagged, e.g. `"blur"`,
+  `"exposure"`, `"contrast"`, `"noise"`, `"blockiness"`, `"cut"`, `"flicker"`,
+  `"freeze"`, `"cut_to_black"`.
+* **`sharpness`**: Number, optional - Laplacian-variance sharpness metric.
+* **`crushed_frac`** / **`blown_frac`**: Number, optional - fraction of
+  clipped-black / clipped-white pixels.
+* **`mean_luma`**: Number, optional - mean brightness.
+* **`contrast`**: Number, optional - luma standard deviation.
+* **`grain`**: Number, optional - noise proxy.
+* **`blockiness`**: Number, optional - compression-artifact proxy.
+* **`temporal_delta`**: Number, optional - frame-to-frame luma change.
 
 ### Product Context
 
