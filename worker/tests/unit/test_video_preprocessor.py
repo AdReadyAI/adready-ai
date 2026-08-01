@@ -265,15 +265,15 @@ def test_sample_frames_delegates_to_frame_sampler(tmp_path, monkeypatch):
     ctor = MagicMock(return_value=sampler)
     monkeypatch.setattr(vp, "FrameSampler", ctor)
 
-    out = _pre(tmp_path)._sample_frames("v.mp4", meta)
+    out = _pre(tmp_path)._sample_frames("v.mp4", meta, ["p1"], ["l1"])
 
     assert out == ["frame"]
     ctor.assert_called_once_with(
         "v.mp4",
         meta,
         str(tmp_path),
-        product_image_paths=["p"],
-        logo_paths=["l"],
+        product_image_paths=["p1"],
+        logo_paths=["l1"],
     )
 
 
@@ -284,7 +284,10 @@ def test_prepare_builds_artifacts(tmp_path, monkeypatch):
     monkeypatch.setattr(pre, "_download_video", lambda: "v.mp4")
     monkeypatch.setattr(pre, "_probe_metadata", lambda p: meta)
     monkeypatch.setattr(pre, "_extract_audio", lambda p: "a.wav")
-    monkeypatch.setattr(pre, "_sample_frames", lambda p, m: [])
+    monkeypatch.setattr(
+        pre, "_download_reference_images", lambda paths, subfolder: []
+    )
+    monkeypatch.setattr(pre, "_sample_frames", lambda p, m, prod, logo: [])
 
     art = pre.prepare()
 
@@ -295,3 +298,32 @@ def test_prepare_builds_artifacts(tmp_path, monkeypatch):
     assert art.frames == ()
     assert art.video_metadata is meta
     assert art.work_dir == str(tmp_path)
+
+
+def test_prepare_threads_reference_image_paths_to_sample_frames(tmp_path, monkeypatch):
+    pre = _pre(tmp_path)
+    meta = VideoMetadata(12.5, 30.0, 1920, 1080, 999)
+    monkeypatch.setattr(pre, "_download_video", lambda: "v.mp4")
+    monkeypatch.setattr(pre, "_probe_metadata", lambda p: meta)
+    monkeypatch.setattr(pre, "_extract_audio", lambda p: "a.wav")
+
+    downloaded = {"product_images": ["local/product0.jpg"], "logo_images": ["local/logo0.jpg"]}
+    monkeypatch.setattr(
+        pre,
+        "_download_reference_images",
+        lambda paths, subfolder: downloaded[subfolder],
+    )
+
+    captured = {}
+
+    def fake_sample_frames(video_path, metadata, product_image_paths, logo_paths):
+        captured["product_image_paths"] = product_image_paths
+        captured["logo_paths"] = logo_paths
+        return []
+
+    monkeypatch.setattr(pre, "_sample_frames", fake_sample_frames)
+
+    pre.prepare()
+
+    assert captured["product_image_paths"] == ["local/product0.jpg"]
+    assert captured["logo_paths"] == ["local/logo0.jpg"]

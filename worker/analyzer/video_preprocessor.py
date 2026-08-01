@@ -33,7 +33,15 @@ class VideoPreprocessor:
         video_path = self._download_video()
         metadata = self._probe_metadata(video_path)
         audio_path = self._extract_audio(video_path)
-        frames = self._sample_frames(video_path, metadata)
+        product_image_paths = self._download_reference_images(
+            self.job_payload.product_image_paths, "product_images"
+        )
+        logo_paths = self._download_reference_images(
+            self.job_payload.logo_paths, "logo_images"
+        )
+        frames = self._sample_frames(
+            video_path, metadata, product_image_paths, logo_paths
+        )
 
         return Artifacts(
             job_id=self.job_payload.request_id,
@@ -46,20 +54,12 @@ class VideoPreprocessor:
             probe_results=self._probe_results,
         )
 
-    def _download_video(self) -> str:
-        """Fetch video from Supabase Storage into work_dir; return local path."""
+    def _download_object(self, storage_path: str, local_path: str, kind: str) -> None:
+        """Fetch a single object from Supabase Storage to a local path."""
         bucket = self.job_payload.bucket
-        video_storage_path = self.job_payload.video_path
-
-        object_path = "/".join(quote(seg) for seg in video_storage_path.split("/"))
+        object_path = "/".join(quote(seg) for seg in storage_path.split("/"))
         url = f"{SUPABASE_URL}/storage/v1/object/{quote(bucket)}/{object_path}"
         session = get_storage_session()
-
-        ext = os.path.splitext(video_storage_path)[1]
-        if not ext:
-            raise PermanentError("Video extension not available")
-        local_path = os.path.join(self.work_dir, f"video{ext}")
-        logger.info("Downloading video %s/%s", bucket, video_storage_path)
 
         try:
             with session.get(
@@ -70,22 +70,51 @@ class VideoPreprocessor:
                     for chunk in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
                         f.write(chunk)
         except requests.Timeout as e:
-            raise TransientError(f"Video download timed out: {e}")
+            raise TransientError(f"{kind} download timed out: {e}")
         except requests.HTTPError as e:
             code = e.response.status_code
             if code == 404:
-                raise PermanentError(
-                    f"Video not found: {bucket}/{video_storage_path}"
-                )
+                raise PermanentError(f"{kind} not found: {bucket}/{storage_path}")
             if code in (401, 403):
                 raise PermanentError(f"Storage access denied ({code}): {e}")
             if code in (408, 429) or code >= 500:
                 raise TransientError(f"Storage temporarily unavailable ({code}): {e}")
-            raise PermanentError(f"Video download failed ({code}): {e}")
+            raise PermanentError(f"{kind} download failed ({code}): {e}")
         except requests.RequestException as e:
-            raise TransientError(f"Video download connection error: {e}")
+            raise TransientError(f"{kind} download connection error: {e}")
 
+    def _download_video(self) -> str:
+        """Fetch video from Supabase Storage into work_dir; return local path."""
+        video_storage_path = self.job_payload.video_path
+
+        ext = os.path.splitext(video_storage_path)[1]
+        if not ext:
+            raise PermanentError("Video extension not available")
+        local_path = os.path.join(self.work_dir, f"video{ext}")
+        logger.info(
+            "Downloading video %s/%s", self.job_payload.bucket, video_storage_path
+        )
+
+        self._download_object(video_storage_path, local_path, kind="Video")
         return local_path
+
+    def _download_reference_images(
+        self, storage_paths: list[str], subfolder: str
+    ) -> list[str]:
+        """Fetch reference product/logo images into a dedicated work_dir subfolder."""
+        folder = os.path.join(self.work_dir, subfolder)
+        os.makedirs(folder, exist_ok=True)
+
+        local_paths = []
+        for i, storage_path in enumerate(storage_paths):
+            ext = os.path.splitext(storage_path)[1] or ".jpg"
+            local_path = os.path.join(folder, f"{i}{ext}")
+            logger.info(
+                "Downloading %s %s/%s", subfolder, self.job_payload.bucket, storage_path
+            )
+            self._download_object(storage_path, local_path, kind=subfolder)
+            local_paths.append(local_path)
+        return local_paths
 
     def _probe_metadata(self, video_path) -> VideoMetadata:
         """duration, fps, width, height, size — via ffprobe."""
@@ -180,14 +209,20 @@ class VideoPreprocessor:
 
         return audio_path
 
-    def _sample_frames(self, video_path, metadata: VideoMetadata) -> list[Frame]:
+    def _sample_frames(
+        self,
+        video_path,
+        metadata: VideoMetadata,
+        product_image_paths: list[str],
+        logo_paths: list[str],
+    ) -> list[Frame]:
         """Decode once and select tagged frames via the probe pipeline."""
         sampler = FrameSampler(
             video_path,
             metadata,
             self.work_dir,
-            product_image_paths=self.job_payload.product_image_paths,
-            logo_paths=self.job_payload.logo_paths,
+            product_image_paths=product_image_paths,
+            logo_paths=logo_paths,
         )
         frames = sampler.run()
         self._probe_results = sampler.probe_results
