@@ -323,7 +323,9 @@ def test_prepare_threads_reference_image_paths_to_sample_frames(tmp_path, monkey
 
     monkeypatch.setattr(pre, "_sample_frames", fake_sample_frames)
 
-    pre.prepare()
+    art = pre.prepare()
 
     assert captured["product_image_paths"] == ["local/product0.jpg"]
     assert captured["logo_paths"] == ["local/logo0.jpg"]
+    assert art.product_image_paths == ("local/product0.jpg",)
+    assert art.logo_paths == ("local/logo0.jpg",)

@@ -14,6 +14,7 @@ from analyzer.frame_sampling.deferred import Candidate, DeferredModelProbe
 from config.models import get_mobileclip
 
 _PHASH_DISTANCE_THRESHOLD = 8
+_MIN_CANDIDATE_SPACING_S = 0.5  # never keep two candidates closer than this
 
 # TODO: THESE WILL BE REDEFINED AFTER TESTING
 _ORB_DISTANCE_THRESHOLD = 50  # max Hamming distance to count a keypoint match as "good"
@@ -47,20 +48,12 @@ class ReferenceMatchResult(ProbeResult):
 
 
 class ReferenceMatchProbe(DeferredModelProbe):
-    """Cost-cascaded reference-image presence: cheap pHash-novelty gate ->
-    MobileCLIP similarity / ORB match -> tag confirmed frames and track
-    presence intervals.
-
-    The expensive model runs on collected candidates (deferred batch), not
-    inline on every frame.
-
-    Subclasses only need to supply which reference image paths to match
-    against (product images vs. logo images) and the tag/name to emit.
-    """
+    """Cost-cascaded reference-image presence"""
 
     def __init__(self) -> None:
         super().__init__()
         self._last_hash: imagehash.ImageHash | None = None
+        self._last_kept_timestamp: float | None = None
         self._clip_model = None
         self._clip_preprocess = None
         self._ref_clip_embeds: torch.Tensor | None = None
@@ -108,7 +101,12 @@ class ReferenceMatchProbe(DeferredModelProbe):
 
     def _gate(self, ctx: FrameContext) -> bool:
         if self._clip_preprocess is None:
-            # No reference images configured for this run; nothing to match.
+            return False
+
+        if (
+            self._last_kept_timestamp is not None
+            and ctx.timestamp - self._last_kept_timestamp < _MIN_CANDIDATE_SPACING_S
+        ):
             return False
 
         rgb = ctx.small[:, :, ::-1]
@@ -116,6 +114,7 @@ class ReferenceMatchProbe(DeferredModelProbe):
 
         if self._last_hash is None or (current_hash - self._last_hash) >= _PHASH_DISTANCE_THRESHOLD:
             self._last_hash = current_hash
+            self._last_kept_timestamp = ctx.timestamp
             return True
         return False
 

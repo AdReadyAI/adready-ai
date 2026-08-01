@@ -53,6 +53,12 @@ export async function loadAgentContext(
   const transcriptionId = processing?.find((row) =>
     row.task_name === "transcription"
   )?.id;
+  const productDetectionId = processing?.find((row) =>
+    row.task_name === "product_detection"
+  )?.id;
+  const logoDetectionId = processing?.find((row) =>
+    row.task_name === "logo_detection"
+  )?.id;
 
   const [
     briefResponse,
@@ -83,12 +89,16 @@ export async function loadAgentContext(
     supabase.from("visual_frames").select(
       "frame_id, timestamp_ms, image_url, visual_description, people, color_palette, background, camera_movement, technical_flags",
     ).eq("request_id", requestId),
-    supabase.from("product_frames").select(
-      "frame_id, timestamp_ms, location, confidence_score, prominence, focus_quality, framing, usage_context",
-    ).eq("request_id", requestId),
-    supabase.from("logo_frames").select(
-      "frame_id, timestamp_ms, location, confidence_score, prominence, reference_match",
-    ).eq("request_id", requestId),
+    productDetectionId
+      ? supabase.from("product_frames").select(
+        "frame_id, timestamp_ms, location, confidence_score, prominence, focus_quality, framing",
+      ).eq("processing_id", productDetectionId)
+      : Promise.resolve({ data: [], error: null }),
+    logoDetectionId
+      ? supabase.from("logo_frames").select(
+        "frame_id, timestamp_ms, location, confidence_score, prominence, reference_match",
+      ).eq("processing_id", logoDetectionId)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   for (

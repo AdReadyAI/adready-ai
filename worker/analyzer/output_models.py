@@ -62,14 +62,44 @@ class OcrResult(TaskResult[OcrItem]):
 
 
 # ==============================================
-#  object_detection  ->  object_detection_items
+#  product_detection  ->  product_frames
 # ==============================================
 
-class ObjectDetectionItem(TaskRow):
-    pass
+class ProductFrameRow(TaskRow):
+    frame_id: str
+    timestamp_ms: int
+    location: dict | None = None
+    confidence_score: float
+    prominence: Literal[
+        "foreground_in_use", "foreground_static", "background", "not_visible"
+    ]
+    focus_quality: Literal["sharp", "soft_focus", "blurry"] | None = None
+    framing: Literal[
+        "fully_visible", "partially_cropped", "heavily_obscured"
+    ] | None = None
 
-class ObjectDetectionResult(TaskResult[ObjectDetectionItem]):
-    table: ClassVar[str] = "object_detection_items" #Table name should be updated to the actual name
+class ProductFrameResult(TaskResult[ProductFrameRow]):
+    table: ClassVar[str] = "product_frames"
+
+
+# ==============================================
+#  logo_detection  ->  logo_frames
+# ==============================================
+
+class LogoFrameRow(TaskRow):
+    frame_id: str
+    timestamp_ms: int
+    location: dict | None = None
+    confidence_score: float
+    prominence: Literal[
+        "large_central", "small_corner", "background_signage", "absent"
+    ]
+    reference_match: Literal[
+        "matches_reference", "differs_from_reference", "cannot_determine"
+    ]
+
+class LogoFrameResult(TaskResult[LogoFrameRow]):
+    table: ClassVar[str] = "logo_frames"
 
 
 # ==============================================

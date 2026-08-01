@@ -8,10 +8,12 @@ pytestmark = pytest.mark.unit
 from analyzer.output_models import (
     ContextResult,
     ContextRow,
+    LogoFrameResult,
+    LogoFrameRow,
     OcrItem,
     OcrResult,
-    ObjectDetectionItem,
-    ObjectDetectionResult,
+    ProductFrameResult,
+    ProductFrameRow,
     TaskFailure,
     TaskRow,
     TaskSuccess,
@@ -96,7 +98,8 @@ def test_transcript_segment_requires_mandatory_fields():
     [
         (TranscriptionResult, "transcript_segments"),
         (OcrResult, "ocr_items"),
-        (ObjectDetectionResult, "object_detection_items"),
+        (ProductFrameResult, "product_frames"),
+        (LogoFrameResult, "logo_frames"),
         (ContextResult, "context_results"),
     ],
 )
@@ -121,17 +124,68 @@ def test_result_envelope_accepts_empty_rows():
 # ---------------------------------------------------------------------------
 # Placeholder row models
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("row_cls", [OcrItem, ObjectDetectionItem, ContextRow])
+@pytest.mark.parametrize("row_cls", [OcrItem, ContextRow])
 def test_placeholder_rows_have_no_fields(row_cls):
     assert row_cls.model_fields == {}
     # Constructs with no arguments.
     assert row_cls() is not None
 
 
-@pytest.mark.parametrize("row_cls", [OcrItem, ObjectDetectionItem, ContextRow])
+@pytest.mark.parametrize("row_cls", [OcrItem, ContextRow])
 def test_placeholder_rows_reject_unknown_field(row_cls):
     with pytest.raises(ValidationError):
         row_cls(anything="x")
+
+
+# ---------------------------------------------------------------------------
+# ProductFrameRow / LogoFrameRow
+# ---------------------------------------------------------------------------
+def test_product_frame_row_valid_construction():
+    row = ProductFrameRow(
+        frame_id="p_000010",
+        timestamp_ms=1000,
+        location={"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4},
+        confidence_score=0.9,
+        prominence="foreground_static",
+        focus_quality="sharp",
+        framing="fully_visible",
+    )
+    assert row.frame_id == "p_000010"
+    assert row.prominence == "foreground_static"
+
+
+def test_product_frame_row_rejects_bad_prominence():
+    with pytest.raises(ValidationError):
+        ProductFrameRow(
+            frame_id="p_000010",
+            timestamp_ms=1000,
+            confidence_score=0.9,
+            prominence="not_a_real_value",
+        )
+
+
+def test_logo_frame_row_valid_construction():
+    row = LogoFrameRow(
+        frame_id="l_000010",
+        timestamp_ms=1000,
+        location={"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4},
+        confidence_score=0.9,
+        prominence="small_corner",
+        reference_match="matches_reference",
+    )
+    assert row.frame_id == "l_000010"
+    assert row.reference_match == "matches_reference"
+
+
+def test_logo_frame_row_rejects_bad_reference_match():
+    with pytest.raises(ValidationError):
+        LogoFrameRow(
+            frame_id="l_000010",
+            timestamp_ms=1000,
+            confidence_score=0.9,
+            prominence="small_corner",
+            reference_match="not_a_real_value",
+        )
 
 
 # ---------------------------------------------------------------------------

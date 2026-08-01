@@ -64,7 +64,6 @@ Deno.test("agent context accepts nullable Postgres evidence columns", () => {
       prominence: null,
       focus_quality: null,
       framing: null,
-      usage_context: null,
     }],
     logo_frames: [{
       frame_id: "frame-1",

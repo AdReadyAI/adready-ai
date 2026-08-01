@@ -116,7 +116,6 @@ Product visibility is frame-based, not moment-based.
 * **`focus_quality`**: `"sharp" | "soft_focus" | "blurry"`, optional.
 * **`framing`**: `"fully_visible" | "partially_cropped" | "heavily_obscured"`,
   optional.
-* **`usage_context`**: String, optional.
 
 ### Logo Frames
 

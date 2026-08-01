@@ -4,11 +4,14 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
+from psycopg2.extras import Json
+
 from app.supabase import Supabase
 from analyzer.frame_sampling.probes.quality import QualityFlag
 from analyzer.output_models import (
     OcrItem,
     OcrResult,
+    ProductFrameRow,
     TranscriptionResult,
     TranscriptSegment,
 )
@@ -199,6 +202,27 @@ def test_replace_rows_placeholder_row_with_no_fields():
     insert_sql, values = cur.executemany_calls[0]
     assert "INSERT INTO ocr_items (processing_id) VALUES (%s);" == insert_sql
     assert values == [("proc-1",)]
+
+
+def test_replace_rows_wraps_dict_fields_for_jsonb():
+    """product_frames/logo_frames.location is jsonb; a raw dict has no psycopg2
+    adapter, so it must be wrapped (e.g. psycopg2.extras.Json) before insert."""
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+    row = ProductFrameRow(
+        frame_id="p_000001",
+        timestamp_ms=1000,
+        location={"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4},
+        confidence_score=0.9,
+        prominence="foreground_static",
+    )
+
+    db._replace_rows("product_frames", "proc-1", [row])
+
+    _, values = cur.executemany_calls[0]
+    location_value = values[0][3]
+    assert isinstance(location_value, Json)
+    assert location_value.adapted == {"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4}
 
 
 # ---------------------------------------------------------------------------
