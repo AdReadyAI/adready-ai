@@ -51,6 +51,12 @@ SCENE_CUT_THRESHOLD = 27.0
 SCENE_CONTENT_SCALE = 100.0    # Still not sure about the exact value wasn't able to find anything on line
 SCENE_MIN_SHOT_FRAMES = 12
 
+# Dynamism thresholds on avg content_val (0-1, excluding shot-boundary
+# frames) — unvalidated starting points, tune against real ad footage once
+# flagged videos can be reviewed (same spirit as QUALITY_*/FOCUS_* above).
+DYNAMISM_MOSTLY_STATIC_MAX = 0.15
+DYNAMISM_MODERATE_MAX = 0.45
+
 
 # QualityProbe (Layer-A) thresholds — unvalidated starting points, tune against
 # real ad footage once flagged frames can be reviewed.
