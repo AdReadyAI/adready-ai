@@ -171,6 +171,7 @@ def _wire_process_message(
     recorder=None,
     probe_results=None,
     fail_quality_persist=False,
+    fail_video_metadata_persist=False,
 ):
     class FakePreprocessor:
         def __init__(self, request_id, work_dir):
@@ -180,7 +181,9 @@ def _wire_process_message(
             # A bare object() no longer satisfies process_message(), which now
             # reads artifact.probe_results — mirror the real Artifacts contract
             # just enough for that access to work.
-            return SimpleNamespace(probe_results=probe_results or {})
+            return SimpleNamespace(
+                probe_results=probe_results or {}, video_metadata="VIDEO_METADATA"
+            )
 
     class FakeVideoAnalyzer:
         def __init__(self, artifact):
@@ -206,6 +209,12 @@ def _wire_process_message(
                 raise RuntimeError("db down")
             if recorder is not None:
                 recorder["quality_flags"] = flags
+
+        def persist_video_metadata(self, metadata, scene_result):
+            if fail_video_metadata_persist:
+                raise RuntimeError("db down")
+            if recorder is not None:
+                recorder["video_metadata"] = (metadata, scene_result)
 
     monkeypatch.setattr(processor, "VideoPreprocessor", FakePreprocessor)
     monkeypatch.setattr(processor, "VideoAnalyzer", FakeVideoAnalyzer)
@@ -301,6 +310,43 @@ def test_process_message_quality_persist_failure_does_not_abort_job(monkeypatch)
     processor.process_message(cur=object(), msg_id=5, payload=VALID_PAYLOAD)
 
     assert "quality_flags" not in recorder  # the failing call never recorded anything
+    results, errors = recorder["persisted"]
+    assert "transcription" in results  # but analysis still ran and persisted
+    assert errors == {}
+
+
+def test_process_message_persists_video_metadata(monkeypatch):
+    recorder = {}
+    scene_result = object()
+    probe_results = {"scene": scene_result}
+    tasks = {"transcription": lambda: None}
+    _wire_process_message(
+        monkeypatch, tasks, recorder=recorder, probe_results=probe_results
+    )
+
+    processor.process_message(cur=object(), msg_id=6, payload=VALID_PAYLOAD)
+
+    metadata, recorded_scene_result = recorder["video_metadata"]
+    assert metadata == "VIDEO_METADATA"
+    assert recorded_scene_result is scene_result
+
+
+def test_process_message_video_metadata_persist_failure_does_not_abort_job(monkeypatch):
+    # A DB error persisting video metadata must not prevent the paid analyzer
+    # calls from running or their results from being persisted.
+    recorder = {}
+    segment = TranscriptSegment(segment_id="tr_000", start_ms=0, end_ms=1, text="hi")
+    tasks = {"transcription": lambda: TranscriptionResult(rows=[segment])}
+    _wire_process_message(
+        monkeypatch,
+        tasks,
+        recorder=recorder,
+        fail_video_metadata_persist=True,
+    )
+
+    processor.process_message(cur=object(), msg_id=7, payload=VALID_PAYLOAD)
+
+    assert "video_metadata" not in recorder  # the failing call never recorded anything
     results, errors = recorder["persisted"]
     assert "transcription" in results  # but analysis still ran and persisted
     assert errors == {}
