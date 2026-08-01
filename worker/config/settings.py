@@ -45,6 +45,19 @@ SCENE_CONTENT_SCALE = 100.0    # Still not sure about the exact value wasn't abl
 SCENE_MIN_SHOT_FRAMES = 12
 
 
+# QualityProbe (Layer-A) thresholds — unvalidated starting points, tune against
+# real ad footage once flagged frames can be reviewed.
+QUALITY_SHARPNESS_MIN = 60.0          # Laplacian variance; below = blur
+QUALITY_EXPOSURE_CLIP_FRAC = 0.05     # fraction of pixels crushed/blown to flag
+QUALITY_EXPOSURE_MEAN_MIN = 12.0      # mean luma (0-255) below = near-black frame
+QUALITY_CONTRAST_MIN = 12.0           # luma std-dev below = flat/washed-out
+QUALITY_NOISE_MAX = 6.0               # median-residual std above = grainy
+QUALITY_BLOCKINESS_MAX = 1.8          # boundary/overall gradient-energy ratio above = blocky
+QUALITY_TEMPORAL_SPIKE_MAX = 25.0     # frame-to-frame mean-luma delta above = cut/flicker
+QUALITY_TEMPORAL_FREEZE_MIN = 0.5     # delta below = frame effectively unchanged
+QUALITY_FREEZE_MIN_FRAMES = 8         # consecutive unchanged frames before calling it frozen
+
+
 
 
 

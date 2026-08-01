@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 
+from analyzer.frame_sampling.probes.quality import QualityFlag
 from analyzer.output_models import TaskResult
 
 class Supabase:
@@ -30,6 +31,47 @@ class Supabase:
 
         for name, error in errors.items():
             self._upsert_processing(name, "error", None, error)
+
+    def persist_quality_frames(self, flags: list[QualityFlag]) -> None:
+        """Replace this request's flagged-frame evidence (delete + reinsert,
+        same as _replace_rows) so a retried job doesn't duplicate rows —
+        preprocessing has no completed-work checkpoint, so it reruns in full.
+        """
+        with self.transaction():
+            self.cur.execute(
+                "DELETE FROM quality_frames WHERE request_id = %s;",
+                (self.request_id,),
+            )
+            if not flags:
+                return
+
+            values = [
+                (
+                    self.request_id,
+                    f"q_{flag.index:06d}",
+                    round(flag.timestamp * 1000),
+                    list(flag.reasons),
+                    flag.scores.get("sharpness"),
+                    flag.scores.get("crushed_frac"),
+                    flag.scores.get("blown_frac"),
+                    flag.scores.get("mean_luma"),
+                    flag.scores.get("contrast"),
+                    flag.scores.get("grain"),
+                    flag.scores.get("blockiness"),
+                    flag.scores.get("temporal_delta"),
+                )
+                for flag in flags
+            ]
+            self.cur.executemany(
+                """
+                INSERT INTO quality_frames (
+                    request_id, frame_id, timestamp_ms, reasons,
+                    sharpness, crushed_frac, blown_frac, mean_luma,
+                    contrast, grain, blockiness, temporal_delta
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                """,
+                values,
+            )
 
     def completed_analyzers(self) -> set[str]:
         self.cur.execute(

@@ -25,6 +25,16 @@ def process_message(cur, msg_id, payload):
 
         analyzer = VideoAnalyzer(artifact)
         db = Supabase(cur=cur, request_id=request_id)
+
+        quality_result = artifact.probe_results.get("quality")
+        if quality_result is not None:
+            try:
+                db.persist_quality_frames(quality_result.flags)
+            except Exception:
+                logger.exception(
+                    "[job %s] failed to persist quality frames", msg_id
+                )
+
         results, errors = _run_analysis(db, analyzer)
 
         db.persist_results(results, errors)

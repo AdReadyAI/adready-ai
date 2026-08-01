@@ -1,5 +1,7 @@
 """Unit tests for the worker processor orchestration (app/processor.py)."""
 
+from types import SimpleNamespace
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -7,6 +9,7 @@ pytestmark = pytest.mark.unit
 import app.processor as processor  # noqa: E402
 from app.errors import PermanentError, TransientError  # noqa: E402
 from app.schemas import JobPayload  # noqa: E402
+from analyzer.frame_sampling.probes.quality import QualityFlag, QualityProbeResult  # noqa: E402
 from analyzer.output_models import TranscriptionResult, TranscriptSegment  # noqa: E402
 
 
@@ -161,13 +164,23 @@ def test_with_retry_does_not_retry_permanent_error():
 # ---------------------------------------------------------------------------
 # process_message()
 # ---------------------------------------------------------------------------
-def _wire_process_message(monkeypatch, tasks, done=None, recorder=None):
+def _wire_process_message(
+    monkeypatch,
+    tasks,
+    done=None,
+    recorder=None,
+    probe_results=None,
+    fail_quality_persist=False,
+):
     class FakePreprocessor:
         def __init__(self, request_id, work_dir):
             pass
 
         def prepare(self):
-            return object()
+            # A bare object() no longer satisfies process_message(), which now
+            # reads artifact.probe_results — mirror the real Artifacts contract
+            # just enough for that access to work.
+            return SimpleNamespace(probe_results=probe_results or {})
 
     class FakeVideoAnalyzer:
         def __init__(self, artifact):
@@ -187,6 +200,12 @@ def _wire_process_message(monkeypatch, tasks, done=None, recorder=None):
         def persist_results(self, results, errors):
             if recorder is not None:
                 recorder["persisted"] = (results, errors)
+
+        def persist_quality_frames(self, flags):
+            if fail_quality_persist:
+                raise RuntimeError("db down")
+            if recorder is not None:
+                recorder["quality_flags"] = flags
 
     monkeypatch.setattr(processor, "VideoPreprocessor", FakePreprocessor)
     monkeypatch.setattr(processor, "VideoAnalyzer", FakeVideoAnalyzer)
@@ -233,5 +252,55 @@ def test_process_message_with_all_stub_tasks_does_not_crash(monkeypatch):
 
     results, errors = recorder["persisted"]
     assert results == {}
+    assert errors == {}
+
+
+def test_process_message_persists_quality_frames(monkeypatch):
+    recorder = {}
+    flag = QualityFlag(index=0, timestamp=0.0, reasons=("blur",), scores={})
+    probe_results = {"quality": QualityProbeResult(flags=[flag])}
+    tasks = {"transcription": lambda: None}
+    _wire_process_message(
+        monkeypatch, tasks, recorder=recorder, probe_results=probe_results
+    )
+
+    processor.process_message(cur=object(), msg_id=3, payload=VALID_PAYLOAD)
+
+    assert recorder["quality_flags"] == [flag]
+
+
+def test_process_message_skips_quality_persist_when_probe_absent(monkeypatch):
+    # No "quality" key at all (e.g. the probe errored during sampling and got
+    # excluded from probe_results) -> persist_quality_frames must not be called.
+    recorder = {}
+    tasks = {"transcription": lambda: None}
+    _wire_process_message(monkeypatch, tasks, recorder=recorder)
+
+    processor.process_message(cur=object(), msg_id=4, payload=VALID_PAYLOAD)
+
+    assert "quality_flags" not in recorder
+
+
+def test_process_message_quality_persist_failure_does_not_abort_job(monkeypatch):
+    # A DB error persisting quality evidence must not prevent the paid
+    # analyzer calls from running or their results from being persisted.
+    recorder = {}
+    flag = QualityFlag(index=0, timestamp=0.0, reasons=("blur",), scores={})
+    probe_results = {"quality": QualityProbeResult(flags=[flag])}
+    segment = TranscriptSegment(segment_id="tr_000", start_ms=0, end_ms=1, text="hi")
+    tasks = {"transcription": lambda: TranscriptionResult(rows=[segment])}
+    _wire_process_message(
+        monkeypatch,
+        tasks,
+        recorder=recorder,
+        probe_results=probe_results,
+        fail_quality_persist=True,
+    )
+
+    processor.process_message(cur=object(), msg_id=5, payload=VALID_PAYLOAD)
+
+    assert "quality_flags" not in recorder  # the failing call never recorded anything
+    results, errors = recorder["persisted"]
+    assert "transcription" in results  # but analysis still ran and persisted
     assert errors == {}
 
