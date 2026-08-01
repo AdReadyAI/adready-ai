@@ -3,11 +3,7 @@
  * (metrics.ts): the all-passing happy path, and the overall result/severity/
  * confidence/explanation roll-up across sub-checks.
  *
- * Run with:
- *   deno test --allow-none visual-quality-agent/metrics.test.ts
- *
- * Behavior of individual sub-checks (video_corruption, dropped_frames, the
- * LLM-derived visual findings, illegible_text) lives in checks.test.ts.
+ * deno test --config supabase/deno.json supabase/tests/functions/unit/visual-quality/metrics.test.ts
  */
 
 import { assert, assertEquals } from "@std/assert";
@@ -96,7 +92,7 @@ Deno.test("aggregate: confidence is medium in the 0.5-0.8 band", () => {
   });
   const result = evaluateProductionReadiness(contextWithOcr, findings);
 
-  assert(result.confidence === "medium" || result.confidence === "high");
+  assert(result.confidence === "high");
 });
 
 Deno.test("aggregate: confidence is low when average confidence is below 0.5", () => {

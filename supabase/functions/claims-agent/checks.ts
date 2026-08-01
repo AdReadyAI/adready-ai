@@ -178,9 +178,7 @@ function parseLLMJson<T>(
     parsed = JSON.parse(stripped);
   } catch (e) {
     throw new Error(
-      `${context}: LLM response was not valid JSON (${
-        (e as Error).message
-      }). Raw response (first 300 chars): ${raw.slice(0, 300)}`,
+      `${context}: LLM response was not valid JSON (${(e as Error).message}).`,
     );
   }
   const result = schema.safeParse(parsed);

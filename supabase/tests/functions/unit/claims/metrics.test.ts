@@ -2,8 +2,7 @@
  * metrics.test.ts — Unit tests for the pure synthesis functions in
  * metrics.ts: evaluateProductTruth and evaluatePolicyCompliance.
  *
- * Run with:
- *   deno test --allow-none claims-agent/metrics.test.ts
+ * deno test --config supabase/deno.json supabase/tests/functions/unit/claims/metrics.test.ts
  */
 
 import { assert, assertEquals } from "@std/assert";

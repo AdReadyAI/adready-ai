@@ -4,11 +4,7 @@
  * the LLM-derived visual findings (ai_artifacts / poor_framing_lighting /
  * jarring_transitions), and illegible_text.
  *
- * Run with:
- *   deno test --allow-none visual-quality-agent/checks.test.ts
- *
- * Aggregate-level behavior (overall result/severity/confidence/explanation
- * roll-up, and the all-passing happy path) lives in metrics.test.ts.
+ * deno test --config supabase/deno.json supabase/tests/functions/unit/visual-quality/checks.test.ts
  */
 
 import { assertEquals, assertExists, assertThrows } from "@std/assert";
