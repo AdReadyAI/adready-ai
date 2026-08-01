@@ -18,7 +18,15 @@
  * DB CONTEXT:
  *   - Loads video metadata, transcript/OCR, visual frames, and platform context
  *     by request_id.
- *   - Uses frame-level visual context.
+ *   - Uses frame-level visual context: `action`/`framing_composition`
+ *     (replaces the old `visual_description`) plus deterministic shot/fade
+ *     linkage (`shot_index`, `is_shot_start`, `is_fade`) for cut-adjacency
+ *     without needing to re-derive it.
+ *   - `video_metadata` now also carries shot/pacing structure (`shot_count`,
+ *     `cuts_per_second`, `avg_shot_s`, `min_shot_s`, `max_shot_s`) and a
+ *     `dynamism` label (`mostly_static`/`moderate`/`dynamic`) — deterministic
+ *     signal directly relevant to pacing/narrative-gap checks, computed by
+ *     the worker rather than needing to be inferred from raw frame captions.
  *
  * OUTPUT JSON STRUCTURE:
  *   [

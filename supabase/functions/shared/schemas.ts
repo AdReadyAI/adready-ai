@@ -76,7 +76,8 @@ export const VisualFrameSchema = z.object({
   frame_id: z.string(),
   timestamp_ms: z.number().int().nonnegative(),
   image_url: optionalDatabaseField(z.string().url()),
-  visual_description: z.string(), // 1-3 sentences describing visual action
+  action: optionalDatabaseField(z.string()), // nullable: context() may fail to caption a frame
+  framing_composition: optionalDatabaseField(z.string()),
   people: optionalDatabaseField(
     z.object({
       count: z.number().int().nonnegative(),
@@ -98,12 +99,34 @@ export const VisualFrameSchema = z.object({
       mood: z.string(),
     }),
   ),
-  camera_movement: optionalDatabaseField(
-    z.enum(["static", "pan", "zoom", "handheld"]),
-  ),
-  technical_flags: z.array(z.string()).optional(),
+  technical_flags: z.array(
+    z.enum([
+      "ai_artifacts",
+      "poor_framing_lighting",
+      "jarring_transitions",
+      "illegible_text",
+    ]),
+  ).default([]),
+  shot_index: optionalDatabaseField(z.number().int().nonnegative()),
+  is_shot_start: z.boolean().default(false),
+  is_fade: z.boolean().default(false),
 });
 export type VisualFrame = z.infer<typeof VisualFrameSchema>;
+
+export const QualityFrameSchema = z.object({
+  frame_id: z.string(),
+  timestamp_ms: z.number().int().nonnegative(),
+  reasons: z.array(z.string()),
+  sharpness: optionalDatabaseField(z.number()),
+  crushed_frac: optionalDatabaseField(z.number()),
+  blown_frac: optionalDatabaseField(z.number()),
+  mean_luma: optionalDatabaseField(z.number()),
+  contrast: optionalDatabaseField(z.number()),
+  grain: optionalDatabaseField(z.number()),
+  blockiness: optionalDatabaseField(z.number()),
+  temporal_delta: optionalDatabaseField(z.number()),
+});
+export type QualityFrame = z.infer<typeof QualityFrameSchema>;
 
 export const ProductFrameSchema = z.object({
   frame_id: z.string(),
@@ -157,6 +180,14 @@ export const VideoMetadataSchema = z.object({
   resolution: z.string(),
   dropped_frame_markers: z.array(z.number().int().nonnegative()),
   corruption_detected: optionalDatabaseField(z.boolean()),
+  shot_count: optionalDatabaseField(z.number().int().nonnegative()),
+  cuts_per_second: optionalDatabaseField(z.number()),
+  avg_shot_s: optionalDatabaseField(z.number()),
+  min_shot_s: optionalDatabaseField(z.number()),
+  max_shot_s: optionalDatabaseField(z.number()),
+  dynamism: optionalDatabaseField(
+    z.enum(["mostly_static", "moderate", "dynamic"]),
+  ),
 });
 export type VideoMetadata = z.infer<typeof VideoMetadataSchema>;
 
@@ -182,6 +213,7 @@ export const AgentContextSchema = z.object({
   visual_frames: z.array(VisualFrameSchema),
   product_frames: z.array(ProductFrameSchema),
   logo_frames: z.array(LogoFrameSchema),
+  quality_frames: z.array(QualityFrameSchema),
   product_context: ProductContextSchema.optional(),
 });
 export type AgentContext = z.infer<typeof AgentContextSchema>;
