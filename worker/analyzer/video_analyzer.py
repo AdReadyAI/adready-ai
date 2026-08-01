@@ -3,14 +3,20 @@ import os
 import assemblyai as aai
 import httpx
 
-from analyzer.types import Artifacts
+from analyzer.types import Artifacts, Frame
+from analyzer import detection_heuristics as dh
+from analyzer.object_detector import Detection, ReferenceDetector
 from config.connection import get_aai_transcriber
+from config.settings import LOGO_DETECTION_LOW_CONFIDENCE, PRODUCT_DETECTION_CONFIDENCE
 from app.errors import PermanentError, TransientError
 
 from analyzer.output_models import (
     TranscriptSegment,
     TranscriptionResult,
-    ObjectDetectionResult,
+    LogoFrameResult,
+    LogoFrameRow,
+    ProductFrameResult,
+    ProductFrameRow,
     ContextResult,
     OcrResult
 )
@@ -87,11 +93,64 @@ class VideoAnalyzer:
     def ocr(self) -> OcrResult:
             pass
 
+    @analysis_task("product_detection")
+    def detect_product(self) -> ProductFrameResult:
+        rows = self._detect_reference_frames(
+            tag="product",
+            reference_paths=self.artifacts.product_image_paths,
+            confidence=PRODUCT_DETECTION_CONFIDENCE,
+            row_builder=self._product_row,
+        )
+        return ProductFrameResult(rows=rows)
 
-    @analysis_task("object_detection")
-    def detect_objects(self) -> ObjectDetectionResult:
-        pass
+    @analysis_task("logo_detection")
+    def detect_logo(self) -> LogoFrameResult:
+        rows = self._detect_reference_frames(
+            tag="logo",
+            reference_paths=self.artifacts.logo_paths,
+            confidence=LOGO_DETECTION_LOW_CONFIDENCE,
+            row_builder=self._logo_row,
+        )
+        return LogoFrameResult(rows=rows)
 
+    def _detect_reference_frames(self, tag, reference_paths, confidence, row_builder):
+        """Run OWLv2 on every candidate frame tagged `tag`; skip unconfirmed ones."""
+        candidates = [frame for frame in self.artifacts.frames if tag in frame.tags]
+        if not candidates or not reference_paths:
+            return []
+
+        detector = ReferenceDetector(list(reference_paths), label=tag)
+
+        rows = []
+        for frame in candidates:
+            detection = detector.detect(frame.path, confidence=confidence)
+            if detection is None:
+                continue
+            rows.append(row_builder(frame, detection))
+        return rows
+
+    @staticmethod
+    def _product_row(frame: Frame, detection: Detection) -> ProductFrameRow:
+        return ProductFrameRow(
+            frame_id=dh.frame_id("p", frame),
+            timestamp_ms=dh.timestamp_ms(frame),
+            location=dh.location(detection),
+            confidence_score=detection.confidence,
+            prominence=dh.product_prominence(detection),
+            focus_quality=dh.focus_quality(frame.path, detection),
+            framing=dh.framing(detection),
+        )
+
+    @staticmethod
+    def _logo_row(frame: Frame, detection: Detection) -> LogoFrameRow:
+        return LogoFrameRow(
+            frame_id=dh.frame_id("l", frame),
+            timestamp_ms=dh.timestamp_ms(frame),
+            location=dh.location(detection),
+            confidence_score=detection.confidence,
+            prominence=dh.logo_prominence(detection),
+            reference_match=dh.reference_match_label(detection.confidence),
+        )
 
     @analysis_task("context")
     def context(self) -> ContextResult:

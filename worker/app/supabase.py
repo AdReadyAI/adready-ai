@@ -1,7 +1,16 @@
 from contextlib import contextmanager
 
+from psycopg2.extras import Json
+
 from analyzer.frame_sampling.probes.quality import QualityFlag
 from analyzer.output_models import TaskResult
+
+
+def _adapt(value):
+    if isinstance(value, (dict, list)):
+        return Json(value)
+    return value
+
 
 class Supabase:
     def __init__(self, cur, request_id: str):
@@ -107,7 +116,7 @@ class Supabase:
         all_columns = ["processing_id", *columns]
         placeholders = "(" + ", ".join(["%s"] * len(all_columns)) + ")"
         values = [
-            (processing_id, *(getattr(row, c) for c in columns))
+            (processing_id, *(_adapt(getattr(row, c)) for c in columns))
             for row in rows
         ]
         self.cur.executemany(

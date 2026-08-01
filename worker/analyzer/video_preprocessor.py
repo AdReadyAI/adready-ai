@@ -52,6 +52,8 @@ class VideoPreprocessor:
             video_metadata=metadata,
             work_dir=self.work_dir,
             probe_results=self._probe_results,
+            product_image_paths=tuple(product_image_paths),
+            logo_paths=tuple(logo_paths),
         )
 
     def _download_object(self, storage_path: str, local_path: str, kind: str) -> None:

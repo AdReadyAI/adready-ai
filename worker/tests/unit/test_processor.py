@@ -243,7 +243,8 @@ def test_process_message_with_all_stub_tasks_does_not_crash(monkeypatch):
     tasks = {
         "transcription": lambda: None,
         "ocr": lambda: None,
-        "object_detection": lambda: None,
+        "product_detection": lambda: None,
+        "logo_detection": lambda: None,
         "context": lambda: None,
     }
     _wire_process_message(monkeypatch, tasks, recorder=recorder)

@@ -39,6 +39,6 @@ class FrameStore:
     def manifest(self) -> list[Frame]:
         """Build the tagged Frame manifest, ordered by frame index."""
         return [
-            Frame(timestamp=entry.timestamp, path=entry.path, tags=tuple(sorted(entry.tags)))
-            for _, entry in sorted(self._kept.items())
+            Frame(index=index, timestamp=entry.timestamp, path=entry.path, tags=tuple(sorted(entry.tags)))
+            for index, entry in sorted(self._kept.items())
         ]

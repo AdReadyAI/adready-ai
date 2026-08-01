@@ -125,7 +125,6 @@ export const ProductFrameSchema = z.object({
   framing: optionalDatabaseField(
     z.enum(["fully_visible", "partially_cropped", "heavily_obscured"]),
   ),
-  usage_context: optionalDatabaseField(z.string()),
 });
 export type ProductFrame = z.infer<typeof ProductFrameSchema>;
 

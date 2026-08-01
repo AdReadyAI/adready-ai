@@ -163,7 +163,27 @@ def test_gate_very_different_frame_is_novel():
     probe._clip_preprocess = lambda image: torch.zeros(3, 4, 4)
 
     assert probe._gate(_ctx(0, 0.0, _solid_frame(0))) is True
-    assert probe._gate(_ctx(1, 1 / 30, _checkerboard_frame())) is True
+    # Far enough past the min-spacing window that novelty alone decides it.
+    assert probe._gate(_ctx(30, 1.0, _checkerboard_frame())) is True
+
+
+# ---- _gate(): minimum candidate spacing ----
+def test_gate_suppresses_novel_frame_too_close_to_last_kept():
+    probe = _FakeReferenceProbe()
+    probe._clip_preprocess = lambda image: torch.zeros(3, 4, 4)
+
+    assert probe._gate(_ctx(0, 0.0, _solid_frame(0))) is True
+    # Novel content, but well within the min-spacing window -> suppressed.
+    assert probe._gate(_ctx(1, 0.1, _checkerboard_frame())) is False
+
+
+def test_gate_allows_novel_frame_once_spacing_elapses():
+    probe = _FakeReferenceProbe()
+    probe._clip_preprocess = lambda image: torch.zeros(3, 4, 4)
+
+    assert probe._gate(_ctx(0, 0.0, _solid_frame(0))) is True
+    assert probe._gate(_ctx(3, 0.1, _checkerboard_frame())) is False  # too close
+    assert probe._gate(_ctx(30, 1.0, _checkerboard_frame())) is True  # spacing OK
 
 
 # ---- _batch_infer(): ORB / CLIP cascade ----

@@ -199,3 +199,114 @@ class TestVideoAnalyzer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# detect_product / detect_logo (real object detection)
+# ---------------------------------------------------------------------------
+import numpy as np
+import cv2 as _cv2
+
+from analyzer.object_detector import Detection
+from analyzer.types import Frame, VideoMetadata
+
+
+def _artifacts(frames, product_image_paths=("ref_p.jpg",), logo_paths=("ref_l.jpg",)):
+    return Artifacts(
+        job_id="r1",
+        storage_ref="bucket/video.mp4",
+        video_path="v.mp4",
+        audio_path="a.wav",
+        frames=tuple(frames),
+        video_metadata=VideoMetadata(1.0, 30.0, 100, 100, 1),
+        work_dir="/tmp",
+        product_image_paths=tuple(product_image_paths),
+        logo_paths=tuple(logo_paths),
+    )
+
+
+def _analyzer(artifacts):
+    with patch("analyzer.video_analyzer.get_aai_transcriber", return_value=MagicMock()):
+        return VideoAnalyzer(artifacts)
+
+
+def test_detect_product_returns_empty_when_no_tagged_frames():
+    frames = [Frame(index=0, timestamp=0.0, path="f0.jpg", tags=("keyframe",))]
+    analyzer = _analyzer(_artifacts(frames))
+
+    result = analyzer.detect_product()
+
+    assert result.rows == []
+
+
+def test_detect_product_returns_empty_when_no_reference_paths():
+    frames = [Frame(index=0, timestamp=0.0, path="f0.jpg", tags=("product",))]
+    analyzer = _analyzer(_artifacts(frames, product_image_paths=()))
+
+    result = analyzer.detect_product()
+
+    assert result.rows == []
+
+
+def test_detect_product_skips_frames_the_detector_rejects():
+    frames = [Frame(index=3, timestamp=0.1, path="/tmp/frames/000003.jpg", tags=("product",))]
+    analyzer = _analyzer(_artifacts(frames))
+
+    with patch("analyzer.video_analyzer.ReferenceDetector") as mock_cls:
+        mock_cls.return_value.detect.return_value = None
+        result = analyzer.detect_product()
+
+    assert result.rows == []
+
+
+def test_detect_product_builds_row_for_confirmed_detection(tmp_path):
+    frame_path = tmp_path / "000003.jpg"
+    _cv2.imwrite(str(frame_path), np.random.randint(0, 255, (50, 50, 3), dtype=np.uint8))
+    frames = [Frame(index=3, timestamp=0.1, path=str(frame_path), tags=("product",))]
+    analyzer = _analyzer(_artifacts(frames))
+
+    detection = Detection(confidence=0.9, x=0.5, y=0.5, w=0.5, h=0.5)
+    with patch("analyzer.video_analyzer.ReferenceDetector") as mock_cls:
+        mock_cls.return_value.detect.return_value = detection
+        result = analyzer.detect_product()
+
+    assert len(result.rows) == 1
+    row = result.rows[0]
+    assert row.frame_id == "p_000003"
+    assert row.timestamp_ms == 100
+    assert row.confidence_score == 0.9
+    assert row.prominence == "foreground_static"  # area 0.25 >= large threshold
+    assert row.location == {"x": 0.5, "y": 0.5, "w": 0.5, "h": 0.5}
+
+
+def test_detect_logo_matches_reference_above_high_confidence(tmp_path):
+    frame_path = tmp_path / "000005.jpg"
+    _cv2.imwrite(str(frame_path), np.full((50, 50, 3), 128, dtype=np.uint8))
+    frames = [Frame(index=5, timestamp=0.2, path=str(frame_path), tags=("logo",))]
+    analyzer = _analyzer(_artifacts(frames))
+
+    detection = Detection(confidence=0.95, x=0.15, y=0.15, w=0.2, h=0.2)
+    with patch("analyzer.video_analyzer.ReferenceDetector") as mock_cls:
+        mock_cls.return_value.detect.return_value = detection
+        result = analyzer.detect_logo()
+
+    assert len(result.rows) == 1
+    row = result.rows[0]
+    assert row.frame_id == "l_000005"
+    assert row.reference_match == "matches_reference"
+    assert row.prominence == "small_corner"  # small + near a corner
+
+
+def test_detect_logo_low_confidence_is_cannot_determine(tmp_path):
+    frame_path = tmp_path / "000006.jpg"
+    _cv2.imwrite(str(frame_path), np.full((50, 50, 3), 128, dtype=np.uint8))
+    frames = [Frame(index=6, timestamp=0.2, path=str(frame_path), tags=("logo",))]
+    analyzer = _analyzer(_artifacts(frames))
+
+    detection = Detection(confidence=0.65, x=0.5, y=0.5, w=0.02, h=0.02)
+    with patch("analyzer.video_analyzer.ReferenceDetector") as mock_cls:
+        mock_cls.return_value.detect.return_value = detection
+        result = analyzer.detect_logo()
+
+    assert result.rows[0].reference_match == "cannot_determine"
+    assert result.rows[0].prominence == "background_signage"  # small + centered

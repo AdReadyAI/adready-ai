@@ -72,3 +72,31 @@ MOBILECLIP_WEIGHTS_PATH = os.getenv(
     "MOBILECLIP_WEIGHTS_PATH", "/app/assets/models/mobileclip_s0.pt"
 )
 MOBILECLIP_MODEL_NAME = os.getenv("MOBILECLIP_MODEL_NAME", "MobileCLIP-S0")
+
+# Roboflow OWLv2 image-guided detection (real bbox confirmation on candidate
+# frames already gated by ReferenceMatchProbe/ProductProbe/LogoProbe).
+ROBOFLOW_API_KEY = os.getenv("ROBOFLOW_API_KEY")
+ROBOFLOW_OWLV2_URL = os.getenv(
+    "ROBOFLOW_OWLV2_URL", "https://infer.roboflow.com/owlv2/infer"
+)
+ROBOFLOW_TIMEOUT = 30
+
+# Detection confidence thresholds — unvalidated starting points, tune against
+# real ad footage once flagged detections can be reviewed.
+PRODUCT_DETECTION_CONFIDENCE = 0.85
+LOGO_DETECTION_CONFIDENCE = 0.85
+LOGO_DETECTION_LOW_CONFIDENCE = 0.6  # below high, above this = "cannot_determine"
+
+# Prominence heuristics — fraction of frame area covered by the detected bbox.
+PROMINENCE_LARGE_AREA_FRAC = 0.15
+PROMINENCE_BACKGROUND_AREA_FRAC = 0.02
+
+# Framing heuristic — how close (as a fraction of frame width/height) a bbox
+# edge must be to the frame boundary to count as touching/cropped.
+FRAMING_EDGE_MARGIN_FRAC = 0.02
+
+# Focus-quality heuristic (Laplacian variance on the cropped bbox region,
+# same metric as QualityProbe but tuned for small crops rather than full
+# frames — unvalidated starting points).
+FOCUS_SHARP_MIN = 60.0
+FOCUS_BLURRY_MAX = 20.0
