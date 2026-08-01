@@ -66,11 +66,19 @@ def test_registered_probes_in_stage_order():
         "QualityProbe",
         "TextProbe",
         "ProductProbe",
+        "LogoProbe",
     ]
 
 
 def test_stage_is_strictly_ordered():
-    assert Stage.SCENE < Stage.SAMPLE < Stage.QUALITY < Stage.TEXT < Stage.PRODUCT
+    assert (
+        Stage.SCENE
+        < Stage.SAMPLE
+        < Stage.QUALITY
+        < Stage.TEXT
+        < Stage.PRODUCT
+        < Stage.LOGO
+    )
 
 
 def test_register_probe_sorts_by_stage(monkeypatch):

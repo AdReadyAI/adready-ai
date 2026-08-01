@@ -1,4 +1,5 @@
 from analyzer.frame_sampling.probes.adaptive import AdaptiveSampler
+from analyzer.frame_sampling.probes.logo import LogoProbe
 from analyzer.frame_sampling.probes.product import ProductProbe
 from analyzer.frame_sampling.probes.quality import QualityProbe
 from analyzer.frame_sampling.probes.scene import SceneProbe
@@ -10,4 +11,5 @@ __all__ = [
     "QualityProbe",
     "TextProbe",
     "ProductProbe",
+    "LogoProbe",
 ]

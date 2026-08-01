@@ -22,6 +22,7 @@ class Stage(IntEnum):
     QUALITY = 3
     TEXT = 4
     PRODUCT = 5
+    LOGO = 6
 
 @dataclass
 class FrameSelection:
