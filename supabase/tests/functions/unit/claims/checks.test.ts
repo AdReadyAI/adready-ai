@@ -7,8 +7,7 @@
  * are tested here -- the async wrappers (extractClaims, triageClaims,
  * substantiateClaims, checkCompliance) call chat() and are not unit tested.
  *
- * Run with:
- *   deno test --allow-none claims-agent/checks.test.ts
+ * deno test --config supabase/deno.json supabase/tests/functions/unit/claims/checks.test.ts
  */
 
 import { assert, assertEquals, assertThrows } from "@std/assert";

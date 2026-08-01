@@ -108,25 +108,51 @@ const FALLBACK_REGULATORY_EVIDENCE: Partial<
  * Created once at module load so the model's cold load/download happens
  * during function instance startup, not during the first inbound request.
  */
-// deno-lint-ignore no-explicit-any
-const embeddingSession: any = new (globalThis as any).Supabase.ai.Session(
-  EMBEDDING_MODEL,
-);
+type EmbeddingSessionLike = {
+  run: (
+    text: string,
+    options?: { mean_pool?: boolean; normalize?: boolean },
+  ) => Promise<unknown>;
+};
+
+type GlobalWithSupabaseAi = typeof globalThis & {
+  Supabase?: {
+    ai?: {
+      Session: new (model: string) => EmbeddingSessionLike;
+    };
+  };
+};
+
+let embeddingSession: EmbeddingSessionLike | null = null;
+try {
+  const globalWithSupabaseAi = globalThis as GlobalWithSupabaseAi;
+  const supabaseAi = globalWithSupabaseAi.Supabase?.ai;
+  if (supabaseAi?.Session) {
+    embeddingSession = new supabaseAi.Session(EMBEDDING_MODEL);
+  }
+} catch (e) {
+  console.warn(
+    "rag: Supabase AI embedding session unavailable; falling back to hardcoded guidance.",
+    e,
+  );
+}
 
 function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
   label: string,
 ): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`${label} timed out after ${ms}ms`)),
-        ms,
-      )
-    ),
-  ]);
+   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+   const timeout = new Promise<never>((_, reject) => {
+     timeoutId = setTimeout(
+       () => reject(new Error(`${label} timed out after ${ms}ms`)),
+       ms,
+     );
+   });
+   return Promise.race([promise, timeout])
+     .finally(() => {
+       if (timeoutId !== undefined) clearTimeout(timeoutId);
+     }) as Promise<T>;
 }
 
 /**
@@ -134,6 +160,9 @@ function withTimeout<T>(
  * inference model. Local inference, not a billed external call.
  */
 async function embedQuery(text: string): Promise<number[]> {
+  if (!embeddingSession) {
+     throw new Error("Supabase AI embedding session is not available in this runtime.");
+   }
   const output = await embeddingSession.run(text, {
     mean_pool: true,
     normalize: true,

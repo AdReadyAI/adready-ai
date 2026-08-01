@@ -15,9 +15,6 @@ export const VisualQualityAgentRequestSchema = AgentRunRequestSchema;
 
 export type VisualQualityAgentRequest = AgentRunRequest;
 
-export type VisualQualityAgentRunOptions = {
-  userId?: string;
-};
 
 /**
  * Runs the Visual Quality Agent pipeline.
@@ -30,14 +27,9 @@ export type VisualQualityAgentRunOptions = {
  */
 export async function runVisualQualityAgent(
   request: VisualQualityAgentRequest,
-  options: VisualQualityAgentRunOptions = {},
+  { userId }: { userId: string },
 ): Promise<MetricResult> {
-  const context = await loadAgentContext(
-    request.request_id,
-    {
-      userId: options.userId!,
-    },
-  );
+  const context = await loadAgentContext(request.request_id, { userId });
 
   const visualFindings = await auditVisualQuality(context);
 
