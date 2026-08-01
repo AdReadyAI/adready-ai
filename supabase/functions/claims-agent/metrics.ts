@@ -64,6 +64,22 @@ function truncate(text: string, max = 60): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+/**
+ * Removes exact-duplicate evidence entries (same type/text/timestamp),
+ * regardless of which claim(s) or check(s) produced them. Duplication can
+ * legitimately arise when extraction splits one spoken/on-screen line into
+ * multiple distinct claims that each cite the same underlying segment.
+ */
+function dedupeEvidence(evidence: EvidenceRef[]): EvidenceRef[] {
+  const seen = new Set<string>();
+  return evidence.filter((e) => {
+    const key = `${e.type}|${e.text}|${e.timestamp}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* product_truth                                                              */
 /* -------------------------------------------------------------------------- */
@@ -87,18 +103,21 @@ export function evaluateProductTruth(
   });
 
   // A flagged claim can occur more than once in the ad -- surface every
-  // instance as evidence, not just one.
-  const evidence: EvidenceRef[] = findings
-    .filter((f) => f.severity > 0)
-    .flatMap((f): EvidenceRef[] => {
-      const claim = claimById.get(f.claim_id);
-      if (!claim) return [];
-      return claim.instances.map((inst) => ({
-        type: inst.source,
-        text: inst.text,
-        timestamp: inst.timestamp,
-      }));
-    });
+  // instance as evidence, not just one. Deduped below since extraction can
+  // split one underlying segment into multiple claims that each cite it.
+  const evidence: EvidenceRef[] = dedupeEvidence(
+    findings
+      .filter((f) => f.severity > 0)
+      .flatMap((f): EvidenceRef[] => {
+        const claim = claimById.get(f.claim_id);
+        if (!claim) return [];
+        return claim.instances.map((inst) => ({
+          type: inst.source,
+          text: inst.text,
+          timestamp: inst.timestamp,
+        }));
+      }),
+  );
 
   const worstFinding = findings.reduce<SubstantiationFinding | null>(
     (worst, f) => (!worst || f.severity > worst.severity ? f : worst),
@@ -239,16 +258,16 @@ export function evaluatePolicyCompliance(
     confidence: worstFinding
       ? bucketConfidence(worstFinding.confidence_score)
       : "medium",
-    evidence,
+    evidence: dedupeEvidence(evidence),
     explanation: missingDisclaimer
       ? "A required disclaimer is missing from the ad entirely."
       : failed && worstFinding
       ? worstFinding.issue_description
       : "Required disclaimers are present and no examined claim raised a compliance concern.",
-    suggested_correction: failed
-      ? (worstFinding
-        ? worstFinding.recommendation
-        : "Add the required disclaimer to the ad.")
+    suggested_correction: missingDisclaimer
+      ? "Add the required disclaimer to the ad."
+      : failed && worstFinding
+      ? worstFinding.recommendation
       : undefined,
     correction_type: failed ? "edit_recommendation" : "none",
     sub_checks: subChecks,

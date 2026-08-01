@@ -228,7 +228,10 @@ export function processExtractionResponse(
 
   return parsed
     .map((claim, i): DerivedClaim | null => {
-      const instances = claim.segment_ids
+      // Dedupe segment_ids per-claim -- extraction can repeat the same id
+      // in one claim's list; this keeps that from producing duplicate
+      // instances (and therefore duplicate evidence downstream).
+      const instances = [...new Set(claim.segment_ids)]
         .map((id) => segmentLookup.get(id))
         .filter((inst): inst is ClaimInstance => inst !== undefined);
       if (instances.length === 0) return null; // only unrecognized segment_ids -- drop rather than fabricate
@@ -326,7 +329,6 @@ export function processSubstantiationResponse(
 
 export async function substantiateClaims(
   claims: VerifiableClaim[],
-  evidence: EvidenceByCategory,
   brief: ParsedCreativeBrief,
   productContext: ProductContext | undefined,
 ): Promise<SubstantiationFinding[]> {
@@ -335,12 +337,7 @@ export async function substantiateClaims(
     { role: "system", content: SUBSTANTIATION_SYSTEM_PROMPT },
     {
       role: "user",
-      content: buildSubstantiationUserPrompt(
-        claims,
-        evidence,
-        brief,
-        productContext,
-      ),
+      content: buildSubstantiationUserPrompt(claims, brief, productContext),
     },
   ]);
   return processSubstantiationResponse(raw, claims);
@@ -386,10 +383,6 @@ export async function checkCompliance(
   _brief: ParsedCreativeBrief,
 ): Promise<ComplianceFinding[]> {
   if (claims.length === 0) return [];
-  // NOTE: previously split into two batched calls on a stronger model for
-  // health/safety claims -- shared/llm.ts's chat() takes no model override,
-  // so that tiering isn't possible anymore. One call, one model, for all
-  // verifiable claims.
   const raw = await chat([
     { role: "system", content: COMPLIANCE_SYSTEM_PROMPT },
     {
