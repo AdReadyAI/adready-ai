@@ -22,6 +22,9 @@ RETRY_BASE_DELAY = 5
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+# Vision model for captioning — unvalidated starting point, tune once real outputs can be reviewed.
+OPENROUTER_VISION_MODEL = os.getenv("OPENROUTER_VISION_MODEL", "google/gemini-2.5-flash")
+OPENROUTER_VISION_TIMEOUT = 30
 
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 

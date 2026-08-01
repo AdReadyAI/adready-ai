@@ -17,7 +17,7 @@ from analyzer.output_models import (
     LogoFrameRow,
     ProductFrameResult,
     ProductFrameRow,
-    ContextResult,
+    VisualFrameResult,
     OcrResult
 )
 
@@ -153,7 +153,7 @@ class VideoAnalyzer:
         )
 
     @analysis_task("context")
-    def context(self) -> ContextResult:
+    def context(self) -> VisualFrameResult:
         pass
 
   
