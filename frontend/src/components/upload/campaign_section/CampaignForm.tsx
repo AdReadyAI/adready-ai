@@ -194,28 +194,39 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
     // INSERT transaction above, so the pipeline starts before this row lands.
     // In practice brief-alignment-agent runs late enough that the row is always
     // there by the time it reads it.
+    // Upsert (not insert) so a retry after a network blip doesn't dead-end on
+    // a batch_id PK conflict when the first attempt actually committed.
     const { error: briefError } = await supabase
       .from("parsed_creative_briefs")
-      .insert({
-        batch_id: batchId,
-        raw_text: creativeBrief,
-        destination_platform: destinationPlatform,
-        brand_voice: advancedFields.brand_voice,
-        target_audience: advancedFields.target_audience,
-        required_messages: advancedFields.required_messages,
-        required_ctas: advancedFields.required_ctas,
-        approved_claims: advancedFields.approved_claims,
-        forbidden_claims: advancedFields.forbidden_claims,
-        brand_guidelines: advancedFields.brand_guidelines,
-        policy_requirements: advancedFields.policy_requirements,
-      });
+      .upsert(
+        {
+          batch_id: batchId,
+          raw_text: creativeBrief,
+          destination_platform: destinationPlatform,
+          brand_voice: advancedFields.brand_voice,
+          target_audience: advancedFields.target_audience,
+          required_messages: advancedFields.required_messages,
+          required_ctas: advancedFields.required_ctas,
+          approved_claims: advancedFields.approved_claims,
+          forbidden_claims: advancedFields.forbidden_claims,
+          brand_guidelines: advancedFields.brand_guidelines,
+          policy_requirements: advancedFields.policy_requirements,
+        },
+        { onConflict: "batch_id" }
+      );
 
     setSubmitting(false);
 
     if (briefError) {
+      // Don't navigate — stay on the form so the error below stays visible.
+      // Navigating here would unmount the error <p> and silently orphan the
+      // batch (requests inserted + pipeline enqueued, but no brief row for
+      // brief-alignment-agent to read). The requests are already in flight
+      // regardless; retry is safe because the brief write is an upsert.
       setSubmitError(
         "Campaign submitted but brief save failed: " + getErrorMessage(briefError, "unknown error"),
       );
+      return;
     }
 
     navigate("/result", {
@@ -357,7 +368,7 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
         <p className="text-sm text-[#9B9A97]">🔒  Your videos are secure and never shared.</p>
         <button
           type="submit"
-          disabled={!isFormValid || submitting}
+          disabled={!isFormValid || submitting || parsing}
           className="rounded-lg bg-[#534AB7] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#463E9E] transition-colors disabled:text-[#808080] disabled:bg-[#CCCCCC] disabled:cursor-not-allowed"
         >
           {submitting ? "Submitting..." : "Run AdReady Review  →"}
