@@ -131,7 +131,7 @@ class VisualFrameRow(TaskRow):
     frame_id: str
     timestamp_ms: int
     image_url: str | None = None
-    action: str
+    action: str | None = None
     framing_composition: str | None = None
     people: PeopleInfo | None = None
     color_palette: ColorPalette | None = None

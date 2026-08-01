@@ -310,3 +310,111 @@ def test_detect_logo_low_confidence_is_cannot_determine(tmp_path):
 
     assert result.rows[0].reference_match == "cannot_determine"
     assert result.rows[0].prominence == "background_signage"  # small + centered
+
+
+# ---------------------------------------------------------------------------
+# context (visual captioning)
+# ---------------------------------------------------------------------------
+from analyzer.frame_sampling.probes.scene import SceneProbeResult, Shot
+from analyzer.visual_captioner import VisualCaptionOutput
+
+
+def _caption(action="doing something"):
+    return VisualCaptionOutput(action=action)
+
+
+def test_context_returns_empty_when_no_keyframes():
+    frames = [Frame(index=0, timestamp=0.0, path="f0.jpg", tags=("product",))]
+    analyzer = _analyzer(_artifacts(frames))
+
+    with patch("analyzer.video_analyzer.VisualCaptioner") as mock_cls:
+        result = analyzer.context()
+
+    assert result.rows == []
+    mock_cls.assert_not_called()
+
+
+def test_context_builds_rows_with_shot_linkage_and_sorts_by_timestamp():
+    frames = [
+        Frame(index=10, timestamp=1.0, path="f10.jpg", tags=("keyframe",)),
+        Frame(index=0, timestamp=0.0, path="f0.jpg", tags=("keyframe",)),
+        Frame(index=5, timestamp=0.5, path="f5.jpg", tags=("keyframe",)),
+    ]
+    artifacts = _artifacts(frames)
+    probe_results = {
+        "scene": SceneProbeResult(
+            shots=[
+                Shot(start_s=0.0, end_s=0.4, start_index=0, end_index=4),
+                Shot(start_s=0.5, end_s=2.0, start_index=5, end_index=20),
+            ],
+            fades=[],
+        )
+    }
+    artifacts = Artifacts(
+        **{**artifacts.__dict__, "probe_results": probe_results}
+    )
+    analyzer = _analyzer(artifacts)
+
+    with patch("analyzer.video_analyzer.VisualCaptioner") as mock_cls:
+        mock_cls.return_value.caption.return_value = _caption()
+        result = analyzer.context()
+
+    assert [row.frame_id for row in result.rows] == ["v_000000", "v_000005", "v_000010"]
+    assert [row.timestamp_ms for row in result.rows] == [0, 500, 1000]
+
+    by_index = {row.frame_id: row for row in result.rows}
+    assert by_index["v_000000"].shot_index == 0
+    assert by_index["v_000000"].is_shot_start is True
+    assert by_index["v_000005"].shot_index == 1
+    assert by_index["v_000005"].is_shot_start is True
+    # frame 10 is mid-shot-1, not at its start (start_index=5)
+    assert by_index["v_000010"].shot_index == 1
+    assert by_index["v_000010"].is_shot_start is False
+    assert all(row.is_fade is False for row in result.rows)
+    assert all(row.action == "doing something" for row in result.rows)
+
+
+def test_context_missing_scene_probe_result_defaults_shot_fields():
+    frames = [Frame(index=0, timestamp=0.0, path="f0.jpg", tags=("keyframe",))]
+    analyzer = _analyzer(_artifacts(frames))  # no probe_results at all
+
+    with patch("analyzer.video_analyzer.VisualCaptioner") as mock_cls:
+        mock_cls.return_value.caption.return_value = _caption()
+        result = analyzer.context()
+
+    assert len(result.rows) == 1
+    row = result.rows[0]
+    assert row.shot_index is None
+    assert row.is_shot_start is False
+    assert row.is_fade is False
+
+
+def test_context_captioning_failure_keeps_row_with_empty_fields():
+    frames = [
+        Frame(index=0, timestamp=0.0, path="f0.jpg", tags=("keyframe",)),
+        Frame(index=1, timestamp=1.0, path="f1.jpg", tags=("keyframe",)),
+    ]
+    analyzer = _analyzer(_artifacts(frames))
+
+    def caption_side_effect(path, *, is_shot_start):
+        if path == "f0.jpg":
+            raise TransientError("boom")
+        return _caption(action="ok frame")
+
+    with patch("analyzer.video_analyzer.VisualCaptioner") as mock_cls:
+        mock_cls.return_value.caption.side_effect = caption_side_effect
+        result = analyzer.context()
+
+    assert len(result.rows) == 2
+    by_id = {row.frame_id: row for row in result.rows}
+
+    failed_row = by_id["v_000000"]
+    assert failed_row.action is None
+    assert failed_row.framing_composition is None
+    assert failed_row.people is None
+    assert failed_row.color_palette is None
+    assert failed_row.background is None
+    assert failed_row.technical_flags == []
+
+    ok_row = by_id["v_000001"]
+    assert ok_row.action == "ok frame"

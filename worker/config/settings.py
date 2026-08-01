@@ -27,6 +27,8 @@ OPENROUTER_VISION_MODEL = os.getenv("OPENROUTER_VISION_MODEL", "google/gemini-2.
 OPENROUTER_VISION_TIMEOUT = 30
 # matches FrameSampler's analysis long-side cap
 VISUAL_CAPTION_LONG_SIDE = 384
+# unvalidated starting point — tune once real OpenRouter rate limits are known
+VISUAL_CAPTION_MAX_WORKERS = 4
 
 ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 

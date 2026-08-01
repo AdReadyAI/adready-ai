@@ -4,7 +4,7 @@ alter table public.visual_frames
   drop column visual_description,
   drop column camera_movement,
   add column processing_id uuid not null references public.video_processing(id) on delete cascade,
-  add column action text not null,
+  add column action text,
   add column framing_composition text,
   add column shot_index integer,
   add column is_shot_start boolean not null default false,
