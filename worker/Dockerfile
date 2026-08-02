@@ -1,5 +1,5 @@
 
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS base
 
 WORKDIR /app
 
@@ -24,6 +24,12 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --no-dev --no-install-project --frozen
 
 COPY . .
-RUN uv sync --no-dev --frozen
 
+FROM base AS dev
+RUN uv sync --frozen
+ENV MODE=dev
+CMD ["uv", "run", "python", "-m", "app.main"]
+
+FROM base AS runtime
+RUN uv sync --no-dev --frozen
 CMD ["uv", "run", "python", "-m", "app.main"]

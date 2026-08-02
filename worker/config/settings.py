@@ -1,7 +1,8 @@
 import os
 import logging
 
-DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
+MODE = os.environ.get("MODE", "prod").lower()
+DEBUG = MODE == "dev"
 
 logging.basicConfig(
     level=logging.DEBUG if DEBUG else logging.INFO,

@@ -23,6 +23,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.4,<10",
+    "debugpy>=1.8",
 ]
 
 [tool.pytest.ini_options]

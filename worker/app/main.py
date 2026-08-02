@@ -1,12 +1,23 @@
+import os
 import time
 import signal
 import select
 import psycopg2
 
-from config.settings import logger, QUEUE_NAME, CHANNEL_NAME, VISIBILITY_TIMEOUT, POLL_TIMEOUT, MAX_RETRIES, WARM_MODELS
+from config.settings import logger, MODE, QUEUE_NAME, CHANNEL_NAME, VISIBILITY_TIMEOUT, POLL_TIMEOUT, MAX_RETRIES, WARM_MODELS
 from config.connection import connect
 from app.worker_queue import drain_queue, set_running
 from config.models import get_east, get_mobileclip
+
+
+def _maybe_start_debugpy():
+    if MODE != "dev":
+        return
+    import debugpy
+
+    debugpy.listen(("0.0.0.0", 5678))
+    logger.info("debugpy listening on 0.0.0.0:5678, waiting for client to attach...")
+    debugpy.wait_for_client()
 
 
 def shutdown(signum, frame):
@@ -19,6 +30,8 @@ signal.signal(signal.SIGINT, shutdown)
 
 
 def main():
+    _maybe_start_debugpy()
+
     logger.info("Worker starting...")
     logger.info("  Queue:    %s", QUEUE_NAME)
     logger.info("  Channel:  %s", CHANNEL_NAME)
