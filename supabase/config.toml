@@ -418,9 +418,6 @@ import_map = "./deno.json"
 [functions.cta-effectiveness-agent]
 import_map = "./deno.json"
 
-[functions.parse-creative-brief]
-import_map = "./deno.json"
-
 [functions.product-representation-agent]
 import_map = "./deno.json"
 
