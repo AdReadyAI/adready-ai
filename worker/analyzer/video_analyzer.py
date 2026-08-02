@@ -50,8 +50,10 @@ class VideoAnalyzer:
         self.transcriber = get_aai_transcriber()
 
     @analysis_task("transcription")
-    def transcribe(self) -> TranscriptionResult: 
-
+    def transcribe(self) -> TranscriptionResult | None:
+        if self.artifacts.audio_path is None:
+            logger.info("No audio track available; skipping transcription")
+            return None
 
         if not os.path.exists(self.artifacts.audio_path):
             raise PermanentError(f"Audio file not found: {self.artifacts.audio_path}")

@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import logging
+import time
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 import cv2
 
 import analyzer.frame_sampling.probes
-from analyzer.types import Frame, VideoMetadata
 from analyzer.frame_sampling.base import (
     Probe,
     ProbeResult,
@@ -14,6 +17,10 @@ from analyzer.frame_sampling.base import (
 from analyzer.frame_sampling.context import FrameContext
 from analyzer.frame_sampling.store import FrameStore
 from app.errors import PermanentError
+from app.log_utils import phase
+
+if TYPE_CHECKING:
+    from analyzer.types import Frame, VideoMetadata
 
 logger = logging.getLogger("worker")
 
@@ -53,31 +60,56 @@ class FrameSampler:
 
     # ---- public entry point ----
     def run(self) -> list[Frame]:
+        probe_names = [probe.name for probe in self.probes]
+        logger.info(
+            "Frame sampling started: %d probes registered: %s",
+            len(self.probes), probe_names,
+        )
+
         store = FrameStore(self.work_dir)
         active = list(self.probes)
-        for ctx in self._decode():
-            ctx.store = store
-            for probe in list(active):
-                try:
-                    probe.process(ctx)
-                except Exception as exc:
-                    logger.exception(
-                        "Probe %r failed in process(); disabling it", probe.name
-                    )
-                    self.probe_errors[probe.name] = exc
-                    active.remove(probe)
+        with phase(logger, "Frame sampling decode/process loop"):
+            for ctx in self._decode():
+                ctx.store = store
+                for probe in list(active):
+                    try:
+                        probe.process(ctx)
+                    except Exception as exc:
+                        logger.exception(
+                            "Probe %r failed in process(); disabling it", probe.name
+                        )
+                        self.probe_errors[probe.name] = exc
+                        active.remove(probe)
 
         self.probe_results = {}
         for probe in self.probes:
             if probe.name in self.probe_errors:
                 continue
+            finalize_start = time.perf_counter()
+            logger.info("Probe %r finalize started", probe.name)
             try:
                 self.probe_results[probe.name] = probe.finalize()
             except Exception as exc:
-                logger.exception("Probe %r failed in finalize()", probe.name)
+                logger.exception(
+                    "Probe %r failed in finalize() after %.2fs",
+                    probe.name, time.perf_counter() - finalize_start,
+                )
                 self.probe_errors[probe.name] = exc
+            else:
+                logger.info(
+                    "Probe %r finalize finished in %.2fs",
+                    probe.name, time.perf_counter() - finalize_start,
+                )
 
-        return store.manifest()
+        frames = store.manifest()
+        logger.info(
+            "Frame sampling finished: %d frames kept, %d probes succeeded, %d probes failed (%s)",
+            len(frames),
+            len(self.probe_results),
+            len(self.probe_errors),
+            list(self.probe_errors),
+        )
+        return frames
 
     # ---- internals ----
     def _build_probes(self) -> list[Probe]:

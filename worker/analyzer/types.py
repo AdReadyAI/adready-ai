@@ -27,7 +27,7 @@ class Artifacts:
     # signed_url: str | None 
 
     video_path: str
-    audio_path: str
+    audio_path: str | None
     frames: tuple[Frame, ...]
 
     video_metadata: VideoMetadata

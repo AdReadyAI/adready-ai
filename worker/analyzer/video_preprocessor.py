@@ -9,6 +9,7 @@ from analyzer.types import Artifacts, Frame, VideoMetadata
 from analyzer.frame_sampling import FrameSampler
 from analyzer.frame_sampling.base import ProbeResult
 from app.errors import PermanentError, TransientError
+from app.log_utils import phase
 from app.schemas import JobPayload
 from config.connection import get_storage_session
 from config.settings import (
@@ -26,22 +27,30 @@ class VideoPreprocessor:
         self.job_payload = job_payload
         self.work_dir = work_dir
         self._probe_results: dict[str, ProbeResult] = {}
+        self._has_audio = True
 
     # ---- public entry point ----
     def prepare(self) -> Artifacts:
         """Orchestrate the whole prep and return the artifacts bundle."""
-        video_path = self._download_video()
-        metadata = self._probe_metadata(video_path)
-        audio_path = self._extract_audio(video_path)
-        product_image_paths = self._download_reference_images(
-            self.job_payload.product_image_paths, "product_images"
-        )
-        logo_paths = self._download_reference_images(
-            self.job_payload.logo_paths, "logo_images"
-        )
-        frames = self._sample_frames(
-            video_path, metadata, product_image_paths, logo_paths
-        )
+        job_id = self.job_payload.request_id
+        with phase(logger, f"[job {job_id}] Download video"):
+            video_path = self._download_video()
+        with phase(logger, f"[job {job_id}] Probe metadata"):
+            metadata = self._probe_metadata(video_path)
+        with phase(logger, f"[job {job_id}] Extract audio"):
+            audio_path = self._extract_audio(video_path)
+        with phase(logger, f"[job {job_id}] Download product images"):
+            product_image_paths = self._download_reference_images(
+                self.job_payload.product_image_paths, "product_images"
+            )
+        with phase(logger, f"[job {job_id}] Download logo images"):
+            logo_paths = self._download_reference_images(
+                self.job_payload.logo_paths, "logo_images"
+            )
+        with phase(logger, f"[job {job_id}] Frame sampling"):
+            frames = self._sample_frames(
+                video_path, metadata, product_image_paths, logo_paths
+            )
 
         return Artifacts(
             job_id=self.job_payload.request_id,
@@ -157,6 +166,7 @@ class VideoPreprocessor:
         if video_stream is None:
             raise PermanentError("No video stream found in file")
 
+        self._has_audio = any(s.get("codec_type") == "audio" for s in streams)
         return VideoMetadata(
             duration_s= float(fmt["duration"]),
             fps=self._parse_fps(video_stream),
@@ -178,8 +188,11 @@ class VideoPreprocessor:
                 return float(num) / den_val
         raise PermanentError("Could not determine video frame rate")
 
-    def _extract_audio(self, video_path) -> str:
-        """Pull audio track to a file (for Whisper); return audio path."""
+    def _extract_audio(self, video_path) -> str | None:
+        if not self._has_audio:
+            logger.info("No audio stream in %s; skipping audio extraction", video_path)
+            return None
+
         audio_path = os.path.join(self.work_dir, "audio.wav")
         cmd = [
             "ffmpeg",

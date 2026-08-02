@@ -1,9 +1,13 @@
 services:
   worker:
-    build: ./worker
+    build:
+      context: ./worker
+      target: dev
     restart: unless-stopped
     env_file:
       - ./worker/.env
+    ports:
+      - "5678:5678"
     # deploy:
     #   replicas: 2
     healthcheck:

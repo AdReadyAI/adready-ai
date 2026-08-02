@@ -1,7 +1,8 @@
 import os
 import logging
 
-DEBUG = os.environ.get("DEBUG", "").lower() in ("1", "true", "yes")
+MODE = os.environ.get("MODE", "prod").lower()
+DEBUG = MODE == "dev"
 
 logging.basicConfig(
     level=logging.DEBUG if DEBUG else logging.INFO,
@@ -81,10 +82,8 @@ WARM_MODELS = os.getenv("WARM_MODELS", "true").lower() in ("1", "true", "yes")
 EAST_MODEL_PATH = os.getenv(
     "EAST_MODEL_PATH", "/app/assets/models/frozen_east_text_detection.pb"
 )
-MOBILECLIP_WEIGHTS_PATH = os.getenv(
-    "MOBILECLIP_WEIGHTS_PATH", "/app/assets/models/mobileclip_s0.pt"
-)
-MOBILECLIP_MODEL_NAME = os.getenv("MOBILECLIP_MODEL_NAME", "MobileCLIP-S0")
+MOBILECLIP_MODEL_NAME = os.getenv("MOBILECLIP_MODEL_NAME", "MobileCLIP2-S0")
+MOBILECLIP_PRETRAINED_TAG = os.getenv("MOBILECLIP_PRETRAINED_TAG", "dfndr2b")
 
 # Roboflow OWLv2 image-guided detection (real bbox confirmation on candidate
 # frames already gated by ReferenceMatchProbe/ProductProbe/LogoProbe).
