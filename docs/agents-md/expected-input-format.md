@@ -37,6 +37,11 @@ The raw creative brief should be parsed before agent execution and stored in
 queryable fields. Agents can still keep the raw brief text for evidence, but they
 should primarily use structured fields.
 
+**Loading:** The brief is joined from `requests` via `requests.batch_id =
+parsed_creative_briefs.batch_id`. One brief per batch (N videos share a single
+brief). The `parsed_creative_briefs` table has no FK to `requests` because
+`batch_id` is a plain uuid column minted client-side.
+
 * **`raw_text`**: String - original brief text.
 * **`brand_voice`**: String, optional - tone and voice expectations.
 * **`target_audience`**: String, optional - intended audience.
