@@ -8,6 +8,8 @@ services:
       - ./worker/.env
     ports:
       - "5678:5678"
+    volumes:
+      - ./worker/tools:/app/tools
     # deploy:
     #   replicas: 2
     healthcheck:
