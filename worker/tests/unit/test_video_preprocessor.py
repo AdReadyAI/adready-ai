@@ -109,7 +109,8 @@ def test_probe_metadata_success(tmp_path, monkeypatch):
     monkeypatch.setattr(
         vp.subprocess, "run", lambda *a, **k: MagicMock(stdout=_ffprobe_json())
     )
-    meta = _pre(tmp_path)._probe_metadata("v.mp4")
+    preprocessor = _pre(tmp_path)
+    meta = preprocessor._probe_metadata("v.mp4")
     assert (meta.duration_s, meta.fps, meta.width, meta.height, meta.size_bytes) == (
         12.5,
         30.0,
@@ -117,6 +118,28 @@ def test_probe_metadata_success(tmp_path, monkeypatch):
         1080,
         1048576,
     )
+    assert preprocessor._has_audio is True
+
+
+def test_probe_metadata_no_audio_stream(tmp_path, monkeypatch):
+    # Silent/b-roll-only video: has a video stream but no audio stream.
+    data = json.dumps(
+        {
+            "format": {"duration": "12.5", "size": "1048576"},
+            "streams": [
+                {
+                    "codec_type": "video",
+                    "width": 1920,
+                    "height": 1080,
+                    "avg_frame_rate": "30/1",
+                },
+            ],
+        }
+    )
+    monkeypatch.setattr(vp.subprocess, "run", lambda *a, **k: MagicMock(stdout=data))
+    preprocessor = _pre(tmp_path)
+    preprocessor._probe_metadata("v.mp4")
+    assert preprocessor._has_audio is False
 
 
 def test_probe_metadata_no_ffprobe(tmp_path, monkeypatch):
@@ -202,6 +225,19 @@ def test_extract_audio_called_process_error(tmp_path, monkeypatch):
     monkeypatch.setattr(vp.subprocess, "run", boom)
     with pytest.raises(PermanentError):
         _pre(tmp_path)._extract_audio("v.mp4")
+
+
+def test_extract_audio_skips_when_no_audio_stream(tmp_path, monkeypatch):
+    # Silent/b-roll-only videos have no audio stream; this must not invoke
+    # ffmpeg (which would fail with "does not contain any stream") and must
+    # not raise — it's a valid, non-error case.
+    def boom(*a, **k):
+        raise AssertionError("ffmpeg should not run when there's no audio stream")
+
+    monkeypatch.setattr(vp.subprocess, "run", boom)
+    preprocessor = _pre(tmp_path)
+    preprocessor._has_audio = False
+    assert preprocessor._extract_audio("v.mp4") is None
 
 
 # ---- _download_video ----

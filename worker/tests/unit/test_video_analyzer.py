@@ -134,6 +134,19 @@ class TestVideoAnalyzer(unittest.TestCase):
             analyzer.transcribe()
 
     @patch("analyzer.video_analyzer.get_aai_transcriber")
+    def test_transcribe_skips_when_no_audio_track(self, mock_get_transcriber):
+        # Silent/b-roll-only videos have audio_path=None; this must be a
+        # graceful skip (no result, no error), not a PermanentError.
+        mock_get_transcriber.return_value = self.mock_transcriber
+        self.mock_artifacts.audio_path = None
+
+        analyzer = VideoAnalyzer(self.mock_artifacts)
+        result = analyzer.transcribe()
+
+        self.assertIsNone(result)
+        self.mock_transcriber.transcribe.assert_not_called()
+
+    @patch("analyzer.video_analyzer.get_aai_transcriber")
     @patch("os.path.exists", return_value=True)
     def test_transcribe_unexpected_error(self, mock_exists, mock_get_transcriber):
         mock_get_transcriber.return_value = self.mock_transcriber

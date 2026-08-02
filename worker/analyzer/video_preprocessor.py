@@ -26,6 +26,7 @@ class VideoPreprocessor:
         self.job_payload = job_payload
         self.work_dir = work_dir
         self._probe_results: dict[str, ProbeResult] = {}
+        self._has_audio = True
 
     # ---- public entry point ----
     def prepare(self) -> Artifacts:
@@ -157,6 +158,7 @@ class VideoPreprocessor:
         if video_stream is None:
             raise PermanentError("No video stream found in file")
 
+        self._has_audio = any(s.get("codec_type") == "audio" for s in streams)
         return VideoMetadata(
             duration_s= float(fmt["duration"]),
             fps=self._parse_fps(video_stream),
@@ -178,8 +180,11 @@ class VideoPreprocessor:
                 return float(num) / den_val
         raise PermanentError("Could not determine video frame rate")
 
-    def _extract_audio(self, video_path) -> str:
-        """Pull audio track to a file (for Whisper); return audio path."""
+    def _extract_audio(self, video_path) -> str | None:
+        if not self._has_audio:
+            logger.info("No audio stream in %s; skipping audio extraction", video_path)
+            return None
+
         audio_path = os.path.join(self.work_dir, "audio.wav")
         cmd = [
             "ffmpeg",
