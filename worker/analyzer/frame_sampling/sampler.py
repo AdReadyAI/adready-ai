@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import logging
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 import cv2
 
 import analyzer.frame_sampling.probes
-from analyzer.types import Frame, VideoMetadata
 from analyzer.frame_sampling.base import (
     Probe,
     ProbeResult,
@@ -14,6 +16,9 @@ from analyzer.frame_sampling.base import (
 from analyzer.frame_sampling.context import FrameContext
 from analyzer.frame_sampling.store import FrameStore
 from app.errors import PermanentError
+
+if TYPE_CHECKING:
+    from analyzer.types import Frame, VideoMetadata
 
 logger = logging.getLogger("worker")
 

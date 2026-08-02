@@ -7,7 +7,7 @@ import open_clip
 from config.settings import (
     EAST_MODEL_PATH,
     MOBILECLIP_MODEL_NAME,
-    MOBILECLIP_WEIGHTS_PATH,
+    MOBILECLIP_PRETRAINED_TAG,
     logger,
 )
 
@@ -22,14 +22,12 @@ def get_east():
 
 @lru_cache(maxsize=1)
 def get_mobileclip():
-    if not os.path.exists(MOBILECLIP_WEIGHTS_PATH):
-        raise FileNotFoundError(
-            f"MobileCLIP weights not found: {MOBILECLIP_WEIGHTS_PATH}"
-        )
-    logger.info("Loading %s from %s", MOBILECLIP_MODEL_NAME, MOBILECLIP_WEIGHTS_PATH)
+    logger.info(
+        "Loading %s (pretrained=%s)", MOBILECLIP_MODEL_NAME, MOBILECLIP_PRETRAINED_TAG
+    )
     model, _, preprocess = open_clip.create_model_and_transforms(
         MOBILECLIP_MODEL_NAME,
-        pretrained=MOBILECLIP_WEIGHTS_PATH,
+        pretrained=MOBILECLIP_PRETRAINED_TAG,
         device='cpu',
         image_mean=(0, 0, 0),
         image_std=(1, 1, 1),
