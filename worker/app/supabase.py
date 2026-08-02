@@ -2,6 +2,7 @@ import math
 from contextlib import contextmanager
 
 from psycopg2.extras import Json
+from pydantic import BaseModel
 
 from analyzer.frame_sampling.probes.quality import QualityFlag
 from analyzer.frame_sampling.probes.scene import SceneProbeResult
@@ -10,7 +11,9 @@ from analyzer.types import VideoMetadata
 
 
 def _adapt(value):
-    if isinstance(value, (dict, list)):
+    if isinstance(value, BaseModel):
+        return Json(value.model_dump(mode="json"))
+    if isinstance(value, dict):
         return Json(value)
     return value
 

@@ -2,10 +2,11 @@ import os
 import logging
 
 MODE = os.environ.get("MODE", "prod").lower()
-DEBUG = MODE == "dev"
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+DEBUG = LOG_LEVEL == "DEBUG"
 
 logging.basicConfig(
-    level=logging.DEBUG if DEBUG else logging.INFO,
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
