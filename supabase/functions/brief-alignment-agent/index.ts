@@ -16,6 +16,8 @@
  * DB CONTEXT:
  *   - Loads parsed creative brief, campaign goal, transcript/OCR, visual frames,
  *     product frames, and platform context by request_id.
+ *   - The parsed creative brief is joined via requests.batch_id →
+ *     parsed_creative_briefs.batch_id (one brief per batch, not per request).
  *   - Uses parsed brief fields rather than treating the raw brief as the only
  *     source of truth.
  *
