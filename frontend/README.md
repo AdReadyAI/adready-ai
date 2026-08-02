@@ -100,6 +100,15 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-02** — Both writes in `CampaignForm`'s submit are now idempotent, so
+  retrying after a failed brief save can't duplicate a batch. `request_id` is
+  minted client-side and the `requests` write is an upsert with
+  `ignoreDuplicates`, so a retry no-ops on conflict instead of fanning out a
+  second set of rows — and a second pipeline run per video via
+  `trg_enqueue_job_on_request_insert`. Migration
+  `036_require_client_minted_request_id.sql` drops the `gen_random_uuid()`
+  default on `requests.request_id` so an insert that omits it fails loudly
+  rather than silently losing retry-safety.
 - **2026-07-30** — `CampaignForm` now parses the creative brief on blur via
   `supabase/functions/parse-creative-brief` edge function, auto-populates the
   new `AdvancedFieldsSection` component with AI-filled field badges and

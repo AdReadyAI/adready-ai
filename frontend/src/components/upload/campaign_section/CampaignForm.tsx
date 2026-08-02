@@ -56,6 +56,13 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
   });
   const [parsing, setParsing] = useState(false);
   const lastParsedRef = useRef("");
+  // video.id → request_id, minted client-side so the requests insert is
+  // idempotent (see handleSubmit). Keyed by video id rather than array index
+  // so adding or removing a video between a failed submit and a retry can't
+  // shift ids onto the wrong rows. A ref, not state, because handleSubmit
+  // reads it in the same async pass that writes it — a state update wouldn't
+  // be visible in that closure.
+  const requestIdsRef = useRef<Map<string, string>>(new Map());
   const [advancedFieldsEdited, setAdvancedFieldsEdited] = useState<Set<string>>(new Set());
   const [aiFilled, setAiFilled] = useState<Set<string>>(new Set());
   const [selectedCampaign, setSelectedCampaign] = useState("");
@@ -138,9 +145,8 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const videoPaths = videos
-      .filter((v) => v.status === "done" && v.storagePath)
-      .map((v) => v.storagePath as string);
+    const doneVideos = videos.filter((v) => v.status === "done" && v.storagePath);
+    const videoPaths = doneVideos.map((v) => v.storagePath as string);
 
     const doneImages = images.filter((img) => img.status === "done" && img.storagePath);
     const productImagePaths = doneImages
@@ -164,20 +170,44 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
     // pipeline's video_processing table is UNIQUE(request_id, task_name), so
     // each video needs its own request_id. batch_id ties the group back
     // together for the loading/results UI.
-    const { data: requests, error } = await supabase
+    //
+    // request_id is minted here instead of by the column's gen_random_uuid()
+    // default, which is what makes this insert idempotent. A retry (see the
+    // briefError branch below) re-sends the same primary keys, and
+    // ignoreDuplicates turns that into ON CONFLICT DO NOTHING rather than a
+    // 23505 error. Skipped rows are never inserted, so
+    // trg_enqueue_job_on_request_insert (FOR EACH ROW) doesn't fire for them
+    // either — a retry can't kick off a second pipeline run per video.
+    //
+    // DO NOTHING rather than catching 23505 on a plain insert, because the
+    // conflict isn't always total: if a video finishes uploading between a
+    // failed attempt and the retry, the already-inserted rows must be skipped
+    // while the new one still lands. A plain insert would abort the whole
+    // statement on the first conflict and silently drop the new video.
+    const requestIds = doneVideos.map((v) => {
+      const existing = requestIdsRef.current.get(v.id);
+      if (existing) return existing;
+
+      const minted = crypto.randomUUID();
+      requestIdsRef.current.set(v.id, minted);
+      return minted;
+    });
+
+    const { error } = await supabase
       .from("requests")
-      .insert(
-        videoPaths.map((videoPath) => ({
+      .upsert(
+        doneVideos.map((v, i) => ({
+          request_id: requestIds[i],
           batch_id: batchId,
-          video_storage_paths: [videoPath],
+          video_storage_paths: [v.storagePath as string],
           product_image_paths: productImagePaths,
           logo_paths: logoPaths,
           user_brief: creativeBrief,
           product_url: productUrl,
           campaign_goal: campaignGoal,
-        }))
-      )
-      .select();
+        })),
+        { onConflict: "request_id", ignoreDuplicates: true }
+      );
 
     if (error) {
       setSubmitError(getErrorMessage(error, "Failed to submit request"));
@@ -221,8 +251,12 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
       // Don't navigate — stay on the form so the error below stays visible.
       // Navigating here would unmount the error <p> and silently orphan the
       // batch (requests inserted + pipeline enqueued, but no brief row for
-      // brief-alignment-agent to read). The requests are already in flight
-      // regardless; retry is safe because the brief write is an upsert.
+      // brief-alignment-agent to read).
+      //
+      // Clicking submit again from here re-enters handleSubmit from the top,
+      // which is safe: the requests insert reuses the same client-minted
+      // request_ids and no-ops on conflict, and the brief write is an upsert
+      // keyed on batch_id. Both writes are idempotent, so retry is free.
       setSubmitError(
         "Campaign submitted but brief save failed: " + getErrorMessage(briefError, "unknown error"),
       );
@@ -232,7 +266,7 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
     navigate("/result", {
       state: {
         batchId,
-        requestIds: requests.map((r) => r.request_id),
+        requestIds,
         productUrl,
         campaignGoal,
         creativeBrief,
@@ -371,7 +405,7 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
           disabled={!isFormValid || submitting || parsing}
           className="rounded-lg bg-[#534AB7] px-6 py-2.5 text-sm font-medium text-white hover:bg-[#463E9E] transition-colors disabled:text-[#808080] disabled:bg-[#CCCCCC] disabled:cursor-not-allowed"
         >
-          {submitting ? "Submitting..." : "Run AdReady Review  →"}
+          {parsing ? "Parsing brief…" : submitting ? "Submitting..." : "Run AdReady Review  →"}
         </button>
       </div>
     </form>
