@@ -112,7 +112,7 @@ export async function evaluateQualitativeChecks(
     brand_guidelines: context.parsed_creative_brief.brand_guidelines,
     visual_frames: sampleEvenly(context.visual_frames, 12).map((frame) => ({
       timestamp_ms: frame.timestamp_ms,
-      description: frame.visual_description,
+      description: frame.action,
       color_palette: frame.color_palette,
     })),
     transcript_segments: sampleEvenly(context.transcript_segments, 20).map((
