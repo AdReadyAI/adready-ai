@@ -1,0 +1,107 @@
+name: Discord notifications
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  pull-request:
+    name: Notify about pull request
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send pull request notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${DISCORD_WEBHOOK_URL:?Set the DISCORD_WEBHOOK_URL repository secret}"
+
+          # The default-branch workflow handles untrusted PR metadata without
+          # checking out or executing code from the contributor's branch.
+          action="$(jq -r '.action' "$GITHUB_EVENT_PATH")"
+          case "$action" in
+            opened) status="opened" ;;
+            reopened) status="reopened" ;;
+            ready_for_review) status="is ready for review" ;;
+            *) echo "Unsupported pull request action: $action" >&2; exit 1 ;;
+          esac
+
+          payload="$(jq -n \
+            --arg title "$(jq -r '.pull_request.title[0:245]' "$GITHUB_EVENT_PATH")" \
+            --arg url "$(jq -r '.pull_request.html_url' "$GITHUB_EVENT_PATH")" \
+            --arg author "$(jq -r '.pull_request.user.login' "$GITHUB_EVENT_PATH")" \
+            --arg branch "$(jq -r '.pull_request.head.label' "$GITHUB_EVENT_PATH")" \
+            --arg number "$(jq -r '.pull_request.number | tostring' "$GITHUB_EVENT_PATH")" \
+            --arg status "$status" \
+            '{
+              username: "AdReady AI GitHub",
+              embeds: [{
+                title: ("PR #" + $number + ": " + $title),
+                url: $url,
+                description: ("Pull request " + $status + " by **" + $author + "**"),
+                color: 3447003,
+                fields: [{name: "Source branch", value: $branch, inline: true}],
+                footer: {text: "AdReadyAI/adready-ai → main"}
+              }]
+            }')"
+
+          curl --fail-with-body --retry 3 \
+            --header "Content-Type: application/json" \
+            --data "$payload" \
+            "$DISCORD_WEBHOOK_URL"
+
+  main-update:
+    name: Notify about main update
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send main update notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${DISCORD_WEBHOOK_URL:?Set the DISCORD_WEBHOOK_URL repository secret}"
+
+          # Every update to main emits a push event, covering PR merges as well
+          # as direct commits and multi-commit pushes without duplicate alerts.
+          payload="$(jq -n \
+            --arg actor "$(jq -r '.pusher.name' "$GITHUB_EVENT_PATH")" \
+            --arg compare_url "$(jq -r '.compare' "$GITHUB_EVENT_PATH")" \
+            --arg commit_url "$(jq -r '.head_commit.url' "$GITHUB_EVENT_PATH")" \
+            --arg message "$(jq -r '.head_commit.message[0:750]' "$GITHUB_EVENT_PATH")" \
+            --arg sha "$(jq -r '.after[0:7]' "$GITHUB_EVENT_PATH")" \
+            --arg commit_count "$(jq -r '.commits | length | tostring' "$GITHUB_EVENT_PATH")" \
+            --arg forced "$(jq -r '.forced | tostring' "$GITHUB_EVENT_PATH")" \
+            '{
+              username: "AdReady AI GitHub",
+              embeds: [{
+                title: ("main updated at " + $sha),
+                url: $compare_url,
+                description: ($commit_count + " commit(s) pushed by **" + $actor + "**"),
+                color: (if $forced == "true" then 15158332 else 3066993 end),
+                fields: [
+                  {name: "Head commit", value: ("[" + $message + "](" + $commit_url + ")"), inline: false},
+                  {name: "Force push", value: $forced, inline: true}
+                ],
+                footer: {text: "AdReadyAI/adready-ai • main"}
+              }]
+            }')"
+
+          curl --fail-with-body --retry 3 \
+            --header "Content-Type: application/json" \
+            --data "$payload" \
+            "$DISCORD_WEBHOOK_URL"
