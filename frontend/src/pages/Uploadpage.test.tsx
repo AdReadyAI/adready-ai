@@ -32,6 +32,9 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }))
 
+// user-123/<batchId uuid>/video/<video id uuid>/<filename>
+const VIDEO_PATH_PATTERN = /^user-123\/[0-9a-f-]{36}\/video\/[0-9a-f-]{36}\/ad\.mp4$/
+
 function makeFile(name: string, type: string) {
   return new File(['content'], name, { type })
 }
@@ -90,7 +93,7 @@ describe('UploadPage', () => {
 
     await waitFor(() => expect(within(getVideoCard('ad.mp4')).getByText('✓')).toBeInTheDocument())
     expect(uploadMock).toHaveBeenCalledWith(
-      expect.stringContaining('user-123'),
+      expect.stringMatching(VIDEO_PATH_PATTERN),
       file,
       { contentType: 'video/mp4' },
     )
@@ -119,7 +122,21 @@ describe('UploadPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove ad.mp4' }))
 
     await waitFor(() => expect(screen.queryByText('ad.mp4')).not.toBeInTheDocument())
-    expect(removeMock).toHaveBeenCalledWith([expect.stringContaining('ad.mp4')])
+    expect(removeMock).toHaveBeenCalledWith([expect.stringMatching(VIDEO_PATH_PATTERN)])
+  })
+
+  it('sanitizes accented and unsafe characters in the uploaded filename before building the storage path', async () => {
+    uploadMock.mockResolvedValue({ error: null })
+    render(<UploadPage />)
+    const file = makeFile('café #1.mp4', 'video/mp4')
+
+    fireEvent.change(getVideoInput(), { target: { files: [file] } })
+
+    await waitFor(() => expect(uploadMock).toHaveBeenCalledTimes(1))
+    const path = uploadMock.mock.calls[0][0] as string
+    expect(path.endsWith('/cafe_1.mp4')).toBe(true)
+    expect(path).not.toContain('é')
+    expect(path).not.toContain('#')
   })
 
   it('classifies a file named "logo.<ext>" as logo, and everything else as product_image', async () => {
