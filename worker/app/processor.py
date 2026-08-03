@@ -3,20 +3,48 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import random
 import time
 
+from config.connection import get_storage_session
 from config.settings import logger
 from analyzer.video_preprocessor import VideoPreprocessor
 from analyzer.video_analyzer import VideoAnalyzer
+from analyzer.ocr.completion import OcrCompletionCoordinator
+from analyzer.ocr.configuration import OcrRuntimeConfig
+from analyzer.ocr.frame_artifacts import SupabaseOcrFrameArtifactStore
+from analyzer.ocr.roboflow import build_roboflow_easyocr_adapter_from_env
 from app.log_utils import phase
 from app.schemas import JobPayload
 from app.errors import TransientError
-from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS
+from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS, SUPABASE_URL
 from analyzer.output_models import TaskResult
+from app.ocr_runs import OcrRunLifecycle
 from app.supabase import Supabase
+
+
+def _build_ocr_adapter():
+    """Return hosted OCR only when its complete configuration is present."""
+    return build_roboflow_easyocr_adapter_from_env()
+
+
+def _build_ocr_completion_coordinator(
+    configuration: OcrRuntimeConfig,
+):
+    """Return OCR completion backed by private durable frame evidence."""
+    return OcrCompletionCoordinator(
+        artifact_store=SupabaseOcrFrameArtifactStore(
+            supabase_url=SUPABASE_URL,
+            bucket=configuration.evidence_bucket,
+            session=get_storage_session(),
+            timeout_seconds=(
+                configuration.evidence_storage_timeout_seconds
+            ),
+        )
+    )
 
 
 
 def process_message(cur, msg_id, payload):
     payload = _parse_payload(msg_id, payload)
+    ocr_configuration = OcrRuntimeConfig.from_env()
     request_id = payload.request_id
 
     job_start = time.perf_counter()
@@ -26,7 +54,11 @@ def process_message(cur, msg_id, payload):
         with phase(logger, f"[job {msg_id}] Preprocessing"):
             artifact = preprocessor.prepare()
 
-        analyzer = VideoAnalyzer(artifact)
+        analyzer = VideoAnalyzer(
+            artifact,
+            ocr_adapter=_build_ocr_adapter(),
+            ocr_candidate_mode=ocr_configuration.candidate_mode,
+        )
         db = Supabase(cur=cur, request_id=request_id)
 
         quality_result = artifact.probe_results.get("quality")
@@ -44,6 +76,21 @@ def process_message(cur, msg_id, payload):
         except Exception:
             logger.exception("[job %s] failed to persist video metadata", msg_id)
 
+        ocr_lifecycle = OcrRunLifecycle(
+            cur=cur,
+            request_id=request_id,
+            source_bucket=payload.bucket,
+            source_path=payload.video_path,
+            completion_coordinator=_build_ocr_completion_coordinator(
+                ocr_configuration
+            ),
+        )
+        analyzer = _OcrLifecycleAnalyzer(
+            analyzer,
+            ocr_lifecycle,
+            artifact.video_metadata,
+        )
+
         with phase(logger, f"[job {msg_id}] Analysis"):
             results, errors = _run_analysis(db, analyzer, msg_id)
 
@@ -60,6 +107,31 @@ def _parse_payload(msg_id, payload: dict) -> JobPayload:
         return JobPayload.model_validate(payload) 
     except (KeyError, TypeError) as e:
         raise ValueError(f"invalid job {msg_id} payload: {e}")
+
+
+class _OcrLifecycleAnalyzer:
+    """Apply durable lifecycle to OCR while preserving the task registry."""
+
+    def __init__(self, analyzer, lifecycle, video_metadata):
+        self.analyzer = analyzer
+        self.lifecycle = lifecycle
+        self.video_metadata = video_metadata
+
+    def analysis_tasks(self):
+        """Return the registry with only its OCR callable wrapped."""
+        tasks = self.analyzer.analysis_tasks()
+        run_ocr_analysis = tasks.get("ocr")
+        if run_ocr_analysis is None:
+            return tasks
+
+        def run_ocr():
+            """Execute OCR through its durable lifecycle boundary."""
+            self.lifecycle.execute(run_ocr_analysis, self.video_metadata)
+            return None
+
+        # Preserve the task identity used by main's retry and timing logs.
+        run_ocr._analysis_task = "ocr"
+        return {**tasks, "ocr": run_ocr}
 
 
 def _run_analysis(
@@ -120,4 +192,3 @@ def _with_retry(fn, attempts=ANALYSIS_TASK_MAX_ATTEMPTS, base=1.0, msg_id=None):
                 msg_id, name, time.perf_counter() - start, e,
             )
             raise
-

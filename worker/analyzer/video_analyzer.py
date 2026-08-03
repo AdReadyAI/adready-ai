@@ -6,6 +6,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import assemblyai as aai
 import httpx
 
+from analyzer.frame_sampling.probes.text import TextProbeResult
+from analyzer.ocr.pipeline import (
+    FixedRateOcrAnalysis,
+    FixedRateOcrPipeline,
+)
+from analyzer.ocr.recognition import OcrAdapter
+from analyzer.ocr.routing import OcrCandidateMode
 from analyzer.types import Artifacts, Frame
 from analyzer import detection_heuristics as dh
 from analyzer.object_detector import Detection, ReferenceDetector
@@ -29,7 +36,6 @@ from analyzer.output_models import (
     ProductFrameRow,
     VisualFrameResult,
     VisualFrameRow,
-    OcrResult
 )
 
 
@@ -44,10 +50,15 @@ def analysis_task(name: str):
 
 
 class VideoAnalyzer:
-    def __init__(self, artifacts: Artifacts):
+    def __init__(
+        self,
+        artifacts: Artifacts,
+        ocr_adapter: OcrAdapter | None = None,
+        ocr_candidate_mode: OcrCandidateMode = OcrCandidateMode.FIXED_4FPS,
+    ):
         self.artifacts = artifacts
-
-        
+        self.ocr_adapter = ocr_adapter
+        self.ocr_candidate_mode = ocr_candidate_mode
         self.transcriber = get_aai_transcriber()
 
     @analysis_task("transcription")
@@ -103,8 +114,37 @@ class VideoAnalyzer:
         
 
     @analysis_task("ocr")
-    def ocr(self) -> OcrResult:
-            pass
+    def ocr(self) -> FixedRateOcrAnalysis | None:
+        """Run OCR through the configured fixed or cascade candidate mode."""
+        if self.ocr_adapter is None:
+            # An unconfigured hosted provider leaves the durable OCR Run
+            # resumable instead of creating a misleading empty result.
+            return None
+
+        text_result = self.artifacts.probe_results.get("text")
+        text_segments = (
+            tuple(text_result.text_segments)
+            if isinstance(text_result, TextProbeResult)
+            else ()
+        )
+        cascade_failure_reason = (
+            "text_detection_unavailable"
+            if (
+                self.ocr_candidate_mode is not OcrCandidateMode.FIXED_4FPS
+                and not isinstance(text_result, TextProbeResult)
+            )
+            else None
+        )
+        return FixedRateOcrPipeline(
+            self.ocr_adapter,
+            requested_mode=self.ocr_candidate_mode,
+        ).run(
+            video_path=self.artifacts.video_path,
+            metadata=self.artifacts.video_metadata,
+            work_dir=self.artifacts.work_dir,
+            text_segments=text_segments,
+            cascade_failure_reason=cascade_failure_reason,
+        )
 
     @analysis_task("product_detection")
     def detect_product(self) -> ProductFrameResult:

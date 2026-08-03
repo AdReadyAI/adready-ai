@@ -246,4 +246,3 @@ class VideoPreprocessor:
     # Might be needed to pass the video link to gemini so their service is able to access a public video and analyse it 
     # def _signed_url(self) -> str | None:
     #     """Optional: signed URL for APIs that fetch by URL (Replicate)."""
-        

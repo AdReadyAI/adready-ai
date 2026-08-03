@@ -11,6 +11,10 @@ from app.errors import PermanentError, TransientError  # noqa: E402
 from app.schemas import JobPayload  # noqa: E402
 from analyzer.frame_sampling.probes.quality import QualityFlag, QualityProbeResult  # noqa: E402
 from analyzer.output_models import TranscriptionResult, TranscriptSegment  # noqa: E402
+from analyzer.ocr.completion import OcrCompletionCoordinator  # noqa: E402
+from analyzer.ocr.roboflow import RoboflowEasyOcrAdapter  # noqa: E402
+from analyzer.ocr.routing import OcrCandidateMode  # noqa: E402
+from analyzer.types import VideoMetadata  # noqa: E402
 
 
 VALID_PAYLOAD = {
@@ -161,6 +165,36 @@ def test_with_retry_does_not_retry_permanent_error():
     assert calls["n"] == 1
 
 
+def test_ocr_wrapper_consumes_owned_completion_without_affecting_other_tasks():
+    """Atomic OCR completion must not enter generic result persistence."""
+
+    class Analyzer:
+        """Expose one OCR task and one unrelated analysis task."""
+
+        def analysis_tasks(self):
+            return {
+                "ocr": lambda: "fixed-rate-analysis",
+                "transcription": lambda: "transcript-result",
+            }
+
+    class Lifecycle:
+        """Consume OCR analysis through its owned completion boundary."""
+
+        def execute(self, run_ocr, metadata):
+            assert run_ocr() == "fixed-rate-analysis"
+            return "ocr-completion"
+
+    wrapped = processor._OcrLifecycleAnalyzer(
+        Analyzer(),
+        Lifecycle(),
+        VideoMetadata(1.0, 20.0, 200, 100, 1_000),
+    )
+    tasks = wrapped.analysis_tasks()
+
+    assert tasks["ocr"]() is None
+    assert tasks["transcription"]() == "transcript-result"
+
+
 # ---------------------------------------------------------------------------
 # process_message()
 # ---------------------------------------------------------------------------
@@ -186,8 +220,16 @@ def _wire_process_message(
             )
 
     class FakeVideoAnalyzer:
-        def __init__(self, artifact):
-            pass
+        def __init__(
+            self,
+            artifact,
+            *,
+            ocr_adapter=None,
+            ocr_candidate_mode=None,
+        ):
+            if recorder is not None:
+                recorder["ocr_adapter"] = ocr_adapter
+                recorder["ocr_candidate_mode"] = ocr_candidate_mode
 
         def analysis_tasks(self):
             return tasks
@@ -216,9 +258,28 @@ def _wire_process_message(
             if recorder is not None:
                 recorder["video_metadata"] = (metadata, scene_result)
 
+    class FakeOcrRunLifecycle:
+        """Keep orchestration tests focused on the processor boundary."""
+
+        def __init__(
+            self,
+            cur,
+            request_id,
+            source_bucket,
+            source_path,
+            completion_coordinator,
+        ):
+            if recorder is not None:
+                recorder["completion_coordinator"] = completion_coordinator
+
+        def execute(self, run_ocr, metadata):
+            """Delegate through the OCR boundary without changing results."""
+            return run_ocr()
+
     monkeypatch.setattr(processor, "VideoPreprocessor", FakePreprocessor)
     monkeypatch.setattr(processor, "VideoAnalyzer", FakeVideoAnalyzer)
     monkeypatch.setattr(processor, "Supabase", FakeSupabase)
+    monkeypatch.setattr(processor, "OcrRunLifecycle", FakeOcrRunLifecycle)
 
 
 def test_process_message_persists_results(monkeypatch):
@@ -351,3 +412,182 @@ def test_process_message_video_metadata_persist_failure_does_not_abort_job(monke
     assert "transcription" in results  # but analysis still ran and persisted
     assert errors == {}
 
+
+def test_process_message_builds_hosted_ocr_adapter_from_environment(
+    monkeypatch,
+):
+    """Complete OCR configuration activates recognition at composition."""
+    monkeypatch.setenv("ROBOFLOW_API_KEY", "private-api-key")
+    monkeypatch.setenv("ROBOFLOW_WORKSPACE_ID", "workspace-id")
+    monkeypatch.setenv("ROBOFLOW_OCR_WORKFLOW_ID", "workflow-id")
+    monkeypatch.setenv("ROBOFLOW_OCR_TIMEOUT_SECONDS", "12.5")
+    recorder = {}
+    _wire_process_message(
+        monkeypatch,
+        {"ocr": lambda: None},
+        recorder=recorder,
+    )
+    monkeypatch.setattr(
+        processor,
+        "_build_ocr_completion_coordinator",
+        lambda configuration=None: object(),
+    )
+
+    processor.process_message(cur=object(), msg_id=8, payload=VALID_PAYLOAD)
+
+    assert isinstance(recorder["ocr_adapter"], RoboflowEasyOcrAdapter)
+
+
+def test_process_message_builds_durable_ocr_completion(monkeypatch):
+    """Worker composition supplies durable frame storage to OCR lifecycle."""
+    recorder = {}
+    _wire_process_message(
+        monkeypatch,
+        {"ocr": lambda: None},
+        recorder=recorder,
+    )
+    monkeypatch.setattr(processor, "_build_ocr_adapter", lambda: None)
+
+    processor.process_message(cur=object(), msg_id=9, payload=VALID_PAYLOAD)
+
+    assert isinstance(
+        recorder["completion_coordinator"],
+        OcrCompletionCoordinator,
+    )
+
+
+def test_process_message_uses_one_ocr_runtime_configuration(monkeypatch):
+    """Candidate routing and durable storage share one validated activation."""
+    monkeypatch.setenv("OCR_CANDIDATE_MODE", "cascade_shadow")
+    recorder = {}
+    received_configuration = []
+    _wire_process_message(
+        monkeypatch,
+        {"ocr": lambda: None},
+        recorder=recorder,
+    )
+    monkeypatch.setattr(processor, "_build_ocr_adapter", lambda: None)
+
+    def build_completion(configuration=None):
+        """Capture the configuration supplied to durable artifact storage."""
+        received_configuration.append(configuration)
+        return object()
+
+    monkeypatch.setattr(
+        processor,
+        "_build_ocr_completion_coordinator",
+        build_completion,
+    )
+
+    processor.process_message(cur=object(), msg_id=10, payload=VALID_PAYLOAD)
+
+    assert recorder["ocr_candidate_mode"] is OcrCandidateMode.CASCADE_SHADOW
+    assert received_configuration[0].candidate_mode is (
+        OcrCandidateMode.CASCADE_SHADOW
+    )
+
+
+def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
+    """Media Processing adds durable lifecycle only around OCR analysis."""
+    execution_events = []
+    expected_ocr_adapter = object()
+    expected_completion_coordinator = object()
+    metadata = VideoMetadata(10.0, 30.0, 1920, 1080, 1_000)
+
+    class FakePreprocessor:
+        """Return prepared media without shared preprocessing."""
+
+        def __init__(self, payload, work_dir):
+            self.payload = payload
+
+        def prepare(self):
+            return SimpleNamespace(
+                video_metadata=metadata,
+                probe_results={},
+            )
+
+    class FakeVideoAnalyzer:
+        """Expose one OCR task and one unaffected non-OCR task."""
+
+        def __init__(
+            self,
+            artifact,
+            *,
+            ocr_adapter,
+            ocr_candidate_mode=None,
+        ):
+            assert ocr_adapter is expected_ocr_adapter
+            assert ocr_candidate_mode is OcrCandidateMode.FIXED_4FPS
+            execution_events.append("ocr-adapter-configured")
+
+        def analysis_tasks(self):
+            return {
+                "ocr": lambda: execution_events.append("ocr-analysis"),
+                "transcription": lambda: execution_events.append(
+                    "transcription"
+                ),
+            }
+
+    class FakeSupabase:
+        """Provide main's generic result and metadata boundaries."""
+
+        def __init__(self, cur, request_id):
+            self.request_id = request_id
+
+        def completed_analyzers(self):
+            return set()
+
+        def persist_quality_frames(self, flags):
+            """Accept main's optional quality persistence."""
+
+        def persist_video_metadata(self, metadata, scene_result):
+            """Accept main's video metadata persistence."""
+
+        def persist_results(self, results, errors):
+            """Accept the unchanged generic result envelope."""
+
+    class FakeOcrRunLifecycle:
+        """Expose whether only OCR crosses its owned lifecycle."""
+
+        def __init__(
+            self,
+            cur,
+            request_id,
+            source_bucket,
+            source_path,
+            completion_coordinator,
+        ):
+            assert completion_coordinator is expected_completion_coordinator
+            execution_events.append("ocr-completion-configured")
+            execution_events.append("ocr-lifecycle-created")
+
+        def execute(self, run_ocr, prepared_metadata):
+            assert prepared_metadata is metadata
+            execution_events.append("ocr-lifecycle")
+            return run_ocr()
+
+    monkeypatch.setattr(processor, "VideoPreprocessor", FakePreprocessor)
+    monkeypatch.setattr(processor, "VideoAnalyzer", FakeVideoAnalyzer)
+    monkeypatch.setattr(processor, "Supabase", FakeSupabase)
+    monkeypatch.setattr(
+        processor,
+        "_build_ocr_adapter",
+        lambda: expected_ocr_adapter,
+    )
+    monkeypatch.setattr(
+        processor,
+        "_build_ocr_completion_coordinator",
+        lambda configuration=None: expected_completion_coordinator,
+    )
+    monkeypatch.setattr(processor, "OcrRunLifecycle", FakeOcrRunLifecycle)
+
+    processor.process_message(cur=object(), msg_id=11, payload=VALID_PAYLOAD)
+
+    assert set(execution_events) == {
+        "ocr-adapter-configured",
+        "ocr-completion-configured",
+        "ocr-lifecycle-created",
+        "ocr-lifecycle",
+        "ocr-analysis",
+        "transcription",
+    }

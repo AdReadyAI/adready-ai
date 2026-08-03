@@ -3,14 +3,44 @@ from unittest.mock import MagicMock, patch
 
 import assemblyai as aai
 import httpx
+import numpy as np
 import pytest
 
+import analyzer.ocr.pipeline as ocr_pipeline
+import analyzer.video_analyzer as video_analyzer
+from analyzer.frame_sampling.probes.text import TextProbeResult, TextSegment
+from analyzer.ocr.routing import OcrCandidateMode
+from analyzer.ocr.recognition import (
+    DeterministicOcrAdapter,
+    DeterministicOcrObservation,
+)
 from analyzer.video_analyzer import VideoAnalyzer
-from analyzer.types import Artifacts
+from analyzer.types import Artifacts, VideoMetadata
 # from analyzer.output_models import TranscriptSegment
 from app.errors import PermanentError, TransientError
 
 pytestmark = pytest.mark.unit
+
+
+class _FakeCapture:
+    """Provide deterministic source frames at the OpenCV decoder seam."""
+
+    def __init__(self, frames):
+        self._frames = iter(frames)
+
+    def isOpened(self):
+        """Report that the synthetic Ad Creative opened successfully."""
+        return True
+
+    def read(self):
+        """Return each source frame once, then signal end of stream."""
+        try:
+            return True, next(self._frames)
+        except StopIteration:
+            return False, None
+
+    def release(self):
+        """Release the synthetic decoder without external resources."""
 
 class TestVideoAnalyzer(unittest.TestCase):
     def setUp(self):
@@ -202,6 +232,131 @@ class TestVideoAnalyzer(unittest.TestCase):
 
         with self.assertRaises(TransientError):
             analyzer.transcribe()
+
+
+def test_ocr_runs_fixed_pipeline_with_optional_text_segments(
+    tmp_path,
+    monkeypatch,
+):
+    """The OCR task independently recognizes frames with detector provenance."""
+    monkeypatch.setattr(
+        video_analyzer,
+        "get_aai_transcriber",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        ocr_pipeline.cv2,
+        "VideoCapture",
+        lambda video_path: _FakeCapture(
+            (
+                np.zeros((100, 200, 3), dtype=np.uint8),
+                np.ones((100, 200, 3), dtype=np.uint8),
+            )
+        ),
+    )
+    text_segment = TextSegment(
+        identifier="text_segment_0001",
+        start_s=0.0,
+        end_s=0.25,
+        duration_s=0.25,
+        rectangle=(0.1, 0.1, 0.4, 0.2),
+        detector_confidence=0.8,
+        representative_frame_index=0,
+        candidate_sources=("periodic",),
+        missed_observations=0,
+        timing_uncertainty_s=0.0,
+    )
+    artifacts = Artifacts(
+        job_id="request-1",
+        storage_ref="uploads/review/creative.mp4",
+        video_path="synthetic.mp4",
+        audio_path="synthetic.wav",
+        frames=(),
+        video_metadata=VideoMetadata(
+            duration_s=0.3,
+            fps=4.0,
+            width=200,
+            height=100,
+            size_bytes=1_000,
+        ),
+        work_dir=str(tmp_path),
+        probe_results={
+            "text": TextProbeResult(text_segments=[text_segment]),
+        },
+    )
+    adapter = DeterministicOcrAdapter(
+        observations_by_frame={
+            index: (
+                DeterministicOcrObservation(
+                    text="SALE",
+                    rectangle_pixels=(20, 10, 80, 20),
+                    confidence=0.9,
+                ),
+            )
+            for index in (0, 1)
+        }
+    )
+
+    result = VideoAnalyzer(artifacts, ocr_adapter=adapter).ocr()
+
+    assert [segment.text for segment in result.segments] == ["SALE"]
+    assert result.segments[0].source_text_segment_ids == (
+        "text_segment_0001",
+    )
+
+
+def test_ocr_active_mode_falls_back_when_text_detection_is_unavailable(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """The OCR boundary converts a missing TextProbe result into fixed fallback."""
+    monkeypatch.setattr(
+        video_analyzer,
+        "get_aai_transcriber",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        ocr_pipeline.cv2,
+        "VideoCapture",
+        lambda video_path: _FakeCapture(
+            (
+                np.zeros((100, 200, 3), dtype=np.uint8),
+                np.ones((100, 200, 3), dtype=np.uint8),
+            )
+        ),
+    )
+    artifacts = Artifacts(
+        job_id="request-1",
+        storage_ref="uploads/review/creative.mp4",
+        video_path="synthetic.mp4",
+        audio_path="synthetic.wav",
+        frames=(),
+        video_metadata=VideoMetadata(
+            duration_s=0.3,
+            fps=4.0,
+            width=200,
+            height=100,
+            size_bytes=1_000,
+        ),
+        work_dir=str(tmp_path),
+        probe_results={},
+    )
+    adapter = DeterministicOcrAdapter(observations_by_frame={})
+
+    result = VideoAnalyzer(
+        artifacts,
+        ocr_adapter=adapter,
+        ocr_candidate_mode=OcrCandidateMode.CASCADE_ACTIVE,
+    ).ocr()
+
+    assert result.routing.requested_mode is OcrCandidateMode.CASCADE_ACTIVE
+    assert result.routing.effective_mode is OcrCandidateMode.FIXED_4FPS
+    assert result.routing.fallback_applied is True
+    assert result.routing.fallback_reason == "text_detection_unavailable"
+    assert [
+        candidate.index
+        for candidate in result.routing.selected_candidates
+    ] == [0, 1]
 
 
 

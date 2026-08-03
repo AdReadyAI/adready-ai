@@ -25,6 +25,11 @@ from analyzer.frame_sampling.probes.adaptive import (
     AdaptiveSamplerResult,
 )
 from analyzer.frame_sampling.probes.quality import QualityProbe, QualityProbeResult
+from analyzer.text_detection.east import (
+    EastTextRegionDetector,
+    EastUnavailableError,
+)
+from analyzer.frame_sampling.probes.text import TextProbe
 from analyzer.frame_sampling.sampler import FrameSampler
 from analyzer.frame_sampling.store import FrameStore
 from analyzer.types import VideoMetadata
@@ -473,6 +478,47 @@ class _GoodKeeper(Probe):
 
     def finalize(self):
         return ProbeResult()
+
+
+def test_runtime_text_probe_uses_east_adapter(tmp_path):
+    """Only the registered runtime TextProbe receives the real EAST adapter."""
+    sampler = _sampler(tmp_path)
+
+    text_probe = next(
+        probe for probe in sampler.probes if isinstance(probe, TextProbe)
+    )
+
+    assert isinstance(text_probe._detector, EastTextRegionDetector)
+
+
+def test_unavailable_east_does_not_disable_unrelated_probe(
+    tmp_path,
+    monkeypatch,
+):
+    """An OCR-local model failure leaves other sampler analyses operational."""
+    import analyzer.text_detection.east as east
+
+    sampler = _sampler(tmp_path)
+    text_probe = next(
+        probe for probe in sampler.probes if isinstance(probe, TextProbe)
+    )
+    frame = _frame()
+    context = sampler._build_context(0, frame)
+    monkeypatch.setattr(sampler, "_decode", lambda: iter([context]))
+
+    def unavailable_model():
+        """Represent the packaged EAST graph being absent at inference time."""
+        raise EastUnavailableError("EAST graph is unavailable")
+
+    monkeypatch.setattr(east, "load_east_network", unavailable_model)
+    sampler.probes = [text_probe, _GoodKeeper()]
+
+    manifest = sampler.run()
+
+    assert isinstance(sampler.probe_errors["text"], EastUnavailableError)
+    assert "text" not in sampler.probe_results
+    assert "good" in sampler.probe_results
+    assert len(manifest) == 1
 
 
 def test_run_isolates_failing_process(tmp_path, monkeypatch):
