@@ -90,6 +90,9 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
       });
 
       if (error || !data?.ok) {
+        // PARSE_FAILED, SCHEMA_MISMATCH and INTERNAL_ERROR are indistinguishable
+        // to the user, so log the code — otherwise a bug report tells us nothing.
+        console.error("parse-creative-brief failed:", error ?? data?.error);
         setSubmitError("Brief parsing unavailable — fill in the advanced fields manually.");
         return;
       }
@@ -120,7 +123,8 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
         setAiFilled(newAi);
         return next;
       });
-    } catch {
+    } catch (cause) {
+      console.error("parse-creative-brief threw:", cause);
       setSubmitError("Brief parsing unavailable — fill in the advanced fields manually.");
     } finally {
       setParsing(false);

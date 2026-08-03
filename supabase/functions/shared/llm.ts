@@ -27,6 +27,22 @@ export type LLMResponse = {
 };
 
 /**
+ * Strips markdown code fences from a model reply.
+ *
+ * Models routinely wrap JSON in ```json … ``` even when the prompt asks for
+ * bare JSON, which makes the reply fail JSON.parse. Returns the fenced content
+ * when a fence is present, otherwise the trimmed reply unchanged.
+ *
+ * No provider-side JSON mode is requested anywhere in this client — response
+ * format support varies by model, and this stays model-agnostic by design.
+ */
+export function stripCodeFences(reply: string): string {
+  const trimmed = reply.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
+  return fenced ? fenced[1].trim() : trimmed;
+}
+
+/**
  * Sends messages to the configured model via OpenRouter and returns the reply.
  */
 export async function chat(messages: ChatMessage[]): Promise<string> {
