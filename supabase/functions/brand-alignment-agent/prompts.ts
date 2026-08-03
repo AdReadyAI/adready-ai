@@ -184,9 +184,10 @@ export async function evaluateQualitativeChecks(
       confidence: confidence(palette.confidence, voice.confidence),
     };
   } catch (error) {
-    const message = error instanceof Error
-      ? error.message
-      : "Unknown LLM error";
+    console.error("[brand-alignment-agent] qualitative evaluation failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    const explanation = "Qualitative brand evaluation could not be completed.";
     return {
       checks: [
         makeCheck(
@@ -194,14 +195,14 @@ export async function evaluateQualitativeChecks(
           "Color Scheme Alignment",
           "cannot_assess",
           "cannot_assess",
-          `Qualitative evaluation unavailable: ${message}`,
+          explanation,
         ),
         makeCheck(
           "brand_voice_drift",
           "Brand Voice Alignment",
           "cannot_assess",
           "cannot_assess",
-          `Qualitative evaluation unavailable: ${message}`,
+          explanation,
         ),
       ],
       evidence: [],
