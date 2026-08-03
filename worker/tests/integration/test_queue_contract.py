@@ -48,6 +48,43 @@ def test_jobs_queue_and_enqueue_function_exist() -> None:
 
 
 @pytest.mark.integration
+def test_ocr_evidence_bucket_is_private_and_worker_owned() -> None:
+    """Representative OCR frames remain private service-role evidence."""
+    database_url = os.environ.get(
+        "TEST_DATABASE_URL",
+        "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+    )
+
+    with psycopg2.connect(database_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT public, file_size_limit, allowed_mime_types
+                FROM storage.buckets
+                WHERE id = 'ocr-evidence';
+                """
+            )
+            assert cursor.fetchone() == (
+                False,
+                10_485_760,
+                ["image/jpeg"],
+            )
+            cursor.execute(
+                """
+                SELECT count(*)
+                FROM pg_policies
+                WHERE schemaname = 'storage'
+                  AND tablename = 'objects'
+                  AND (
+                    coalesce(qual, '') LIKE '%ocr-evidence%'
+                    OR coalesce(with_check, '') LIKE '%ocr-evidence%'
+                  );
+                """
+            )
+            assert cursor.fetchone()[0] == 0
+
+
+@pytest.mark.integration
 def test_ocr_run_schema_supports_idempotent_worker_redelivery() -> None:
     """The durable OCR contract reuses one generated run for one video request."""
     database_url = os.environ.get(
@@ -827,7 +864,7 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
     monkeypatch.setattr(
         processor,
         "_build_ocr_completion_coordinator",
-        lambda: OcrCompletionCoordinator(
+        lambda configuration: OcrCompletionCoordinator(
             artifact_store=LocalOcrFrameArtifactStore(
                 work_dir=str(tmp_path),
             )

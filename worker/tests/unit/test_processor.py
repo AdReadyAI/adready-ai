@@ -8,6 +8,9 @@ import app.processor as processor  # noqa: E402
 from app.errors import PermanentError, TransientError  # noqa: E402
 from app.schemas import JobPayload  # noqa: E402
 from analyzer.output_models import TranscriptionResult, TranscriptSegment  # noqa: E402
+from analyzer.ocr.completion import OcrCompletionCoordinator  # noqa: E402
+from analyzer.ocr.roboflow import RoboflowEasyOcrAdapter  # noqa: E402
+from analyzer.ocr.routing import OcrCandidateMode  # noqa: E402
 from analyzer.types import VideoMetadata  # noqa: E402
 
 
@@ -210,8 +213,17 @@ def _wire_process_message(monkeypatch, tasks, done=None, recorder=None):
             return type("PreparedArtifacts", (), {"video_metadata": metadata})()
 
     class FakeVideoAnalyzer:
-        def __init__(self, artifact, *, ocr_adapter=None):
+        def __init__(
+            self,
+            artifact,
+            *,
+            ocr_adapter=None,
+            ocr_candidate_mode=None,
+        ):
             self.ocr_adapter = ocr_adapter
+            if recorder is not None:
+                recorder["ocr_adapter"] = ocr_adapter
+                recorder["ocr_candidate_mode"] = ocr_candidate_mode
 
         def analysis_tasks(self):
             return tasks
@@ -240,6 +252,8 @@ def _wire_process_message(monkeypatch, tasks, done=None, recorder=None):
             completion_coordinator,
         ):
             """Accept the optional OCR-owned completion dependency."""
+            if recorder is not None:
+                recorder["completion_coordinator"] = completion_coordinator
 
         def execute(self, run_ocr, metadata):
             """Delegate through the OCR boundary without changing task results."""
@@ -294,6 +308,80 @@ def test_process_message_with_all_stub_tasks_does_not_crash(monkeypatch):
     assert errors == {}
 
 
+def test_process_message_builds_hosted_ocr_adapter_from_environment(
+    monkeypatch,
+):
+    """Complete OCR configuration activates recognition at worker composition."""
+    monkeypatch.setenv("ROBOFLOW_API_KEY", "private-api-key")
+    monkeypatch.setenv("ROBOFLOW_WORKSPACE_ID", "workspace-id")
+    monkeypatch.setenv("ROBOFLOW_OCR_WORKFLOW_ID", "workflow-id")
+    monkeypatch.setenv("ROBOFLOW_OCR_TIMEOUT_SECONDS", "12.5")
+    recorder = {}
+    _wire_process_message(
+        monkeypatch,
+        {"ocr": lambda: None},
+        recorder=recorder,
+    )
+    monkeypatch.setattr(
+        processor,
+        "_build_ocr_completion_coordinator",
+        lambda configuration=None: object(),
+    )
+
+    processor.process_message(cur=object(), msg_id=3, payload=VALID_PAYLOAD)
+
+    assert isinstance(recorder["ocr_adapter"], RoboflowEasyOcrAdapter)
+
+
+def test_process_message_builds_durable_ocr_completion(monkeypatch):
+    """Worker composition supplies durable frame storage to OCR lifecycle."""
+    recorder = {}
+    _wire_process_message(
+        monkeypatch,
+        {"ocr": lambda: None},
+        recorder=recorder,
+    )
+    monkeypatch.setattr(processor, "_build_ocr_adapter", lambda: None)
+
+    processor.process_message(cur=object(), msg_id=4, payload=VALID_PAYLOAD)
+
+    assert isinstance(
+        recorder["completion_coordinator"],
+        OcrCompletionCoordinator,
+    )
+
+
+def test_process_message_uses_one_ocr_runtime_configuration(monkeypatch):
+    """Candidate routing and durable storage share one validated activation."""
+    monkeypatch.setenv("OCR_CANDIDATE_MODE", "cascade_shadow")
+    recorder = {}
+    received_configuration = []
+    _wire_process_message(
+        monkeypatch,
+        {"ocr": lambda: None},
+        recorder=recorder,
+    )
+    monkeypatch.setattr(processor, "_build_ocr_adapter", lambda: None)
+
+    def build_completion(configuration=None):
+        """Capture the configuration supplied to durable artifact storage."""
+        received_configuration.append(configuration)
+        return object()
+
+    monkeypatch.setattr(
+        processor,
+        "_build_ocr_completion_coordinator",
+        build_completion,
+    )
+
+    processor.process_message(cur=object(), msg_id=5, payload=VALID_PAYLOAD)
+
+    assert recorder["ocr_candidate_mode"] is OcrCandidateMode.CASCADE_SHADOW
+    assert received_configuration[0].candidate_mode is (
+        OcrCandidateMode.CASCADE_SHADOW
+    )
+
+
 def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
     """Media Processing adds durable lifecycle only around the OCR analysis."""
     execution_events = []
@@ -320,9 +408,16 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
     class FakeVideoAnalyzer:
         """Expose one OCR task and one unaffected non-OCR task."""
 
-        def __init__(self, artifact, *, ocr_adapter):
+        def __init__(
+            self,
+            artifact,
+            *,
+            ocr_adapter,
+            ocr_candidate_mode=None,
+        ):
             self.artifact = artifact
             assert ocr_adapter is expected_ocr_adapter
+            assert ocr_candidate_mode is OcrCandidateMode.FIXED_4FPS
             execution_events.append("ocr-adapter-configured")
 
         def analysis_tasks(self):
@@ -377,7 +472,7 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
     monkeypatch.setattr(
         processor,
         "_build_ocr_completion_coordinator",
-        lambda: expected_completion_coordinator,
+        lambda configuration=None: expected_completion_coordinator,
     )
     monkeypatch.setattr(
         processor,

@@ -3,38 +3,47 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import random
 import time
 
+from config.connection import get_storage_session
 from config.settings import logger
 from analyzer.video_preprocessor import VideoPreprocessor
 from analyzer.video_analyzer import VideoAnalyzer
 from app.schemas import JobPayload
 from app.errors import TransientError
-from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS
+from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS, SUPABASE_URL
 from analyzer.output_models import TaskResult
+from analyzer.ocr.completion import OcrCompletionCoordinator
+from analyzer.ocr.configuration import OcrRuntimeConfig
+from analyzer.ocr.frame_artifacts import SupabaseOcrFrameArtifactStore
+from analyzer.ocr.roboflow import build_roboflow_easyocr_adapter_from_env
 from app.ocr_runs import OcrRunLifecycle
 from app.supabase import Supabase
 
 
 def _build_ocr_adapter():
-    """Return the configured OCR adapter when provider wiring is available.
-
-    OCR remains disabled by default so an OCR Run cannot appear complete before
-    the worker has an explicitly configured recognition dependency.
-    """
-    return None
+    """Return hosted OCR only when its complete local configuration is present."""
+    return build_roboflow_easyocr_adapter_from_env()
 
 
-def _build_ocr_completion_coordinator():
-    """Return OCR persistence backed by durable artifact storage when configured.
-
-    Per-message work directories are intentionally excluded here because their
-    cleanup would leave immutable OCR Results pointing at deleted evidence.
-    """
-    return None
+def _build_ocr_completion_coordinator(
+    configuration: OcrRuntimeConfig,
+):
+    """Return OCR completion backed by private durable frame evidence."""
+    return OcrCompletionCoordinator(
+        artifact_store=SupabaseOcrFrameArtifactStore(
+            supabase_url=SUPABASE_URL,
+            bucket=configuration.evidence_bucket,
+            session=get_storage_session(),
+            timeout_seconds=(
+                configuration.evidence_storage_timeout_seconds
+            ),
+        )
+    )
 
 
 
 def process_message(cur, msg_id, payload):
     payload = _parse_payload(msg_id, payload)
+    ocr_configuration = OcrRuntimeConfig.from_env()
     request_id = payload.request_id
 
     logger.info("[job %s] Processing: %s", msg_id, request_id)
@@ -45,6 +54,7 @@ def process_message(cur, msg_id, payload):
         analyzer = VideoAnalyzer(
             artifact,
             ocr_adapter=_build_ocr_adapter(),
+            ocr_candidate_mode=ocr_configuration.candidate_mode,
         )
         db = Supabase(cur=cur, request_id=request_id)
         ocr_lifecycle = OcrRunLifecycle(
@@ -52,7 +62,9 @@ def process_message(cur, msg_id, payload):
             request_id=request_id,
             source_bucket=payload.bucket,
             source_path=payload.video_path,
-            completion_coordinator=_build_ocr_completion_coordinator(),
+            completion_coordinator=_build_ocr_completion_coordinator(
+                ocr_configuration
+            ),
         )
         analyzer = _OcrLifecycleAnalyzer(
             analyzer,
