@@ -7,6 +7,14 @@
 
 import { z } from "zod";
 
+/**
+ * Accepts Postgres nullable columns while keeping evaluator-facing values
+ * consistently optional instead of making every downstream agent handle null.
+ */
+function optionalDatabaseField<T extends z.ZodTypeAny>(schema: T) {
+  return schema.nullish().transform((value) => value ?? undefined);
+}
+
 // 1. INPUT: Agent invocation + DB-loaded context
 
 export const AgentNameSchema = z.enum([
@@ -32,8 +40,8 @@ export type AgentRunRequest = z.infer<typeof AgentRunRequestSchema>;
 
 export const ParsedCreativeBriefSchema = z.object({
   raw_text: z.string(),
-  brand_voice: z.string().optional(),
-  target_audience: z.string().optional(),
+  brand_voice: optionalDatabaseField(z.string()),
+  target_audience: optionalDatabaseField(z.string()),
   required_messages: z.array(z.string()).default([]),
   required_ctas: z.array(z.string()).default([]),
   approved_claims: z.array(z.string()).default([]),
@@ -48,7 +56,7 @@ export const TranscriptSegmentSchema = z.object({
   start_ms: z.number().int().nonnegative(),
   end_ms: z.number().int().nonnegative(),
   text: z.string(),
-  speaker: z.string().optional(),
+  speaker: optionalDatabaseField(z.string()),
 });
 export type TranscriptSegment = z.infer<typeof TranscriptSegmentSchema>;
 
@@ -59,71 +67,110 @@ export const OCRSegmentSchema = z.object({
   end_ms: z.number().int().nonnegative(),
   text: z.string(),
   on_screen_duration_ms: z.number().int().nonnegative(),
-  region_size: z.number().optional(),
-  font_size_px: z.number().int().nonnegative().optional(),
+  region_size: optionalDatabaseField(z.number()),
+  font_size_px: optionalDatabaseField(z.number().int().nonnegative()),
 });
 export type OCRSegment = z.infer<typeof OCRSegmentSchema>;
 
 export const VisualFrameSchema = z.object({
   frame_id: z.string(),
   timestamp_ms: z.number().int().nonnegative(),
-  image_url: z.string().url().optional(),
-  visual_description: z.string(), // 1-3 sentences describing visual action
-  people: z.object({
-    count: z.number().int().nonnegative(),
-    apparent_ages: z.array(z.string()),
-    apparent_presentation: z.array(z.string()),
-    activity: z.string(),
-    clothing_style: z.string(),
-  }).optional(),
-  color_palette: z.object({
-    dominant_colors: z.array(z.string()),
-    lighting_quality: z.string(),
-  }).optional(),
-  background: z.object({
-    location_type: z.string(),
-    mood: z.string(),
-  }).optional(),
-  camera_movement: z.enum(["static", "pan", "zoom", "handheld"]).optional(),
-  technical_flags: z.array(z.string()).optional(),
+  image_url: optionalDatabaseField(z.string().url()),
+  action: optionalDatabaseField(z.string()), // nullable: context() may fail to caption a frame
+  framing_composition: optionalDatabaseField(z.string()),
+  people: optionalDatabaseField(
+    z.object({
+      count: z.number().int().nonnegative(),
+      apparent_ages: z.array(z.string()),
+      apparent_presentation: z.array(z.string()),
+      activity: z.string(),
+      clothing_style: z.string(),
+    }),
+  ),
+  color_palette: optionalDatabaseField(
+    z.object({
+      dominant_colors: z.array(z.string()),
+      lighting_quality: z.string(),
+    }),
+  ),
+  background: optionalDatabaseField(
+    z.object({
+      location_type: z.string(),
+      mood: z.string(),
+    }),
+  ),
+  technical_flags: z.array(
+    z.enum([
+      "ai_artifacts",
+      "poor_framing_lighting",
+      "jarring_transitions",
+      "illegible_text",
+    ]),
+  ).default([]),
+  shot_index: optionalDatabaseField(z.number().int().nonnegative()),
+  is_shot_start: z.boolean().default(false),
+  is_fade: z.boolean().default(false),
 });
 export type VisualFrame = z.infer<typeof VisualFrameSchema>;
+
+export const QualityFrameSchema = z.object({
+  frame_id: z.string(),
+  timestamp_ms: z.number().int().nonnegative(),
+  reasons: z.array(z.string()),
+  sharpness: optionalDatabaseField(z.number()),
+  crushed_frac: optionalDatabaseField(z.number()),
+  blown_frac: optionalDatabaseField(z.number()),
+  mean_luma: optionalDatabaseField(z.number()),
+  contrast: optionalDatabaseField(z.number()),
+  grain: optionalDatabaseField(z.number()),
+  blockiness: optionalDatabaseField(z.number()),
+  temporal_delta: optionalDatabaseField(z.number()),
+});
+export type QualityFrame = z.infer<typeof QualityFrameSchema>;
 
 export const ProductFrameSchema = z.object({
   frame_id: z.string(),
   timestamp_ms: z.number().int().nonnegative(),
   // Coordinates are not formally specified yet, so preserve the processor's value.
-  location: z.unknown().optional(),
+  location: optionalDatabaseField(z.unknown()),
   confidence_score: z.number(),
-  prominence: z.enum([
-    "foreground_in_use",
-    "foreground_static",
-    "background",
-    "not_visible",
-  ]).optional(),
-  focus_quality: z.enum(["sharp", "soft_focus", "blurry"]).optional(),
-  framing: z.enum(["fully_visible", "partially_cropped", "heavily_obscured"])
-    .optional(),
-  usage_context: z.string().optional(),
+  prominence: optionalDatabaseField(
+    z.enum([
+      "foreground_in_use",
+      "foreground_static",
+      "background",
+      "not_visible",
+    ]),
+  ),
+  focus_quality: optionalDatabaseField(
+    z.enum(["sharp", "soft_focus", "blurry"]),
+  ),
+  framing: optionalDatabaseField(
+    z.enum(["fully_visible", "partially_cropped", "heavily_obscured"]),
+  ),
 });
 export type ProductFrame = z.infer<typeof ProductFrameSchema>;
 
 export const LogoFrameSchema = z.object({
   frame_id: z.string(),
   timestamp_ms: z.number().int().nonnegative(),
-  location: z.unknown().optional(),
+  location: optionalDatabaseField(z.unknown()),
   confidence_score: z.number(),
-  prominence: z.enum([
-    "large_central",
-    "small_corner",
-    "background_signage",
-    "absent",
-  ]).optional(),
-  reference_match: z.enum([
-    "matches_reference",
-    "differs_from_reference",
-    "cannot_determine",
-  ]).optional(),
+  prominence: optionalDatabaseField(
+    z.enum([
+      "large_central",
+      "small_corner",
+      "background_signage",
+      "absent",
+    ]),
+  ),
+  reference_match: optionalDatabaseField(
+    z.enum([
+      "matches_reference",
+      "differs_from_reference",
+      "cannot_determine",
+    ]),
+  ),
 });
 export type LogoFrame = z.infer<typeof LogoFrameSchema>;
 
@@ -132,12 +179,20 @@ export const VideoMetadataSchema = z.object({
   aspect_ratio: z.string(),
   resolution: z.string(),
   dropped_frame_markers: z.array(z.number().int().nonnegative()),
-  corruption_detected: z.boolean().optional(),
+  corruption_detected: optionalDatabaseField(z.boolean()),
+  shot_count: optionalDatabaseField(z.number().int().nonnegative()),
+  cuts_per_second: optionalDatabaseField(z.number()),
+  avg_shot_s: optionalDatabaseField(z.number()),
+  min_shot_s: optionalDatabaseField(z.number()),
+  max_shot_s: optionalDatabaseField(z.number()),
+  dynamism: optionalDatabaseField(
+    z.enum(["mostly_static", "moderate", "dynamic"]),
+  ),
 });
 export type VideoMetadata = z.infer<typeof VideoMetadataSchema>;
 
 export const ProductContextSchema = z.object({
-  raw_text: z.string().optional(),
+  raw_text: optionalDatabaseField(z.string()),
   claims: z.array(z.string()).default([]),
   contraindications: z.array(z.string()).default([]),
   reference_asset_urls: z.array(z.string().url()).default([]),
@@ -158,6 +213,7 @@ export const AgentContextSchema = z.object({
   visual_frames: z.array(VisualFrameSchema),
   product_frames: z.array(ProductFrameSchema),
   logo_frames: z.array(LogoFrameSchema),
+  quality_frames: z.array(QualityFrameSchema),
   product_context: ProductContextSchema.optional(),
 });
 export type AgentContext = z.infer<typeof AgentContextSchema>;

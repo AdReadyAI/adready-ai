@@ -112,7 +112,8 @@ def test_probe_metadata_success(tmp_path, monkeypatch):
     monkeypatch.setattr(
         vp.subprocess, "run", lambda *a, **k: MagicMock(stdout=_ffprobe_json())
     )
-    meta = _pre(tmp_path)._probe_metadata("v.mp4")
+    preprocessor = _pre(tmp_path)
+    meta = preprocessor._probe_metadata("v.mp4")
     assert (meta.duration_s, meta.fps, meta.width, meta.height, meta.size_bytes) == (
         12.5,
         30.0,
@@ -120,6 +121,28 @@ def test_probe_metadata_success(tmp_path, monkeypatch):
         1080,
         1048576,
     )
+    assert preprocessor._has_audio is True
+
+
+def test_probe_metadata_no_audio_stream(tmp_path, monkeypatch):
+    # Silent/b-roll-only video: has a video stream but no audio stream.
+    data = json.dumps(
+        {
+            "format": {"duration": "12.5", "size": "1048576"},
+            "streams": [
+                {
+                    "codec_type": "video",
+                    "width": 1920,
+                    "height": 1080,
+                    "avg_frame_rate": "30/1",
+                },
+            ],
+        }
+    )
+    monkeypatch.setattr(vp.subprocess, "run", lambda *a, **k: MagicMock(stdout=data))
+    preprocessor = _pre(tmp_path)
+    preprocessor._probe_metadata("v.mp4")
+    assert preprocessor._has_audio is False
 
 
 def test_probe_metadata_no_ffprobe(tmp_path, monkeypatch):
@@ -207,6 +230,19 @@ def test_extract_audio_called_process_error(tmp_path, monkeypatch):
         _pre(tmp_path)._extract_audio("v.mp4")
 
 
+def test_extract_audio_skips_when_no_audio_stream(tmp_path, monkeypatch):
+    # Silent/b-roll-only videos have no audio stream; this must not invoke
+    # ffmpeg (which would fail with "does not contain any stream") and must
+    # not raise — it's a valid, non-error case.
+    def boom(*a, **k):
+        raise AssertionError("ffmpeg should not run when there's no audio stream")
+
+    monkeypatch.setattr(vp.subprocess, "run", boom)
+    preprocessor = _pre(tmp_path)
+    preprocessor._has_audio = False
+    assert preprocessor._extract_audio("v.mp4") is None
+
+
 # ---- _download_video ----
 def test_download_writes_chunks(tmp_path, monkeypatch):
     session = MagicMock()
@@ -268,15 +304,15 @@ def test_sample_frames_delegates_to_frame_sampler(tmp_path, monkeypatch):
     ctor = MagicMock(return_value=sampler)
     monkeypatch.setattr(vp, "FrameSampler", ctor)
 
-    out = _pre(tmp_path)._sample_frames("v.mp4", meta)
+    out = _pre(tmp_path)._sample_frames("v.mp4", meta, ["p1"], ["l1"])
 
     assert out == ["frame"]
     ctor.assert_called_once_with(
         "v.mp4",
         meta,
         str(tmp_path),
-        product_image_paths=["p"],
-        logo_paths=["l"],
+        product_image_paths=["p1"],
+        logo_paths=["l1"],
     )
 
 
@@ -295,7 +331,7 @@ def test_sample_frames_does_not_promote_ocr_failure_from_text_probe(
             "periodic OCR coverage exceeds candidate capacity"
         )
     }
-    assert _pre(tmp_path)._sample_frames("v.mp4", meta) == ["frame"]
+    assert _pre(tmp_path)._sample_frames("v.mp4", meta, (), ()) == ["frame"]
 
 
 # ---- prepare (orchestration) ----
@@ -305,7 +341,10 @@ def test_prepare_builds_artifacts(tmp_path, monkeypatch):
     monkeypatch.setattr(pre, "_download_video", lambda: "v.mp4")
     monkeypatch.setattr(pre, "_probe_metadata", lambda p: meta)
     monkeypatch.setattr(pre, "_extract_audio", lambda p: "a.wav")
-    monkeypatch.setattr(pre, "_sample_frames", lambda p, m: [])
+    monkeypatch.setattr(
+        pre, "_download_reference_images", lambda paths, subfolder: []
+    )
+    monkeypatch.setattr(pre, "_sample_frames", lambda p, m, prod, logo: [])
 
     art = pre.prepare()
 
@@ -316,3 +355,34 @@ def test_prepare_builds_artifacts(tmp_path, monkeypatch):
     assert art.frames == ()
     assert art.video_metadata is meta
     assert art.work_dir == str(tmp_path)
+
+
+def test_prepare_threads_reference_image_paths_to_sample_frames(tmp_path, monkeypatch):
+    pre = _pre(tmp_path)
+    meta = VideoMetadata(12.5, 30.0, 1920, 1080, 999)
+    monkeypatch.setattr(pre, "_download_video", lambda: "v.mp4")
+    monkeypatch.setattr(pre, "_probe_metadata", lambda p: meta)
+    monkeypatch.setattr(pre, "_extract_audio", lambda p: "a.wav")
+
+    downloaded = {"product_images": ["local/product0.jpg"], "logo_images": ["local/logo0.jpg"]}
+    monkeypatch.setattr(
+        pre,
+        "_download_reference_images",
+        lambda paths, subfolder: downloaded[subfolder],
+    )
+
+    captured = {}
+
+    def fake_sample_frames(video_path, metadata, product_image_paths, logo_paths):
+        captured["product_image_paths"] = product_image_paths
+        captured["logo_paths"] = logo_paths
+        return []
+
+    monkeypatch.setattr(pre, "_sample_frames", fake_sample_frames)
+
+    art = pre.prepare()
+
+    assert captured["product_image_paths"] == ["local/product0.jpg"]
+    assert captured["logo_paths"] == ["local/logo0.jpg"]
+    assert art.product_image_paths == ("local/product0.jpg",)
+    assert art.logo_paths == ("local/logo0.jpg",)

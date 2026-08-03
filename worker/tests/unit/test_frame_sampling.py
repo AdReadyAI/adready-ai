@@ -24,6 +24,7 @@ from analyzer.frame_sampling.probes.adaptive import (
     AdaptiveSampler,
     AdaptiveSamplerResult,
 )
+from analyzer.frame_sampling.probes.quality import QualityProbe, QualityProbeResult
 from analyzer.text_detection.east import (
     EastTextRegionDetector,
     EastUnavailableError,
@@ -70,11 +71,19 @@ def test_registered_probes_in_stage_order():
         "QualityProbe",
         "TextProbe",
         "ProductProbe",
+        "LogoProbe",
     ]
 
 
 def test_stage_is_strictly_ordered():
-    assert Stage.SCENE < Stage.SAMPLE < Stage.QUALITY < Stage.TEXT < Stage.PRODUCT
+    assert (
+        Stage.SCENE
+        < Stage.SAMPLE
+        < Stage.QUALITY
+        < Stage.TEXT
+        < Stage.PRODUCT
+        < Stage.LOGO
+    )
 
 
 def test_register_probe_sorts_by_stage(monkeypatch):
@@ -354,7 +363,7 @@ def test_run_produces_manifest_from_keeping_probe(tmp_path, monkeypatch):
 
 # ---- probe stubs contract ----
 # Probes with a real implementation, covered by their own tests.
-_IMPLEMENTED_PROBES = {"scene", "adaptive"}
+_IMPLEMENTED_PROBES = {"scene", "adaptive", "quality"}
 
 
 def test_probe_stubs_are_noop(tmp_path):
@@ -583,6 +592,130 @@ def test_run_isolates_failing_finalize(tmp_path, monkeypatch):
 def test_frame_context_shot_boundary_default(tmp_path):
     ctx = _sampler(tmp_path)._build_context(0, _frame())
     assert ctx.shot_boundary is False
+
+
+# ---- QualityProbe ----
+def _quality_ctx(index, gray, shot_boundary=False, store=None):
+    """A single-channel synthetic frame, like _ctx() but with a controlled
+    grayscale pattern instead of _frame()'s random noise.
+    """
+    ctx = FrameContext(
+        index=index,
+        timestamp=index / 30,
+        frame=np.stack([gray, gray, gray], axis=-1),
+        gray=gray,
+        small=gray,
+        edges=gray,
+        shot_boundary=shot_boundary,
+    )
+    ctx.store = store
+    return ctx
+
+
+def _solid(value, height=20, width=20):
+    return np.full((height, width), value, dtype=np.uint8)
+
+
+def _edge(low, high, height=20, width=20):
+    """A single clean vertical edge — sharp and high-contrast without the
+    per-pixel alternation that (realistically) also trips the noise/grain
+    heuristic, the same way real fine texture can.
+    """
+    gray = np.full((height, width), low, dtype=np.uint8)
+    gray[:, width // 2 :] = high
+    return gray
+
+
+def test_quality_probe_flags_flat_frame_as_blur_and_low_contrast(tmp_path):
+    store = FrameStore(str(tmp_path))
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _solid(128), store=store))
+
+    assert probe._flags[0].reasons == ("blur", "contrast")
+    # FrameStore holds tags in a set and sorts them on manifest() — alphabetical,
+    # not insertion order.
+    assert store.manifest()[0].tags == ("blur", "contrast", "quality")
+
+
+def test_quality_probe_does_not_flag_sharp_high_contrast_frame(tmp_path):
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _edge(100, 160)))
+
+    assert probe._flags == []
+
+
+def test_quality_probe_flags_near_black_frame_as_exposure(tmp_path):
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _solid(0)))
+
+    assert "exposure" in probe._flags[0].reasons
+    assert probe._flags[0].scores["mean_luma"] == pytest.approx(0.0)
+
+
+def test_quality_probe_temporal_spike_lands_on_dark_frame_is_cut_to_black(tmp_path):
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _solid(200)))
+    probe.process(_quality_ctx(1, _solid(0)))
+
+    assert "cut_to_black" in probe._flags[-1].reasons
+
+
+def test_quality_probe_temporal_spike_with_shot_boundary_is_cut(tmp_path):
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _solid(50)))
+    probe.process(_quality_ctx(1, _solid(200), shot_boundary=True))
+
+    assert "cut" in probe._flags[-1].reasons
+
+
+def test_quality_probe_temporal_spike_without_shot_boundary_is_flicker(tmp_path):
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _solid(50)))
+    probe.process(_quality_ctx(1, _solid(200), shot_boundary=False))
+
+    assert "flicker" in probe._flags[-1].reasons
+
+
+def test_quality_probe_flags_freeze_after_sustained_static_run(tmp_path):
+    from config.settings import QUALITY_FREEZE_MIN_FRAMES
+
+    probe = QualityProbe()
+    for index in range(QUALITY_FREEZE_MIN_FRAMES + 2):
+        probe.process(_quality_ctx(index, _solid(128)))
+
+    freeze_hits = [f for f in probe._flags if "freeze" in f.reasons]
+    # Flagged once, on the frame where the sustained run first crosses the
+    # threshold — not on every frame after, which would flood the manifest.
+    # The first frame has no predecessor (no delta at all), so it takes
+    # QUALITY_FREEZE_MIN_FRAMES + 1 frames to accumulate that many
+    # low-delta transitions.
+    assert len(freeze_hits) == 1
+    assert freeze_hits[0].index == QUALITY_FREEZE_MIN_FRAMES
+
+
+def test_quality_probe_finalize_returns_accumulated_flags(tmp_path):
+    probe = QualityProbe()
+    probe.process(_quality_ctx(0, _solid(128)))
+
+    result = probe.finalize()
+
+    assert isinstance(result, QualityProbeResult)
+    assert len(result.flags) == 1
+
+
+def test_quality_probe_unflagged_frame_is_not_kept(tmp_path):
+    store = FrameStore(str(tmp_path))
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _edge(100, 160), store=store))
+
+    assert store.manifest() == []
 
 
 # ---- store.keep_frame ----

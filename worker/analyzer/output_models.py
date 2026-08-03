@@ -3,6 +3,8 @@ from typing import ClassVar, Generic, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict
 
 
+
+
 # ---------------------------------------------------------------------------
 # General "video_processing" table models
 # ---------------------------------------------------------------------------
@@ -62,24 +64,84 @@ class OcrResult(TaskResult[OcrItem]):
 
 
 # ==============================================
-#  object_detection  ->  object_detection_items
+#  product_detection  ->  product_frames
 # ==============================================
 
-class ObjectDetectionItem(TaskRow):
-    pass
+class ProductFrameRow(TaskRow):
+    frame_id: str
+    timestamp_ms: int
+    location: dict | None = None
+    confidence_score: float
+    prominence: Literal[
+        "foreground_in_use", "foreground_static", "background", "not_visible"
+    ]
+    focus_quality: Literal["sharp", "soft_focus", "blurry"] | None = None
+    framing: Literal[
+        "fully_visible", "partially_cropped", "heavily_obscured"
+    ] | None = None
 
-class ObjectDetectionResult(TaskResult[ObjectDetectionItem]):
-    table: ClassVar[str] = "object_detection_items" #Table name should be updated to the actual name
+class ProductFrameResult(TaskResult[ProductFrameRow]):
+    table: ClassVar[str] = "product_frames"
 
 
 # ==============================================
-#  context  ->  context_results
+#  logo_detection  ->  logo_frames
 # ==============================================
 
-class ContextRow(TaskRow):
-    pass
+class LogoFrameRow(TaskRow):
+    frame_id: str
+    timestamp_ms: int
+    location: dict | None = None
+    confidence_score: float
+    prominence: Literal[
+        "large_central", "small_corner", "background_signage", "absent"
+    ]
+    reference_match: Literal[
+        "matches_reference", "differs_from_reference", "cannot_determine"
+    ]
 
-class ContextResult(TaskResult[ContextRow]):
-    table: ClassVar[str] = "context_results" #Table name should be updated to the actual name
+class LogoFrameResult(TaskResult[LogoFrameRow]):
+    table: ClassVar[str] = "logo_frames"
+
+
+# ==============================================
+#  context  ->  visual_frames
+# ==============================================
+
+class PeopleInfo(BaseModel):
+    count: int
+    apparent_ages: list[str] = []
+    apparent_presentation: list[str] = []
+    activity: str
+    clothing_style: str
+
+class ColorPalette(BaseModel):
+    dominant_colors: list[str] = []
+    lighting_quality: str
+
+class SceneBackground(BaseModel):
+    location_type: str
+    mood: str
+
+TechnicalFlag = Literal[
+    "ai_artifacts", "poor_framing_lighting", "jarring_transitions", "illegible_text"
+]
+
+class VisualFrameRow(TaskRow):
+    frame_id: str
+    timestamp_ms: int
+    image_url: str | None = None
+    action: str | None = None
+    framing_composition: str | None = None
+    people: PeopleInfo | None = None
+    color_palette: ColorPalette | None = None
+    background: SceneBackground | None = None
+    technical_flags: list[TechnicalFlag] = []
+    shot_index: int | None = None
+    is_shot_start: bool = False
+    is_fade: bool = False
+
+class VisualFrameResult(TaskResult[VisualFrameRow]):
+    table: ClassVar[str] = "visual_frames"
 
 

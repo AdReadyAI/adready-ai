@@ -834,7 +834,15 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
 
         def completed_analyzers(self):
             """Leave only OCR pending through the real analyzer registry."""
-            return {"transcription", "object_detection", "context"}
+            return {
+                "transcription",
+                "product_detection",
+                "logo_detection",
+                "context",
+            }
+
+        def persist_video_metadata(self, metadata, scene_result):
+            """Accept main's metadata write outside generic task results."""
 
         def persist_results(self, results, errors):
             """Accept only the empty generic envelope after OCR completion."""

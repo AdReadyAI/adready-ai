@@ -1,6 +1,6 @@
 import psycopg2
 import requests
-# from openai import OpenAI
+from openai import OpenAI
 from config.settings import (
     OPENROUTER_API_KEY,
     DATABASE_URL,
@@ -39,12 +39,13 @@ def get_aai_transcriber()-> aai.Transcriber:
     aai.settings.api_key = ASSEMBLYAI_API_KEY
     return aai.Transcriber()
 
-# @lru_cache(maxsize=1)
-# def get_openrouter_client(): 
+@lru_cache(maxsize=1)
+def get_openrouter_client() -> OpenAI:
+    if not OPENROUTER_API_KEY:
+        raise ValueError("OPENROUTER_API_KEY is not set. Please check your environment variables.")
 
-#     logger.info("Creating OpenRouter client...")
-
-#     return OpenAI(
-#         base_url=OPENROUTER_BASE_URL,
-#         api_key=OPENROUTER_API_KEY,
-#     )
+    logger.info("Creating OpenRouter client...")
+    return OpenAI(
+        base_url=OPENROUTER_BASE_URL,
+        api_key=OPENROUTER_API_KEY,
+    )

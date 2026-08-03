@@ -4,9 +4,11 @@ from scenedetect import StatsManager, ContentDetector, ThresholdDetector, FrameT
 from analyzer.frame_sampling.base import Probe, ProbeResult, Stage, register_probe
 from analyzer.frame_sampling.context import FrameContext
 from config.settings import (
-    SCENE_CUT_THRESHOLD,
-    SCENE_CONTENT_SCALE,
-    SCENE_MIN_SHOT_FRAMES
+    SCENE_CUT_THRESHOLD, 
+    SCENE_CONTENT_SCALE, 
+    SCENE_MIN_SHOT_FRAMES,
+    DYNAMISM_MOSTLY_STATIC_MAX,
+    DYNAMISM_MODERATE_MAX,
 )
 
 @dataclass
@@ -21,6 +23,7 @@ class SceneProbeResult(ProbeResult):
     shots: list[Shot] = field(default_factory=list)
     pacing: dict = field(default_factory=dict)
     fades: list[float] = field(default_factory=list)
+    dynamism: str | None = None
 
 @register_probe(Stage.SCENE)
 class SceneProbe(Probe):
@@ -43,6 +46,8 @@ class SceneProbe(Probe):
         self.cut_set: set[int] = set()
         self.fade_frames: list[int] = []
         self.last_index = 0
+        self._content_sum = 0.0
+        self._content_count = 0
 
 
     def process(self, ctx: FrameContext) -> None:
@@ -54,6 +59,10 @@ class SceneProbe(Probe):
 
         ctx.content_val = min(content_val / SCENE_CONTENT_SCALE, 1.0)
         ctx.shot_boundary = bool(content_cuts)
+
+        if not ctx.shot_boundary:
+            self._content_sum += ctx.content_val
+            self._content_count += 1
 
         self.cut_set.update(int(c) for c in content_cuts)
         self.fade_frames.extend(int(f) for f in fade_events)
@@ -68,7 +77,18 @@ class SceneProbe(Probe):
             shots=shots,
             pacing=self._pacing(shots),
             fades=sorted(f / self.fps for f in set(self.fade_frames)),
+            dynamism=self._dynamism(),
         )
+
+    def _dynamism(self) -> str | None:
+        if self._content_count == 0:
+            return None
+        avg = self._content_sum / self._content_count
+        if avg <= DYNAMISM_MOSTLY_STATIC_MAX:
+            return "mostly_static"
+        if avg <= DYNAMISM_MODERATE_MAX:
+            return "moderate"
+        return "dynamic"
 
     # ---- internals ----
     def _read_metrics(self, index) -> tuple[float, ...]:
