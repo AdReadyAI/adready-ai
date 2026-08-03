@@ -9,14 +9,14 @@ import { evaluateQualitativeChecks } from "./prompts.ts";
 
 export const BrandAgentRequestSchema = AgentRunRequestSchema;
 export type BrandAgentRequest = AgentRunRequest;
-export type BrandAgentRunOptions = { userId?: string };
+export type BrandAgentRunOptions = { userId: string };
 
 /** Runs the Brand Alignment pipeline independently of HTTP transport. */
 export async function runBrandAlignment(
   request: BrandAgentRequest,
-  options: BrandAgentRunOptions = {},
+  options: BrandAgentRunOptions,
 ): Promise<MetricResult> {
-  const userId = options.userId ?? "";
+  const { userId } = options;
   const context = await loadAgentContext(request.request_id, { userId });
   const logo = evaluateLogoChecks(context);
   const qualitative = await evaluateQualitativeChecks(context);
