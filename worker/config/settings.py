@@ -93,6 +93,7 @@ ROBOFLOW_OWLV2_URL = os.getenv(
     "ROBOFLOW_OWLV2_URL", "https://infer.roboflow.com/owlv2/infer"
 )
 ROBOFLOW_TIMEOUT = 30
+REFERENCE_DETECTION_MAX_WORKERS = 8
 
 # Detection confidence thresholds — unvalidated starting points, tune against
 # real ad footage once flagged detections can be reviewed.

@@ -14,6 +14,7 @@ from config.connection import get_aai_transcriber
 from config.settings import (
     LOGO_DETECTION_LOW_CONFIDENCE,
     PRODUCT_DETECTION_CONFIDENCE,
+    REFERENCE_DETECTION_MAX_WORKERS,
     VISUAL_CAPTION_MAX_WORKERS,
 )
 from config.settings import logger
@@ -134,17 +135,25 @@ class VideoAnalyzer:
         detector = ReferenceDetector(list(reference_paths), label=tag)
 
         rows = []
-        for frame in candidates:
-            try:
-                detection = detector.detect(frame.path, confidence=confidence)
-            except TransientError:
-                logger.exception(
-                    "OWLv2 request failed for frame %s, skipping this frame", frame.index
-                )
-                continue
-            if detection is None:
-                continue
-            rows.append(row_builder(frame, detection))
+        with ThreadPoolExecutor(max_workers=REFERENCE_DETECTION_MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(detector.detect, frame.path, confidence=confidence): frame
+                for frame in candidates
+            }
+            for future in as_completed(futures):
+                frame = futures[future]
+                try:
+                    detection = future.result()
+                except TransientError:
+                    logger.exception(
+                        "OWLv2 request failed for frame %s, skipping this frame", frame.index
+                    )
+                    continue
+                if detection is None:
+                    continue
+                rows.append(row_builder(frame, detection))
+
+        rows.sort(key=lambda r: r.timestamp_ms)
         return rows
 
     @staticmethod
