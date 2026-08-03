@@ -1,7 +1,9 @@
 """Prepare representative artifacts and evaluator rows for OCR completion."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
+from analyzer.frame_sampling.probes.text import TextSegment
+from analyzer.ocr.consolidation import OcrSegment
 from analyzer.ocr.pipeline import FixedRateOcrAnalysis
 from analyzer.ocr.frame_artifacts import (
     OcrFrameArtifact,
@@ -16,6 +18,8 @@ class OcrCompletion:
 
     artifacts: tuple[OcrFrameArtifact, ...]
     result_segments: tuple[OcrResultSegment, ...]
+    ocr_segments: tuple[OcrSegment, ...] = ()
+    text_segments: tuple[TextSegment, ...] = ()
 
 
 class OcrCompletionCoordinator:
@@ -39,10 +43,38 @@ class OcrCompletionCoordinator:
             artifact.source_frame_index: artifact.frame_id
             for artifact in artifacts
         }
+        text_segment_ids = {
+            segment.identifier: (
+                f"{ocr_run_id}-text-segment-{position:04d}"
+            )
+            for position, segment in enumerate(
+                analysis.text_segments,
+                start=1,
+            )
+        }
+        text_segments = tuple(
+            replace(
+                segment,
+                identifier=text_segment_ids[segment.identifier],
+            )
+            for segment in analysis.text_segments
+        )
+        ocr_segments = tuple(
+            replace(
+                segment,
+                source_text_segment_ids=tuple(
+                    text_segment_ids.get(identifier, identifier)
+                    for identifier in segment.source_text_segment_ids
+                ),
+            )
+            for segment in analysis.segments
+        )
         return OcrCompletion(
             artifacts=artifacts,
             result_segments=to_ocr_result_segments(
-                segments=analysis.segments,
+                segments=ocr_segments,
                 frame_ids_by_index=frame_ids_by_index,
             ),
+            ocr_segments=ocr_segments,
+            text_segments=text_segments,
         )

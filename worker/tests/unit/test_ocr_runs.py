@@ -6,7 +6,10 @@ pytestmark = pytest.mark.unit
 
 from analyzer.types import VideoMetadata  # noqa: E402
 from analyzer.ocr.completion import OcrCompletion  # noqa: E402
+from analyzer.ocr.consolidation import OcrSegment  # noqa: E402
+from analyzer.ocr.recognition import RawOcrReading  # noqa: E402
 from analyzer.ocr.result import OcrResultSegment  # noqa: E402
+from analyzer.frame_sampling.probes.text import TextSegment  # noqa: E402
 from app.errors import PermanentError  # noqa: E402
 from app.ocr_runs import OcrRunLifecycle  # noqa: E402
 
@@ -399,12 +402,14 @@ def test_lifecycle_prepares_and_atomically_persists_ocr_analysis() -> None:
         def __init__(self) -> None:
             self.write_count = 0
             self.atomic_completion_called = False
+            self.completion_params = None
 
         def execute(self, sql, params=None):
             """Model run creation, timing provenance, and atomic completion."""
             self.write_count += 1
             if self.write_count == 3:
                 self.atomic_completion_called = True
+                self.completion_params = params
 
         def fetchone(self):
             """Return the run identity first and completion outcome last."""
@@ -433,6 +438,56 @@ def test_lifecycle_prepares_and_atomically_persists_ocr_analysis() -> None:
                         on_screen_duration_ms=250,
                         region_size=8.0,
                         font_size_px=None,
+                    ),
+                ),
+                ocr_segments=(
+                    OcrSegment(
+                        identifier="ocr_segment_0001",
+                        text="SALE",
+                        rectangle=(0.1, 0.2, 0.4, 0.2),
+                        start_s=0.0,
+                        end_s=0.25,
+                        duration_s=0.25,
+                        confidence=None,
+                        representative_frame_index=5,
+                        supporting_frame_indexes=(5,),
+                        source_text_segment_ids=(
+                            "ocr-run-completion-text-segment-0001",
+                        ),
+                        supporting_readings=(
+                            RawOcrReading(
+                                source_frame_index=5,
+                                timestamp_s=0.25,
+                                text="SALE",
+                                rectangle=(0.1, 0.2, 0.4, 0.2),
+                                confidence=None,
+                            ),
+                        ),
+                    ),
+                ),
+                text_segments=(
+                    TextSegment(
+                        identifier=(
+                            "ocr-run-completion-text-segment-0001"
+                        ),
+                        start_s=0.0,
+                        end_s=0.25,
+                        duration_s=0.25,
+                        rectangle=(0.1, 0.2, 0.4, 0.2),
+                        detector_confidence=0.8,
+                        representative_frame_index=5,
+                        candidate_sources=("periodic",),
+                        missed_observations=0,
+                        timing_uncertainty_s=0.0,
+                        observations=(
+                            (
+                                5,
+                                0.25,
+                                (0.1, 0.2, 0.4, 0.2),
+                                0.8,
+                                "stable-region",
+                            ),
+                        ),
                     ),
                 ),
             )
@@ -469,6 +524,20 @@ def test_lifecycle_prepares_and_atomically_persists_ocr_analysis() -> None:
     assert coordinator.received == ("ocr-run-completion", analysis)
     assert cursor.atomic_completion_called is True
     assert result.result_segments[0].text == "SALE"
+    assert len(cursor.completion_params) == 4
+    _, _, ocr_evidence, text_provenance = cursor.completion_params
+    assert ocr_evidence.adapted[0]["source_text_segment_ids"] == (
+        "ocr-run-completion-text-segment-0001",
+    )
+    assert ocr_evidence.adapted[0]["supporting_readings"][0]["text"] == (
+        "SALE"
+    )
+    assert text_provenance.adapted[0]["ocr_segment_ids"] == (
+        "ocr_segment_0001",
+    )
+    assert text_provenance.adapted[0]["observations"][0][4] == (
+        "stable-region"
+    )
 
 
 @pytest.mark.parametrize(

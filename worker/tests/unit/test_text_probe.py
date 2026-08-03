@@ -297,6 +297,61 @@ def test_repeated_region_extends_one_segment_and_selects_stronger_frame(tmp_path
     assert segment.detector_confidence == 0.9
 
 
+def test_finalized_segment_retains_compact_ordered_observations(tmp_path):
+    """TextProbe retains traceable observations without candidate payloads."""
+    frame = np.zeros((100, 200, 3), dtype=np.uint8)
+    store = FrameStore(str(tmp_path))
+    contexts = [
+        FrameContext(
+            index=index,
+            timestamp=timestamp,
+            frame=frame,
+            gray=frame[:, :, 0],
+            small=frame,
+            edges=edges,
+            store=store,
+        )
+        for index, timestamp, edges in (
+            (0, 0.0, np.full((100, 200), 255, dtype=np.uint8)),
+            (1, 0.25, np.zeros((100, 200), dtype=np.uint8)),
+        )
+    ]
+    first = TextDetection(
+        rectangle=(0.1, 0.2, 0.4, 0.1),
+        confidence=0.7,
+        visual_signature="stable-signature",
+    )
+    second = TextDetection(
+        rectangle=(0.11, 0.2, 0.4, 0.1),
+        confidence=None,
+        visual_signature="stable-signature",
+    )
+    probe = TextProbe(
+        detector=FakeTextRegionDetector([[first], [second]])
+    )
+
+    for context in contexts:
+        probe.process(context)
+    segment = probe.finalize().text_segments[0]
+
+    assert segment.observations == (
+        (
+            0,
+            0.0,
+            (0.1, 0.2, 0.4, 0.1),
+            0.7,
+            "stable-signature",
+        ),
+        (
+            1,
+            0.25,
+            (0.11, 0.2, 0.4, 0.1),
+            None,
+            "stable-signature",
+        ),
+    )
+
+
 def test_visually_stable_moving_region_remains_one_segment(tmp_path):
     """Motion continuity must not depend exclusively on rectangle overlap."""
     frame = np.zeros((100, 200, 3), dtype=np.uint8)

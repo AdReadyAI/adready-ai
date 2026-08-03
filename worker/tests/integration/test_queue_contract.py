@@ -365,10 +365,59 @@ def test_ocr_result_is_atomic_retrievable_and_immutable_by_run_id() -> None:
                     "region_size": 8.0,
                     "font_size_px": None,
                 }
+                text_segment_id = f"{ocr_run_id}-text-segment-0001"
+                original_evidence = {
+                    "identifier": "ocr_segment_0001",
+                    "rectangle": [0.1, 0.2, 0.4, 0.2],
+                    "confidence": None,
+                    "representative_frame_index": 5,
+                    "supporting_frame_indexes": [0, 5],
+                    "supporting_readings": [
+                        {
+                            "source_frame_index": 5,
+                            "timestamp_s": 0.25,
+                            "text": "SALE",
+                            "rectangle": [0.1, 0.2, 0.4, 0.2],
+                            "confidence": None,
+                        }
+                    ],
+                    "source_text_segment_ids": [text_segment_id],
+                }
+                original_provenance = {
+                    "identifier": text_segment_id,
+                    "start_s": 0.0,
+                    "end_s": 0.25,
+                    "duration_s": 0.25,
+                    "timing_uncertainty_s": 0.0,
+                    "rectangle": [0.1, 0.2, 0.4, 0.2],
+                    "detector_confidence": 0.8,
+                    "representative_frame_index": 5,
+                    "candidate_sources": ["periodic"],
+                    "missed_observations": 0,
+                    "observations": [
+                        [
+                            5,
+                            0.25,
+                            [0.1, 0.2, 0.4, 0.2],
+                            0.8,
+                            "stable-region",
+                        ]
+                    ],
+                    "ocr_segment_ids": ["ocr_segment_0001"],
+                }
 
                 cursor.execute(
-                    "SELECT complete_ocr_run(%s, %s::jsonb);",
-                    (ocr_run_id, Json([original_segment])),
+                    """
+                    SELECT complete_ocr_run(
+                      %s, %s::jsonb, %s::jsonb, %s::jsonb
+                    );
+                    """,
+                    (
+                        ocr_run_id,
+                        Json([original_segment]),
+                        Json([original_evidence]),
+                        Json([original_provenance]),
+                    ),
                 )
                 assert cursor.fetchone()[0] is True
 
@@ -379,8 +428,24 @@ def test_ocr_result_is_atomic_retrievable_and_immutable_by_run_id() -> None:
                     "on_screen_duration_ms": 500,
                 }
                 cursor.execute(
-                    "SELECT complete_ocr_run(%s, %s::jsonb);",
-                    (ocr_run_id, Json([changed_segment])),
+                    """
+                    SELECT complete_ocr_run(
+                      %s, %s::jsonb, %s::jsonb, %s::jsonb
+                    );
+                    """,
+                    (
+                        ocr_run_id,
+                        Json([changed_segment]),
+                        Json([{**original_evidence, "confidence": 0.1}]),
+                        Json(
+                            [
+                                {
+                                    **original_provenance,
+                                    "missed_observations": 99,
+                                }
+                            ]
+                        ),
+                    ),
                 )
                 assert cursor.fetchone()[0] is False
 
@@ -414,6 +479,64 @@ def test_ocr_result_is_atomic_retrievable_and_immutable_by_run_id() -> None:
                     Decimal("8.0"),
                     None,
                 )
+                cursor.execute(
+                    """
+                    SELECT
+                      rectangle,
+                      confidence,
+                      representative_frame_index,
+                      supporting_frame_indexes,
+                      supporting_readings,
+                      source_text_segment_ids
+                    FROM ocr_segment_evidence
+                    WHERE ocr_run_id = %s;
+                    """,
+                    (ocr_run_id,),
+                )
+                evidence_row = cursor.fetchone()
+                assert evidence_row[:4] == (
+                    [
+                        Decimal("0.1"),
+                        Decimal("0.2"),
+                        Decimal("0.4"),
+                        Decimal("0.2"),
+                    ],
+                    None,
+                    5,
+                    [0, 5],
+                )
+                assert evidence_row[4][0]["text"] == "SALE"
+                assert evidence_row[5] == [text_segment_id]
+
+                cursor.execute(
+                    """
+                    SELECT
+                      estimated_start_ms,
+                      estimated_end_ms,
+                      observed_start_ms,
+                      observed_end_ms,
+                      detector_confidence,
+                      candidate_sources,
+                      missed_observations,
+                      observations,
+                      ocr_segment_ids
+                    FROM ocr_text_segments
+                    WHERE ocr_run_id = %s;
+                    """,
+                    (ocr_run_id,),
+                )
+                provenance_row = cursor.fetchone()
+                assert provenance_row[:7] == (
+                    0,
+                    250,
+                    250,
+                    250,
+                    Decimal("0.8"),
+                    ["periodic"],
+                    0,
+                )
+                assert provenance_row[7][0][4] == "stable-region"
+                assert provenance_row[8] == ["ocr_segment_0001"]
                 cursor.execute(
                     "SELECT status FROM ocr_runs WHERE ocr_run_id = %s;",
                     (ocr_run_id,),
@@ -543,11 +666,21 @@ def test_ocr_result_is_atomic_retrievable_and_immutable_by_run_id() -> None:
                       (SELECT count(*) FROM ocr_results
                        WHERE ocr_run_id = %s),
                       (SELECT count(*) FROM ocr_segments
+                       WHERE ocr_run_id = %s),
+                      (SELECT count(*) FROM ocr_segment_evidence
+                       WHERE ocr_run_id = %s),
+                      (SELECT count(*) FROM ocr_text_segments
                        WHERE ocr_run_id = %s);
                     """,
-                    (ocr_run_id, ocr_run_id, ocr_run_id),
+                    (
+                        ocr_run_id,
+                        ocr_run_id,
+                        ocr_run_id,
+                        ocr_run_id,
+                        ocr_run_id,
+                    ),
                 )
-                assert cursor.fetchone() == (0, 0, 0)
+                assert cursor.fetchone() == (0, 0, 0, 0, 0)
             finally:
                 # Rollback removes fixtures even when PostgreSQL has aborted
                 # the transaction at the expected pre-migration red seam.

@@ -30,6 +30,7 @@ class FixedRateOcrAnalysis:
     segments: tuple[OcrSegment, ...]
     representative_candidates: tuple[OcrCandidate, ...]
     routing: OcrRoutingDecision | None = None
+    text_segments: tuple[TextSegment, ...] = ()
 
 
 class FixedRateOcrPipeline:
@@ -220,6 +221,10 @@ class FixedRateOcrPipeline:
             segments=segments,
             representative_candidates=tuple(representative_candidates),
             routing=routing,
+            # Only the complete detector result accepted by routing crosses
+            # into OCR completion; failed partial cascade evidence was removed
+            # before candidate decoding began.
+            text_segments=text_segments,
         )
 
     @classmethod

@@ -128,8 +128,31 @@ class OcrRunLifecycle:
                 ocr_run_id=str(ocr_run_id),
                 analysis=result,
             )
+            ocr_evidence = [
+                asdict(segment)
+                for segment in completion.ocr_segments
+            ]
+            text_provenance = []
+            for text_segment in completion.text_segments:
+                # The reverse association is derived once at completion so
+                # detector-only Text Segments never learn recognized text.
+                provenance = asdict(text_segment)
+                provenance["ocr_segment_ids"] = tuple(
+                    segment.identifier
+                    for segment in completion.ocr_segments
+                    if text_segment.identifier
+                    in segment.source_text_segment_ids
+                )
+                text_provenance.append(provenance)
             self.cur.execute(
-                "SELECT complete_ocr_run(%s, %s::jsonb);",
+                """
+                SELECT complete_ocr_run(
+                  %s,
+                  %s::jsonb,
+                  %s::jsonb,
+                  %s::jsonb
+                );
+                """,
                 (
                     ocr_run_id,
                     Json(
@@ -138,6 +161,8 @@ class OcrRunLifecycle:
                             for segment in completion.result_segments
                         ]
                     ),
+                    Json(ocr_evidence),
+                    Json(text_provenance),
                 ),
             )
             result_created = self.cur.fetchone()[0]

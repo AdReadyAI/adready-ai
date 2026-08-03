@@ -19,6 +19,7 @@ class OcrSegment:
     representative_frame_index: int
     supporting_frame_indexes: tuple[int, ...]
     source_text_segment_ids: tuple[str, ...] = ()
+    supporting_readings: tuple[RawOcrReading, ...] = ()
 
 
 @dataclass
@@ -30,6 +31,8 @@ class _ReadingTrack:
 
 _MAX_READING_GAP_S = 0.25
 _MIN_RECTANGLE_IOU = 0.5
+_MAX_GEOMETRY_CHANGE = 0.2
+_MAX_CENTER_MOVEMENT_BOX_RATIO = 0.5
 
 
 def consolidate_readings(
@@ -78,6 +81,7 @@ def consolidate_readings(
             confidence=segment.confidence,
             representative_frame_index=segment.representative_frame_index,
             supporting_frame_indexes=segment.supporting_frame_indexes,
+            supporting_readings=segment.supporting_readings,
         )
         for position, segment in enumerate(segments, start=1)
     )
@@ -89,14 +93,59 @@ def _is_compatible(
 ) -> bool:
     """Require exact text, adjacent timing, and conservative spatial overlap."""
     gap_s = current.timestamp_s - previous.timestamp_s
+    if (
+        current.text != previous.text
+        or gap_s < -1e-9
+        or gap_s > _MAX_READING_GAP_S + 1e-9
+    ):
+        return False
+
+    overlap = _intersection_over_union(
+        previous.rectangle,
+        current.rectangle,
+    )
+    if overlap >= _MIN_RECTANGLE_IOU:
+        return True
+
+    # Movement continuity applies only across advancing source observations.
+    # Same-timestamp regions stay separate unless they genuinely overlap.
+    return gap_s > 1e-9 and _has_stable_movement(
+        previous.rectangle,
+        current.rectangle,
+    )
+
+
+def _has_stable_movement(
+    previous: tuple[float, float, float, float],
+    current: tuple[float, float, float, float],
+) -> bool:
+    """Recognize bounded movement while preserving stable box geometry."""
+    previous_x, previous_y, previous_width, previous_height = previous
+    current_x, current_y, current_width, current_height = current
+    if min(previous_width, previous_height, current_width, current_height) <= 0:
+        return False
+
+    width_change = abs(current_width - previous_width) / previous_width
+    height_change = abs(current_height - previous_height) / previous_height
+    previous_center_x = previous_x + previous_width / 2
+    previous_center_y = previous_y + previous_height / 2
+    current_center_x = current_x + current_width / 2
+    current_center_y = current_y + current_height / 2
+    max_horizontal_movement = (
+        max(previous_width, current_width)
+        * _MAX_CENTER_MOVEMENT_BOX_RATIO
+    )
+    max_vertical_movement = (
+        max(previous_height, current_height)
+        * _MAX_CENTER_MOVEMENT_BOX_RATIO
+    )
     return (
-        current.text == previous.text
-        and -1e-9 <= gap_s <= _MAX_READING_GAP_S + 1e-9
-        and _intersection_over_union(
-            previous.rectangle,
-            current.rectangle,
-        )
-        >= _MIN_RECTANGLE_IOU
+        width_change <= _MAX_GEOMETRY_CHANGE
+        and height_change <= _MAX_GEOMETRY_CHANGE
+        and abs(current_center_x - previous_center_x)
+        <= max_horizontal_movement + 1e-9
+        and abs(current_center_y - previous_center_y)
+        <= max_vertical_movement + 1e-9
     )
 
 
@@ -141,6 +190,9 @@ def _to_segment(track: _ReadingTrack) -> OcrSegment:
                 for reading in track.readings
             )
         ),
+        # Raw OCR Readings are already compact, provider-neutral Media Evidence,
+        # so retain them directly instead of creating another observation model.
+        supporting_readings=tuple(track.readings),
     )
 
 

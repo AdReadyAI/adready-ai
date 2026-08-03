@@ -24,6 +24,13 @@ from analyzer.text_detection.candidates import (
 
 
 TextProbeCandidate = Candidate | TextCandidate
+TextSegmentObservation = tuple[
+    int,
+    float,
+    tuple[float, float, float, float],
+    float | None,
+    str | None,
+]
 
 
 @dataclass(frozen=True)
@@ -49,6 +56,7 @@ class TextSegment:
     missed_observations: int
     timing_uncertainty_s: float
     identifier: str = ""
+    observations: tuple[TextSegmentObservation, ...] = ()
 
 
 @dataclass
@@ -377,6 +385,18 @@ class TextProbe(DeferredModelProbe):
                 candidate_sources=segment.candidate_sources,
                 missed_observations=segment.missed_observations,
                 timing_uncertainty_s=segment.timing_uncertainty_s,
+                observations=tuple(
+                    (
+                        candidate.index,
+                        candidate.timestamp,
+                        detection.rectangle,
+                        detection.confidence,
+                        detection.visual_signature,
+                    )
+                    # Only compact diagnostic values cross the TextProbe seam;
+                    # candidate pixels and temporary paths remain internal.
+                    for detection, candidate in segment.observations
+                ),
             )
         )
         # Representative selection waits until closure so weaker earlier
