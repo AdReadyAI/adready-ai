@@ -86,7 +86,7 @@ export function evaluateLogoChecks(context: AgentContext): CheckAssessment {
   const detected = context.logo_frames.filter((frame) =>
     frame.prominence !== "absent" && frame.confidence_score >= 0.5
   );
-  const evidence = detected.map((frame) =>
+  const logoEvidence = detected.map((frame) =>
     toEvidence(
       "visual",
       `Logo detection ${
@@ -121,7 +121,7 @@ export function evaluateLogoChecks(context: AgentContext): CheckAssessment {
           : undefined,
       ),
     ],
-    evidence,
+    evidence: logoEvidence,
     confidence: absent ? "medium" : "high",
   };
 }
@@ -132,12 +132,12 @@ export function buildBrandResult(
   qualitative: CheckAssessment,
 ): MetricResult {
   const sub_checks = [...logo.checks, ...qualitative.checks];
-  const failed = sub_checks.filter((item) => item.result === "failed");
+  const failedChecks = sub_checks.filter((item) => item.result === "failed");
   const unavailable = sub_checks.filter((item) =>
     item.result === "cannot_assess"
   );
   const { result, severity } = rollupChecks(sub_checks);
-  const failedIds = new Set(failed.map((item) => item.check_id));
+  const failedIds = new Set(failedChecks.map((item) => item.check_id));
   const suggested_correction = failedIds.has("logo_absent")
     ? "Add the approved logo in the placement required by the brand guidelines."
     : failedIds.has("logo_incorrect")
@@ -168,7 +168,7 @@ export function buildBrandResult(
       ? unavailable.length > 0
         ? "The available brand evidence aligns with the supplied guidance, but some checks could not be assessed."
         : "The available logo, palette, and voice evidence aligns with the supplied brand guidance."
-      : failed.map((item) => item.explanation).filter(Boolean).join(" "),
+      : failedChecks.map((item) => item.explanation).filter(Boolean).join(" "),
     suggested_correction,
     correction_type: suggested_correction
       ? failedIds.has("brand_voice_drift") && failedIds.size === 1
