@@ -135,7 +135,13 @@ class VideoAnalyzer:
 
         rows = []
         for frame in candidates:
-            detection = detector.detect(frame.path, confidence=confidence)
+            try:
+                detection = detector.detect(frame.path, confidence=confidence)
+            except TransientError:
+                logger.exception(
+                    "OWLv2 request failed for frame %s, skipping this frame", frame.index
+                )
+                continue
             if detection is None:
                 continue
             rows.append(row_builder(frame, detection))
