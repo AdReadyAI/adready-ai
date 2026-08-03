@@ -9,6 +9,15 @@
       "pathMappings": [
         { "localRoot": "${workspaceFolder}/worker", "remoteRoot": "/app" }
       ]
+    },
+    {
+      "name": "Attach to tools script",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": { "host": "localhost", "port": 5679 },
+      "pathMappings": [
+        { "localRoot": "${workspaceFolder}/worker", "remoteRoot": "/app" }
+      ]
     }
   ]
 }

@@ -47,7 +47,10 @@ def test_reference_detector_builds_training_data_from_full_image_box(tmp_path, m
 
     assert len(detector._training_data) == 1
     boxes = detector._training_data[0]["boxes"]
-    assert boxes == [{"x": 0, "y": 0, "w": 40, "h": 20, "cls": "product"}]
+    # No foreground distinguishable from background (solid color) -> tight_bbox
+    # falls back to the full 40x20 image, then padding (ratio=0.5) adds 20px/10px
+    # on each side, landing the box centered in an 80x40 padded canvas.
+    assert boxes == [{"x": 40, "y": 20, "w": 40, "h": 20, "cls": "product"}]
 
 
 def test_reference_detector_no_references_never_calls_network(tmp_path, monkeypatch):

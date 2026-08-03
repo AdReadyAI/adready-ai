@@ -97,8 +97,9 @@ ROBOFLOW_TIMEOUT = 30
 # Detection confidence thresholds — unvalidated starting points, tune against
 # real ad footage once flagged detections can be reviewed.
 PRODUCT_DETECTION_CONFIDENCE = 0.85
-LOGO_DETECTION_CONFIDENCE = 0.85
-LOGO_DETECTION_LOW_CONFIDENCE = 0.6  # below high, above this = "cannot_determine"
+LOGO_DETECTION_CONFIDENCE = 0.95
+LOGO_DETECTION_LOW_CONFIDENCE = 0.90
+REFERENCE_PADDING_RATIO = 0.5
 
 # Prominence heuristics — fraction of frame area covered by the detected bbox.
 PROMINENCE_LARGE_AREA_FRAC = 0.15
