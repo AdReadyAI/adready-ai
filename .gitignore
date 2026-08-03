@@ -155,3 +155,7 @@ __pycache__/
 
 #WORKER
 worker/tools/tmp/*
+
+# Jupyter
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
