@@ -8,6 +8,7 @@ services:
       - ./worker/.env
     ports:
       - "5678:5678"
+      - "5679:5679"
       - "8888:8888"
     volumes:
       - ./worker/tools:/app/tools
