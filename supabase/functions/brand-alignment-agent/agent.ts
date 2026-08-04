@@ -2,6 +2,7 @@ import {
   AgentRunRequestSchema,
   loadAgentContext,
   persistMetricResults,
+  validateMetricResults,
 } from "../shared/index.ts";
 
 import type { AgentRunRequest, MetricResult } from "../shared/index.ts";
@@ -35,7 +36,7 @@ export async function runBrandAlignment(
 
   const logo = evaluateLogoChecks(context);
   const qualitative = await evaluateQualitativeChecks(context);
-  const result = buildBrandResult(logo, qualitative);
+  const [result] = validateMetricResults([buildBrandResult(logo, qualitative)]);
 
   await persistMetricResults(context.request_id, [result]);
 

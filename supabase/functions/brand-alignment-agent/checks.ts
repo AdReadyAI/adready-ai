@@ -13,7 +13,6 @@ import {
   failed,
   passed,
   rollupChecks,
-  timestampFromMs,
 } from "../shared/index.ts";
 
 export type CheckAssessment = {
@@ -21,18 +20,6 @@ export type CheckAssessment = {
   evidence: EvidenceRef[];
   confidence: ConfidenceLevel;
 };
-
-export function formatTimestamp(milliseconds?: number): string {
-  return timestampFromMs(milliseconds);
-}
-
-export function toEvidence(
-  type: EvidenceRef["type"],
-  text: string,
-  timestamp_ms?: number,
-): EvidenceRef {
-  return evidence(type, text, timestamp_ms);
-}
 
 export function makeCheck(
   check_id: string,
@@ -54,6 +41,15 @@ export function makeCheck(
     : severity;
 
   return failed(check_id, name, failureSeverity, explanation);
+}
+
+/** Delegates to shared evidence() for use in prompts.ts imports. */
+export function toEvidence(
+  type: EvidenceRef["type"],
+  text: string,
+  timestamp_ms?: number,
+): EvidenceRef {
+  return evidence(type, text, timestamp_ms);
 }
 
 /** Evaluates deterministic logo presence and reference-match checks. */
@@ -93,7 +89,7 @@ export function evaluateLogoChecks(context: AgentContext): CheckAssessment {
   );
 
   const logoEvidence = detected.map((frame) =>
-    toEvidence(
+    evidence(
       "visual",
       `Logo detection ${
         frame.reference_match ?? "without reference comparison"
@@ -157,6 +153,11 @@ export function buildBrandResult(
     ? "Rewrite the voiceover and on-screen copy to match the supplied brand voice."
     : undefined;
 
+  const failureExplanations = failedChecks
+    .map((item) => item.explanation)
+    .filter((e): e is string => Boolean(e))
+    .join(" ");
+
   return {
     metric_id: "brand_fit",
     agent: "brand_alignment",
@@ -177,7 +178,7 @@ export function buildBrandResult(
       ? unavailable.length > 0
         ? "The available brand evidence aligns with the supplied guidance, but some checks could not be assessed."
         : "The available logo, palette, and voice evidence aligns with the supplied brand guidance."
-      : failedChecks.map((item) => item.explanation).filter(Boolean).join(" "),
+      : failureExplanations || "One or more brand checks failed.",
     suggested_correction,
     correction_type: suggested_correction
       ? failedIds.has("brand_voice_drift") && failedIds.size === 1
