@@ -1,10 +1,14 @@
 import { z } from "zod";
+
 import { chat } from "../shared/index.ts";
+
 import type { AgentContext, ConfidenceLevel } from "../shared/index.ts";
+
 import { makeCheck, toEvidence } from "./checks.ts";
+
 import type { CheckAssessment } from "./checks.ts";
 
-const LLMCheckSchema = z.object({
+export const LLMCheckSchema = z.object({
   result: z.enum(["passed", "failed", "cannot_assess"]),
   severity: z.enum([
     "none",
@@ -16,17 +20,52 @@ const LLMCheckSchema = z.object({
   ]),
   confidence: z.enum(["low", "medium", "high"]),
   explanation: z.string(),
-  evidence: z.array(z.object({
-    type: z.enum(["transcript", "ocr", "visual", "brief"]),
-    text: z.string(),
-    timestamp_ms: z.number().int().nonnegative().optional(),
-  })),
+  evidence: z.array(
+    z.object({
+      type: z.enum(["transcript", "ocr", "visual", "brief"]),
+      text: z.string(),
+      timestamp_ms: z.number().int().nonnegative().optional(),
+    }),
+  ).optional().default([]),
 });
 
-const LLMAssessmentSchema = z.object({
+export const LLMAssessmentSchema = z.object({
   color_palette_off: LLMCheckSchema,
   brand_voice_drift: LLMCheckSchema,
 });
+
+export type LLMAssessment = z.infer<typeof LLMAssessmentSchema>;
+
+/**
+ * Overrides qualitative checks to cannot_assess when corresponding guidance is absent.
+ */
+export function applyGuidanceGuards(
+  assessment: LLMAssessment,
+  hasPaletteGuidance: boolean,
+  hasVoiceGuidance: boolean,
+): LLMAssessment {
+  if (!hasPaletteGuidance) {
+    assessment.color_palette_off = {
+      result: "cannot_assess",
+      severity: "cannot_assess",
+      confidence: "low",
+      explanation: "No palette, typography, or color guidance was supplied.",
+      evidence: [],
+    };
+  }
+
+  if (!hasVoiceGuidance) {
+    assessment.brand_voice_drift = {
+      result: "cannot_assess",
+      severity: "cannot_assess",
+      confidence: "low",
+      explanation: "No brand voice guidance was supplied.",
+      evidence: [],
+    };
+  }
+
+  return assessment;
+}
 
 function extractJson(content: string): unknown {
   const start = content.indexOf("{");
@@ -37,20 +76,29 @@ function extractJson(content: string): unknown {
   let depth = 0;
   let inString = false;
   let escaped = false;
+
   for (let index = start; index < content.length; index++) {
     const character = content[index];
     if (inString) {
-      if (escaped) escaped = false;
-      else if (character === "\\") escaped = true;
-      else if (character === '"') inString = false;
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === '"') {
+        inString = false;
+      }
       continue;
     }
 
-    if (character === '"') inString = true;
-    else if (character === "{") depth++;
-    else if (character === "}") {
+    if (character === '"') {
+      inString = true;
+    } else if (character === "{") {
+      depth++;
+    } else if (character === "}") {
       depth--;
-      if (depth === 0) return JSON.parse(content.slice(start, index + 1));
+      if (depth === 0) {
+        return JSON.parse(content.slice(start, index + 1));
+      }
     }
   }
 
@@ -70,11 +118,11 @@ function sampleEvenly<T>(items: T[], limit: number): T[] {
   if (items.length <= limit) return items;
   return Array.from(
     { length: limit },
-    (_, index) => items[Math.floor(index * (items.length - 1) / (limit - 1))],
+    (_, index) => items[Math.floor((index * (items.length - 1)) / (limit - 1))],
   );
 }
 
-/** One bounded LLM call for non-deterministic palette and voice evaluation. */
+/** Evaluates qualitative color palette and brand voice checks via LLM. */
 export async function evaluateQualitativeChecks(
   context: AgentContext,
 ): Promise<CheckAssessment> {
@@ -144,20 +192,26 @@ export async function evaluateQualitativeChecks(
           }`,
       },
     ]);
+
     console.info(
       JSON.stringify({
         event: "brand_alignment.llm_completed",
         configured_model: Deno.env.get("OPENROUTER_MODEL"),
       }),
     );
-    const assessment = LLMAssessmentSchema.parse(
-      extractJson(content),
+
+    const assessment = LLMAssessmentSchema.parse(extractJson(content));
+    const guardedAssessment = applyGuidanceGuards(
+      assessment,
+      hasPaletteGuidance,
+      hasVoiceGuidance,
     );
+
     const toAssessment = (
       check_id: "color_palette_off" | "brand_voice_drift",
       name: string,
     ) => {
-      const item = assessment[check_id];
+      const item = guardedAssessment[check_id];
       return {
         check: makeCheck(
           check_id,
@@ -176,8 +230,10 @@ export async function evaluateQualitativeChecks(
         confidence: item.confidence,
       };
     };
+
     const palette = toAssessment("color_palette_off", "Color Scheme Alignment");
     const voice = toAssessment("brand_voice_drift", "Brand Voice Alignment");
+
     return {
       checks: [palette.check, voice.check],
       evidence: [...palette.evidence, ...voice.evidence],
@@ -187,7 +243,9 @@ export async function evaluateQualitativeChecks(
     console.error("[brand-alignment-agent] qualitative evaluation failed", {
       error: error instanceof Error ? error.message : String(error),
     });
+
     const explanation = "Qualitative brand evaluation could not be completed.";
+
     return {
       checks: [
         makeCheck(

@@ -6,6 +6,7 @@ import type {
   SeverityLevel,
   SubCheckResult,
 } from "../shared/index.ts";
+
 import {
   cannotAssess,
   evidence,
@@ -40,7 +41,10 @@ export function makeCheck(
   severity: SeverityLevel,
   explanation?: string,
 ): SubCheckResult {
-  if (result === "passed") return passed(check_id, name);
+  if (result === "passed") {
+    return passed(check_id, name);
+  }
+
   if (result === "cannot_assess") {
     return cannotAssess(check_id, name, explanation);
   }
@@ -48,10 +52,11 @@ export function makeCheck(
   const failureSeverity = severity === "none" || severity === "cannot_assess"
     ? "medium"
     : severity;
+
   return failed(check_id, name, failureSeverity, explanation);
 }
 
-/** Deterministic logo presence and reference-match checks. */
+/** Evaluates deterministic logo presence and reference-match checks. */
 export function evaluateLogoChecks(context: AgentContext): CheckAssessment {
   const guidelines = context.parsed_creative_brief.brand_guidelines;
   const logoIsRequired =
@@ -86,6 +91,7 @@ export function evaluateLogoChecks(context: AgentContext): CheckAssessment {
   const detected = context.logo_frames.filter((frame) =>
     frame.prominence !== "absent" && frame.confidence_score >= 0.5
   );
+
   const logoEvidence = detected.map((frame) =>
     toEvidence(
       "visual",
@@ -95,6 +101,7 @@ export function evaluateLogoChecks(context: AgentContext): CheckAssessment {
       frame.timestamp_ms,
     )
   );
+
   const absent = detected.length === 0;
   const incorrect = detected.some((frame) =>
     frame.reference_match === "differs_from_reference"
@@ -126,7 +133,7 @@ export function evaluateLogoChecks(context: AgentContext): CheckAssessment {
   };
 }
 
-/** Aggregates individual checks into the shared Brand Fit result. */
+/** Aggregates individual checks into the shared Brand Fit metric result. */
 export function buildBrandResult(
   logo: CheckAssessment,
   qualitative: CheckAssessment,
@@ -136,8 +143,10 @@ export function buildBrandResult(
   const unavailable = sub_checks.filter((item) =>
     item.result === "cannot_assess"
   );
+
   const { result, severity } = rollupChecks(sub_checks);
   const failedIds = new Set(failedChecks.map((item) => item.check_id));
+
   const suggested_correction = failedIds.has("logo_absent")
     ? "Add the approved logo in the placement required by the brand guidelines."
     : failedIds.has("logo_incorrect")
