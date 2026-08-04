@@ -13,16 +13,14 @@ import {
 } from "../../../../functions/claims-agent/metrics.ts";
 
 import {
-  BASE_BRIEF,
-  BRIEF_REQUIRES_DISCLAIMER,
+  buildAdWidePolicyAssessment,
   buildClaim,
-  buildComplianceFinding,
   buildDisclaimerOcrSegment,
+  buildDisclaimerTranscriptSegment,
   buildSubstantiationFinding,
   buildTriage,
   SHARED_INSTANCE,
 } from "./fixtures.ts";
-
 // ---------------------------------------------------------------------------
 // evaluateProductTruth
 // ---------------------------------------------------------------------------
@@ -41,28 +39,7 @@ Deno.test("evaluateProductTruth: all findings passing yields true/none/no failur
   assertEquals(result.metric_id, "product_truth");
 });
 
-Deno.test("evaluateProductTruth: a single failing finding drives result/severity/correction", () => {
-  const result = evaluateProductTruth(
-    [buildClaim()],
-    [buildTriage()],
-    [
-      buildSubstantiationFinding({
-        severity: 3,
-        issue_description: "exaggerated claim",
-        recommendation: "soften wording",
-        confidence_score: 0.9,
-      }),
-    ],
-  );
-
-  assertEquals(result.result, "false");
-  assertEquals(result.severity, "high");
-  assertEquals(result.explanation, "exaggerated claim");
-  assertEquals(result.suggested_correction, "soften wording");
-  assertEquals(result.correction_type, "rewrite");
-});
-
-Deno.test("evaluateProductTruth: worst severity among multiple failed findings wins", () => {
+Deno.test("evaluateProductTruth: sub_checks are always the 3 fixed checks, keyed by classification", () => {
   const result = evaluateProductTruth(
     [buildClaim({ claim_id: "claim-1" }), buildClaim({ claim_id: "claim-2" })],
     [
@@ -70,18 +47,42 @@ Deno.test("evaluateProductTruth: worst severity among multiple failed findings w
       buildTriage({ claim_id: "claim-2" }),
     ],
     [
-      buildSubstantiationFinding({ claim_id: "claim-1", severity: 1 }),
-      buildSubstantiationFinding({ claim_id: "claim-2", severity: 4 }),
+      buildSubstantiationFinding({
+        claim_id: "claim-1",
+        classification: "unsupported",
+        severity: 2,
+      }),
+      buildSubstantiationFinding({
+        claim_id: "claim-2",
+        classification: "forbidden_claim",
+        severity: 4,
+      }),
     ],
   );
 
-  assertEquals(result.severity, "critical");
+  const ids = result.sub_checks?.map((c) => c.check_id).sort();
+  assertEquals(ids, [
+    "claim_contradicted",
+    "claim_unsupported",
+    "forbidden_claim_used",
+  ]);
+
+  const unsupported = result.sub_checks?.find((c) =>
+    c.check_id === "claim_unsupported"
+  );
+  const contradicted = result.sub_checks?.find((c) =>
+    c.check_id === "claim_contradicted"
+  );
+  const forbidden = result.sub_checks?.find((c) =>
+    c.check_id === "forbidden_claim_used"
+  );
+
+  assertEquals(unsupported?.result, "failed");
+  assertEquals(contradicted?.result, "passed");
+  assertEquals(forbidden?.result, "failed");
 });
 
 Deno.test("evaluateProductTruth: dedupes identical evidence entries across claims", () => {
-  // Two different claims whose extraction happened to cite the exact same
-  // underlying segment (same text/source/timestamp) -- both fail, both
-  // contribute the same evidence line.
   const result = evaluateProductTruth(
     [
       buildClaim({ claim_id: "claim-1", instances: [SHARED_INSTANCE] }),
@@ -92,8 +93,16 @@ Deno.test("evaluateProductTruth: dedupes identical evidence entries across claim
       buildTriage({ claim_id: "claim-2" }),
     ],
     [
-      buildSubstantiationFinding({ claim_id: "claim-1", severity: 2 }),
-      buildSubstantiationFinding({ claim_id: "claim-2", severity: 2 }),
+      buildSubstantiationFinding({
+        claim_id: "claim-1",
+        classification: "unsupported",
+        severity: 2,
+      }),
+      buildSubstantiationFinding({
+        claim_id: "claim-2",
+        classification: "unsupported",
+        severity: 2,
+      }),
     ],
   );
 
@@ -150,134 +159,283 @@ Deno.test("evaluateProductTruth: explanation counts skipped puffery when nothing
 // evaluatePolicyCompliance
 // ---------------------------------------------------------------------------
 
-Deno.test("evaluatePolicyCompliance: missing required disclaimer drives explanation AND suggested_correction", () => {
-  const result = evaluatePolicyCompliance(
-    [buildClaim()],
-    [], // no OCR segments -- no disclaimer present
-    [buildComplianceFinding({ severity: 0 })], // per-claim findings all pass
-    BRIEF_REQUIRES_DISCLAIMER,
-  );
+Deno.test("evaluatePolicyCompliance: missing required disclaimer drives explanation, suggested_correction, and severity", () => {
+  const assessment = buildAdWidePolicyAssessment({
+    disclaimer: {
+      required: true,
+      present: false,
+      explanation: "No disclaimer found anywhere in the ad.",
+    },
+  });
+
+  const result = evaluatePolicyCompliance(assessment, [], []);
 
   assertEquals(result.result, "false");
   assertEquals(result.severity, "critical");
-  assertEquals(
-    result.explanation,
-    "A required disclaimer is missing from the ad entirely.",
-  );
+  assertEquals(result.explanation, "No disclaimer found anywhere in the ad.");
   assertEquals(
     result.suggested_correction,
     "Add the required disclaimer to the ad.",
   );
-});
-
-Deno.test("evaluatePolicyCompliance: missing disclaimer takes priority in suggested_correction even when a claim also fails", () => {
-  // Regression test for the bug where suggested_correction ignored
-  // missingDisclaimer whenever any per-claim finding existed.
-  const result = evaluatePolicyCompliance(
-    [buildClaim()],
-    [],
-    [
-      buildComplianceFinding({
-        severity: 3,
-        recommendation: "add substantiation for energy claim",
-      }),
-    ],
-    BRIEF_REQUIRES_DISCLAIMER,
-  );
-
-  assertEquals(
-    result.suggested_correction,
-    "Add the required disclaimer to the ad.",
-  );
-});
-
-Deno.test("evaluatePolicyCompliance: disclaimer present is detected via OCR and adds evidence", () => {
-  const result = evaluatePolicyCompliance(
-    [buildClaim()],
-    [buildDisclaimerOcrSegment()],
-    [buildComplianceFinding({ severity: 0 })],
-    BRIEF_REQUIRES_DISCLAIMER,
-  );
-
-  const disclaimerCheck = result.sub_checks?.find((c) =>
-    c.check_id === "missing_disclaimer"
-  );
-  assertEquals(disclaimerCheck?.result, "passed");
-  assertEquals(result.evidence?.some((e) => e.type === "ocr"), true);
 });
 
 Deno.test("evaluatePolicyCompliance: disclaimer not required means absence doesn't fail the check", () => {
-  const result = evaluatePolicyCompliance(
-    [buildClaim()],
-    [],
-    [buildComplianceFinding({ severity: 0 })],
-    BASE_BRIEF, // no policy_requirements mentioning a disclaimer
-  );
+  const assessment = buildAdWidePolicyAssessment({
+    disclaimer: { required: false, present: false },
+  });
+
+  const result = evaluatePolicyCompliance(assessment, [], []);
 
   const disclaimerCheck = result.sub_checks?.find((c) =>
     c.check_id === "missing_disclaimer"
   );
   assertEquals(disclaimerCheck?.result, "passed");
-  assertEquals(result.result, "true");
 });
 
-Deno.test("evaluatePolicyCompliance: a failing per-claim finding adds both instance and policy_excerpt evidence", () => {
-  const result = evaluatePolicyCompliance(
-    [buildClaim()],
-    [],
-    [
-      buildComplianceFinding({
-        severity: 4,
-        policy_excerpt: "must be substantiated",
-      }),
-    ],
-    BASE_BRIEF,
-  );
+Deno.test("evaluatePolicyCompliance: disclaimer matched via OCR resolves real evidence and enables contrast/duration checks", () => {
+  const ocrSeg = buildDisclaimerOcrSegment({
+    font_size_px: 16,
+    on_screen_duration_ms: 3000,
+  });
+  const assessment = buildAdWidePolicyAssessment({
+    disclaimer: {
+      required: true,
+      present: true,
+      matched_segment_id: ocrSeg.ocr_id,
+      matched_source: "ocr",
+    },
+  });
 
-  assertEquals(result.evidence?.some((e) => e.type === "transcript"), true);
+  const result = evaluatePolicyCompliance(assessment, [], [ocrSeg]);
+
+  assertEquals(
+    result.evidence?.some((e) => e.type === "ocr" && e.text === ocrSeg.text),
+    true,
+  );
+  const contrastCheck = result.sub_checks?.find((c) =>
+    c.check_id === "disclaimer_contrast_low"
+  );
+  const durationCheck = result.sub_checks?.find((c) =>
+    c.check_id === "disclaimer_duration_insufficient"
+  );
+  assertEquals(contrastCheck?.result, "passed");
+  assertEquals(durationCheck?.result, "passed");
+});
+
+Deno.test("evaluatePolicyCompliance: disclaimer matched via transcript (spoken) resolves evidence but skips contrast/duration", () => {
+  const transcriptSeg = buildDisclaimerTranscriptSegment();
+  const assessment = buildAdWidePolicyAssessment({
+    disclaimer: {
+      required: true,
+      present: true,
+      matched_segment_id: transcriptSeg.segment_id,
+      matched_source: "transcript",
+    },
+  });
+
+  const result = evaluatePolicyCompliance(assessment, [transcriptSeg], []);
+
   assertEquals(
     result.evidence?.some((e) =>
-      e.type === "metadata" && e.text === "must be substantiated"
+      e.type === "transcript" && e.text === transcriptSeg.text
+    ),
+    true,
+  );
+  const contrastCheck = result.sub_checks?.find((c) =>
+    c.check_id === "disclaimer_contrast_low"
+  );
+  const durationCheck = result.sub_checks?.find((c) =>
+    c.check_id === "disclaimer_duration_insufficient"
+  );
+  assertEquals(contrastCheck?.result, "cannot_assess");
+  assertEquals(durationCheck?.result, "cannot_assess");
+});
+
+Deno.test("evaluatePolicyCompliance: disclaimer missing entirely -> contrast/duration are cannot_assess, not passed", () => {
+  const assessment = buildAdWidePolicyAssessment({
+    disclaimer: { required: true, present: false },
+  });
+
+  const result = evaluatePolicyCompliance(assessment, [], []);
+
+  const contrastCheck = result.sub_checks?.find((c) =>
+    c.check_id === "disclaimer_contrast_low"
+  );
+  const durationCheck = result.sub_checks?.find((c) =>
+    c.check_id === "disclaimer_duration_insufficient"
+  );
+  assertEquals(contrastCheck?.result, "cannot_assess");
+  assertEquals(durationCheck?.result, "cannot_assess");
+});
+
+Deno.test("evaluatePolicyCompliance: font size below minimum fails disclaimer_contrast_low", () => {
+  const ocrSeg = buildDisclaimerOcrSegment({
+    font_size_px: 10,
+    on_screen_duration_ms: 3000,
+  });
+  const assessment = buildAdWidePolicyAssessment({
+    disclaimer: {
+      required: true,
+      present: true,
+      matched_segment_id: ocrSeg.ocr_id,
+      matched_source: "ocr",
+    },
+  });
+
+  const result = evaluatePolicyCompliance(assessment, [], [ocrSeg]);
+
+  const contrastCheck = result.sub_checks?.find((c) =>
+    c.check_id === "disclaimer_contrast_low"
+  );
+  assertEquals(contrastCheck?.result, "failed");
+  assertEquals(contrastCheck?.severity, "low");
+});
+
+Deno.test("evaluatePolicyCompliance: on-screen duration below minimum fails disclaimer_duration_insufficient", () => {
+  const ocrSeg = buildDisclaimerOcrSegment({
+    font_size_px: 16,
+    on_screen_duration_ms: 500,
+  });
+  const assessment = buildAdWidePolicyAssessment({
+    disclaimer: {
+      required: true,
+      present: true,
+      matched_segment_id: ocrSeg.ocr_id,
+      matched_source: "ocr",
+    },
+  });
+
+  const result = evaluatePolicyCompliance(assessment, [], [ocrSeg]);
+
+  const durationCheck = result.sub_checks?.find((c) =>
+    c.check_id === "disclaimer_duration_insufficient"
+  );
+  assertEquals(durationCheck?.result, "failed");
+});
+
+Deno.test("evaluatePolicyCompliance: font size metadata missing -> cannot_assess, not a silent pass", () => {
+  const ocrSeg = buildDisclaimerOcrSegment({
+    font_size_px: undefined,
+    on_screen_duration_ms: 3000,
+  });
+  const assessment = buildAdWidePolicyAssessment({
+    disclaimer: {
+      required: true,
+      present: true,
+      matched_segment_id: ocrSeg.ocr_id,
+      matched_source: "ocr",
+    },
+  });
+
+  const result = evaluatePolicyCompliance(assessment, [], [ocrSeg]);
+
+  const contrastCheck = result.sub_checks?.find((c) =>
+    c.check_id === "disclaimer_contrast_low"
+  );
+  assertEquals(contrastCheck?.result, "cannot_assess");
+});
+
+Deno.test("evaluatePolicyCompliance: policy_depiction detected resolves real evidence from the matched segment", () => {
+  const ocrSeg = buildDisclaimerOcrSegment({
+    ocr_id: "o-violation",
+    text: "banned substance logo",
+  });
+  const assessment = buildAdWidePolicyAssessment({
+    policy_depiction: {
+      detected: true,
+      severity: 3,
+      description: "Depicts a recognizable illegal substance logo.",
+      matched_segment_id: "o-violation",
+      matched_source: "ocr",
+    },
+  });
+
+  const result = evaluatePolicyCompliance(assessment, [], [ocrSeg]);
+
+  const depictionCheck = result.sub_checks?.find((c) =>
+    c.check_id === "policy_violation_depicted"
+  );
+  assertEquals(depictionCheck?.result, "failed");
+  assertEquals(depictionCheck?.severity, "high");
+  assertEquals(
+    result.evidence?.some((e) =>
+      e.type === "ocr" && e.text === "banned substance logo"
     ),
     true,
   );
 });
 
-Deno.test("evaluatePolicyCompliance: passing findings add no evidence", () => {
-  const result = evaluatePolicyCompliance(
-    [buildClaim()],
-    [],
-    [buildComplianceFinding({ severity: 0 })],
-    BASE_BRIEF,
-  );
+Deno.test("evaluatePolicyCompliance: policy_depiction not detected passes with no evidence", () => {
+  const assessment = buildAdWidePolicyAssessment(); // defaults: policy_depiction.detected = false
 
+  const result = evaluatePolicyCompliance(assessment, [], []);
+
+  const depictionCheck = result.sub_checks?.find((c) =>
+    c.check_id === "policy_violation_depicted"
+  );
+  assertEquals(depictionCheck?.result, "passed");
   assertEquals(result.evidence?.length, 0);
 });
 
-Deno.test("evaluatePolicyCompliance: missing disclaimer (critical) outranks a lower-severity finding", () => {
-  const result = evaluatePolicyCompliance(
-    [buildClaim()],
-    [],
-    [buildComplianceFinding({ severity: 1 })],
-    BRIEF_REQUIRES_DISCLAIMER,
-  );
+Deno.test("evaluatePolicyCompliance: explanation/suggested_correction reflect the WORST failed check, not just the first one pushed", () => {
+  // Regression test: missing_disclaimer is pushed first but here is only
+  // "low"-adjacent (not applicable since it's not failing); instead a
+  // low-severity contrast failure is pushed before a high-severity
+  // policy_depiction failure -- the top-level explanation must reflect
+  // the depiction issue (higher severity), not the contrast issue (first
+  // pushed).
+  const ocrSeg = buildDisclaimerOcrSegment({
+    ocr_id: "o-disclaimer",
+    font_size_px: 8, // fails contrast, severity "low"
+    on_screen_duration_ms: 3000,
+  });
+  const violationSeg = buildDisclaimerOcrSegment({
+    ocr_id: "o-violation",
+    text: "unsafe stunt depicted",
+  });
+
+  const assessment = buildAdWidePolicyAssessment({
+    disclaimer: {
+      required: true,
+      present: true,
+      matched_segment_id: "o-disclaimer",
+      matched_source: "ocr",
+    },
+    policy_depiction: {
+      detected: true,
+      severity: 4,
+      description:
+        "Depicts a dangerous safety hazard with no mitigating context.",
+      matched_segment_id: "o-violation",
+      matched_source: "ocr",
+    },
+  });
+
+  const result = evaluatePolicyCompliance(assessment, [], [
+    ocrSeg,
+    violationSeg,
+  ]);
 
   assertEquals(result.severity, "critical");
+  assertEquals(
+    result.explanation,
+    "Depicts a dangerous safety hazard with no mitigating context.",
+  );
 });
 
-Deno.test("evaluatePolicyCompliance: dedupes identical evidence entries", () => {
-  const result = evaluatePolicyCompliance(
-    [
-      buildClaim({ claim_id: "claim-1", instances: [SHARED_INSTANCE] }),
-      buildClaim({ claim_id: "claim-2", instances: [SHARED_INSTANCE] }),
-    ],
-    [],
-    [
-      buildComplianceFinding({ claim_id: "claim-1", severity: 2 }),
-      buildComplianceFinding({ claim_id: "claim-2", severity: 2 }),
-    ],
-    BASE_BRIEF,
-  );
+Deno.test("evaluatePolicyCompliance: sub_checks always includes all four fixed checks", () => {
+  const assessment = buildAdWidePolicyAssessment();
 
-  assertEquals(result.evidence?.length, 1);
+  const result = evaluatePolicyCompliance(assessment, [], []);
+
+  const ids = result.sub_checks?.map((c) => c.check_id).sort();
+  assertEquals(
+    ids,
+    [
+      "disclaimer_contrast_low",
+      "disclaimer_duration_insufficient",
+      "missing_disclaimer",
+      "policy_violation_depicted",
+    ].sort(),
+  );
 });

@@ -9,7 +9,7 @@ import type {
   AgentContext,
   OCRSegment,
   VideoMetadata,
-} from "../../../../functions/shared/schemas.ts";
+} from "../../../../functions/shared/index.ts";
 
 import type {
   VisualAuditFinding,
@@ -49,6 +49,7 @@ export function buildContext(
     transcript_segments: [],
     ocr_segments: [],
     visual_frames: [],
+    quality_frames: [],
     product_frames: [],
     logo_frames: [],
     ...overrides,
