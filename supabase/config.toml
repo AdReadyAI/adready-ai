@@ -429,6 +429,8 @@ import_map = "./deno.json"
 
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
+[functions.shared]
+enabled = false
 
 [analytics]
 enabled = true

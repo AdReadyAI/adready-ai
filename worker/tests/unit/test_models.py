@@ -26,9 +26,12 @@ def test_get_east_missing_path_raises():
             models.get_east()
 
 
-def test_get_mobileclip_missing_path_raises():
-    with patch.object(models, "MOBILECLIP_WEIGHTS_PATH", "/nonexistent/mc.pt"):
-        with pytest.raises(FileNotFoundError):
+def test_get_mobileclip_load_failure_propagates():
+    with patch(
+        "config.models.open_clip.create_model_and_transforms",
+        side_effect=RuntimeError("weights unavailable"),
+    ):
+        with pytest.raises(RuntimeError):
             models.get_mobileclip()
 
 
@@ -47,12 +50,10 @@ def test_get_east_loads_once():
 
 def test_get_mobileclip_loads_once():
     fake_model, fake_preprocess = MagicMock(), MagicMock()
-    with patch.object(models, "MOBILECLIP_WEIGHTS_PATH", "/tmp/mc.pt"), \
-         patch("config.models.os.path.exists", return_value=True), \
-         patch(
-             "config.models.open_clip.create_model_and_transforms",
-             return_value=(fake_model, None, fake_preprocess),
-         ) as mock_create:
+    with patch(
+        "config.models.open_clip.create_model_and_transforms",
+        return_value=(fake_model, None, fake_preprocess),
+    ) as mock_create:
         m1, p1 = models.get_mobileclip()
         m2, p2 = models.get_mobileclip()
 

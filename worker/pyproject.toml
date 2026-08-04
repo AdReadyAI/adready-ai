@@ -17,11 +17,17 @@ dependencies = [
     "pillow>=12.3.0",
     "scenedetect-headless>=0.7,<0.8",
     "trafilatura>=2.1,<3",
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=8.4,<10",
+    "debugpy>=1.8",
+    "jupyterlab>=4.3,<5",
+    "ipywidgets>=8.1,<9",
+    "matplotlib>=3.10,<4",
 ]
 
 [tool.pytest.ini_options]
@@ -34,10 +40,21 @@ markers = [
 ]
 
 [tool.uv.sources]
-torch = [{ index = "pytorch-cpu" }]
-torchvision = [{ index = "pytorch-cpu" }]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+    { index = "pypi-default", marker = "sys_platform != 'linux'" },
+]
+torchvision = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+    { index = "pypi-default", marker = "sys_platform != 'linux'" },
+]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pypi-default"
+url = "https://pypi.org/simple"
 explicit = true

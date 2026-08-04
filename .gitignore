@@ -152,3 +152,18 @@ __pycache__/
 .venv/
 
 *.wav
+
+# Local agent planning and documentation
+/.scratch/
+/AGENTS.md
+/CONTEXT.md
+/docs/adr/
+/docs/agents/
+/docs/specs/
+
+#WORKER
+worker/tools/tmp/*
+
+# Jupyter
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/

@@ -4,10 +4,16 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from app.supabase import Supabase
+from psycopg2.extras import Json
+
+from app.supabase import Supabase, _aspect_ratio
+from analyzer.frame_sampling.probes.quality import QualityFlag
+from analyzer.frame_sampling.probes.scene import SceneProbeResult
+from analyzer.types import VideoMetadata
 from analyzer.output_models import (
     OcrItem,
     OcrResult,
+    ProductFrameRow,
     TranscriptionResult,
     TranscriptSegment,
 )
@@ -244,6 +250,27 @@ def test_replace_rows_placeholder_row_with_no_fields():
     assert values == [("proc-1",)]
 
 
+def test_replace_rows_wraps_dict_fields_for_jsonb():
+    """product_frames/logo_frames.location is jsonb; a raw dict has no psycopg2
+    adapter, so it must be wrapped (e.g. psycopg2.extras.Json) before insert."""
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+    row = ProductFrameRow(
+        frame_id="p_000001",
+        timestamp_ms=1000,
+        location={"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4},
+        confidence_score=0.9,
+        prominence="foreground_static",
+    )
+
+    db._replace_rows("product_frames", "proc-1", [row])
+
+    _, values = cur.executemany_calls[0]
+    location_value = values[0][3]
+    assert isinstance(location_value, Json)
+    assert location_value.adapted == {"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4}
+
+
 # ---------------------------------------------------------------------------
 # persist_results()
 # ---------------------------------------------------------------------------
@@ -288,3 +315,127 @@ def test_persist_results_mixed_success_and_error():
     assert "success" in statuses
     assert "error" in statuses
     assert cur.connection.commits == 1  # only the success result commits
+
+
+# ---------------------------------------------------------------------------
+# persist_quality_frames()
+# ---------------------------------------------------------------------------
+def test_persist_quality_frames_deletes_then_inserts():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+    flags = [
+        QualityFlag(
+            index=0,
+            timestamp=0.0,
+            reasons=("blur", "contrast"),
+            scores={"sharpness": 1.0, "contrast": 2.0},
+        ),
+        QualityFlag(
+            index=5,
+            timestamp=0.5,
+            reasons=("exposure",),
+            scores={"mean_luma": 3.0},
+        ),
+    ]
+
+    db.persist_quality_frames(flags)
+
+    delete_sql, delete_params = cur.executed[0]
+    assert delete_sql == "DELETE FROM quality_frames WHERE request_id = %s;"
+    assert delete_params == (REQUEST_ID,)
+
+    assert len(cur.executemany_calls) == 1
+    insert_sql, values = cur.executemany_calls[0]
+    assert "INSERT INTO quality_frames" in insert_sql
+    # the INSERT is a multi-line triple-quoted string in supabase.py, so check
+    # columns individually rather than asserting one exact formatted substring
+    for column in (
+        "request_id", "frame_id", "timestamp_ms", "reasons",
+        "sharpness", "crushed_frac", "blown_frac", "mean_luma",
+        "contrast", "grain", "blockiness", "temporal_delta",
+    ):
+        assert column in insert_sql
+    assert insert_sql.count("%s") == 12
+    # sharpness/contrast set, everything else None -> SQL NULL
+    assert values[0] == (
+        REQUEST_ID, "q_000000", 0, ["blur", "contrast"],
+        1.0, None, None, None, 2.0, None, None, None,
+    )
+    # timestamp 0.5s -> 500ms; only mean_luma set
+    assert values[1] == (
+        REQUEST_ID, "q_000005", 500, ["exposure"],
+        None, None, None, 3.0, None, None, None, None,
+    )
+    # commits inside the same transaction as the delete
+    assert cur.connection.commits == 1
+
+
+def test_persist_quality_frames_empty_deletes_only():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.persist_quality_frames([])
+
+    assert cur.executed[0][0] == "DELETE FROM quality_frames WHERE request_id = %s;"
+    assert cur.executed[0][1] == (REQUEST_ID,)
+    assert cur.executemany_calls == []
+    # the delete still commits on a retry that flags nothing this time
+    assert cur.connection.commits == 1
+
+
+# ---------------------------------------------------------------------------
+# persist_video_metadata()
+# ---------------------------------------------------------------------------
+def test_persist_video_metadata_normal_case():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+    metadata = VideoMetadata(duration_s=12.5, fps=30.0, width=1920, height=1080, size_bytes=999)
+    scene_result = SceneProbeResult(
+        shots=[],
+        pacing={"shot_count": 5, "cuts_per_second": 0.4, "avg_shot_s": 2.5, "min_shot_s": 1.0, "max_shot_s": 4.0},
+        fades=[],
+        dynamism="moderate",
+    )
+
+    db.persist_video_metadata(metadata, scene_result)
+
+    sql, params = cur.executed[0]
+    assert "ON CONFLICT (request_id)" in sql
+    assert params == (
+        REQUEST_ID,
+        12500,
+        "16:9",
+        "1920x1080",
+        5,
+        0.4,
+        2.5,
+        1.0,
+        4.0,
+        "moderate",
+    )
+    assert cur.connection.commits == 1
+
+
+def test_persist_video_metadata_scene_result_none():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+    metadata = VideoMetadata(duration_s=12.5, fps=30.0, width=1920, height=1080, size_bytes=999)
+
+    db.persist_video_metadata(metadata, None)
+
+    _, params = cur.executed[0]
+    assert params[4:] == (None, None, None, None, None, None)
+
+
+@pytest.mark.parametrize(
+    "width, height, expected",
+    [
+        (1920, 1080, "16:9"),
+        (1280, 720, "16:9"),
+        (1080, 1920, "9:16"),
+        (0, 1080, "unknown"),
+        (1920, 0, "unknown"),
+    ],
+)
+def test_aspect_ratio_helper(width, height, expected):
+    assert _aspect_ratio(width, height) == expected

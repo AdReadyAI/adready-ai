@@ -22,12 +22,12 @@ type EdgeHandlerWithBody<T> = (
  */
 export function createEdgeHandler(name: string, handler: EdgeHandler): void;
 export function createEdgeHandler<T>(
-  _name: string,
+  name: string,
   schema: z.ZodType<T>,
   handler: EdgeHandlerWithBody<T>,
 ): void;
 export function createEdgeHandler<T>(
-  _name: string,
+  name: string,
   schemaOrHandler: z.ZodType<T> | EdgeHandler,
   maybeHandler?: EdgeHandlerWithBody<T>,
 ): void {
@@ -41,17 +41,40 @@ export function createEdgeHandler<T>(
       const user = await getAuthenticatedUser(req);
 
       if (maybeHandler !== undefined) {
-        const raw = await req.json();
-        const body = (schemaOrHandler as z.ZodType<T>).parse(raw);
+        let raw: unknown;
+        try {
+          raw = await req.json();
+        } catch {
+          return err("INVALID_JSON", "Request body must be valid JSON", 400);
+        }
+
+        let body: T;
+        try {
+          body = (schemaOrHandler as z.ZodType<T>).parse(raw);
+        } catch (validationErr) {
+          if (validationErr instanceof z.ZodError) {
+            return err(
+              "VALIDATION_ERROR",
+              validationErr.errors.map((e) =>
+                `${e.path.join(".")}: ${e.message}`
+              ).join("; "),
+              400,
+            );
+          }
+          throw validationErr;
+        }
+
         return await maybeHandler(req, { user, requestId, body });
       } else {
         return await (schemaOrHandler as EdgeHandler)(req, { user, requestId });
       }
     } catch (res) {
       if (res instanceof Response) return res;
+      console.error(`[${name}] Handler error:`, res);
       return err(
         "INTERNAL_ERROR",
-        res instanceof Error ? res.message : "Unexpected server error",
+        "Unexpected server error",
+        500,
       );
     }
   });

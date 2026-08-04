@@ -14,8 +14,23 @@
  *      [ ] illegible_text: Rendered caption fonts are blurry or unreadable.
  *
  * DB CONTEXT:
- *   - Loads video metadata, OCR, and visual frames by request_id.
- *   - Uses frame-level visual descriptions and technical flags.
+ *   - Loads video metadata, OCR, visual frames, and quality frames by
+ *     request_id (`quality_frames` was previously missing from the loader —
+ *     now included).
+ *   - Uses frame-level `action`/`framing_composition` (replaces the old
+ *     `visual_description`) and `technical_flags`, whose 4 values
+ *     (`ai_artifacts`, `poor_framing_lighting`, `jarring_transitions`,
+ *     `illegible_text`) map directly onto this agent's relevant sub-checks
+ *     (minus anything about video corruption/dropped frames, which comes
+ *     from `video_metadata` instead).
+ *   - `quality_frames` gives deterministic evidence (`sharpness`,
+ *     `crushed_frac`/`blown_frac`, `contrast`, `grain`, `blockiness`,
+ *     `temporal_delta`, `reasons`) for the CV-detectable side of production
+ *     quality — distinct from and complementary to the VLM-judged
+ *     `technical_flags`.
+ *   - `camera_movement` no longer exists on `visual_frames` — a single still
+ *     frame can't reliably show motion; replaced by video-level `dynamism`
+ *     on `video_metadata` if a coarse motion signal is needed.
  *
  * OUTPUT JSON STRUCTURE:
  *   [
