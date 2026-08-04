@@ -1,44 +1,41 @@
 /**
- * metrics.ts — The pure, deterministic post-processing layer: no DB
- * access, no LLM calls, no I/O. Takes already-computed claims/findings
- * from checks.ts and produces the two schema-validated MetricResults.
- *
- * Severity/confidence helpers are kept local (not imported from a shared
- * module) since shared/index.ts's barrel doesn't currently export
- * equivalents -- small enough (a handful of one-liners) that duplicating
- * them here is simpler than depending on an unconfirmed shared API.
+ * metrics.ts — Pure, deterministic post-processing: no DB access, no LLM
+ * calls, no I/O. Aggregates LLM findings into the two fixed-checklist
+ * MetricResults (product_truth: 3 sub_checks, policy_compliance: 4
+ * sub_checks) matching the agent's documented output structure.
  */
 
+import {
+  cannotAssess,
+  evidence,
+  failed,
+  highestFailedSeverity,
+  passed,
+  severityRank,
+} from "../shared/index.ts";
 import type {
   EvidenceRef,
   MetricResult,
   OCRSegment,
-  ParsedCreativeBrief,
+  SeverityLevel,
   SubCheckResult,
+  TranscriptSegment,
 } from "../shared/index.ts";
 import type {
-  ComplianceFinding,
   DerivedClaim,
   SeverityScore,
+  SubstantiationClassification,
   SubstantiationFinding,
   TriageResult,
 } from "./checks.ts";
+import type { AdWidePolicyAssessment } from "./policy.ts";
 
 /* -------------------------------------------------------------------------- */
-/* Local severity/confidence helpers                                         */
+/* Local helpers                                                             */
 /* -------------------------------------------------------------------------- */
 
-function msToTimestamp(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${
-    String(seconds).padStart(2, "0")
-  }`;
-}
-
-function mapSeverityScore(score: SeverityScore): MetricResult["severity"] {
-  const table: Record<SeverityScore, MetricResult["severity"]> = {
+function mapSeverityScore(score: SeverityScore): SeverityLevel {
+  const table: Record<SeverityScore, SeverityLevel> = {
     0: "none",
     1: "low",
     2: "medium",
@@ -46,10 +43,6 @@ function mapSeverityScore(score: SeverityScore): MetricResult["severity"] {
     4: "critical",
   };
   return table[score];
-}
-
-function worstSeverityScore(scores: SeverityScore[]): SeverityScore {
-  return scores.length ? (Math.max(...scores) as SeverityScore) : 0;
 }
 
 function bucketConfidence(
@@ -60,19 +53,9 @@ function bucketConfidence(
   return "low";
 }
 
-function truncate(text: string, max = 60): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
-}
-
-/**
- * Removes exact-duplicate evidence entries (same type/text/timestamp),
- * regardless of which claim(s) or check(s) produced them. Duplication can
- * legitimately arise when extraction splits one spoken/on-screen line into
- * multiple distinct claims that each cite the same underlying segment.
- */
-function dedupeEvidence(evidence: EvidenceRef[]): EvidenceRef[] {
+function dedupeEvidence(refs: EvidenceRef[]): EvidenceRef[] {
   const seen = new Set<string>();
-  return evidence.filter((e) => {
+  return refs.filter((e) => {
     const key = `${e.type}|${e.text}|${e.timestamp}`;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -80,9 +63,45 @@ function dedupeEvidence(evidence: EvidenceRef[]): EvidenceRef[] {
   });
 }
 
+function worstFailedSubCheck(
+  subChecks: SubCheckResult[],
+): SubCheckResult | null {
+  return subChecks
+    .filter((c) => c.result === "failed")
+    .reduce<SubCheckResult | null>(
+      (worst, c) =>
+        !worst || severityRank(c.severity) > severityRank(worst.severity)
+          ? c
+          : worst,
+      null,
+    );
+}
+
 /* -------------------------------------------------------------------------- */
-/* product_truth                                                              */
+/* product_truth -- 3 fixed sub_checks, aggregated from per-claim findings   */
 /* -------------------------------------------------------------------------- */
+
+const PRODUCT_TRUTH_CHECKS: {
+  classification: SubstantiationClassification;
+  checkId: string;
+  name: string;
+}[] = [
+  {
+    classification: "unsupported",
+    checkId: "claim_unsupported",
+    name: "Claim Support Check",
+  },
+  {
+    classification: "contradicted",
+    checkId: "claim_contradicted",
+    name: "Claim Contradiction Check",
+  },
+  {
+    classification: "forbidden_claim",
+    checkId: "forbidden_claim_used",
+    name: "Forbidden Claim Check",
+  },
+];
 
 export function evaluateProductTruth(
   claims: DerivedClaim[],
@@ -91,41 +110,48 @@ export function evaluateProductTruth(
 ): MetricResult {
   const claimById = new Map(claims.map((c) => [c.claim_id, c]));
 
-  const subChecks: SubCheckResult[] = findings.map((finding) => {
-    const claim = claimById.get(finding.claim_id);
-    return {
-      check_id: finding.claim_id,
-      name: claim ? truncate(claim.text) : finding.claim_id,
-      result: finding.severity === 0 ? "passed" : "failed",
-      severity: mapSeverityScore(finding.severity),
-      explanation: finding.issue_description,
-    };
+  const subChecks: SubCheckResult[] = PRODUCT_TRUTH_CHECKS.map((def) => {
+    const bucket = findings.filter((f) =>
+      f.classification === def.classification
+    );
+    if (bucket.length === 0) return passed(def.checkId, def.name);
+
+    const worst = bucket.reduce((w, f) => (f.severity > w.severity ? f : w));
+    if (worst.severity === 0) return passed(def.checkId, def.name);
+
+    return failed(
+      def.checkId,
+      def.name,
+      mapSeverityScore(worst.severity) as Exclude<
+        SeverityLevel,
+        "none" | "cannot_assess"
+      >,
+      worst.issue_description,
+    );
   });
 
-  // A flagged claim can occur more than once in the ad -- surface every
-  // instance as evidence, not just one. Deduped below since extraction can
-  // split one underlying segment into multiple claims that each cite it.
-  const evidence: EvidenceRef[] = dedupeEvidence(
-    findings
-      .filter((f) => f.severity > 0)
-      .flatMap((f): EvidenceRef[] => {
-        const claim = claimById.get(f.claim_id);
-        if (!claim) return [];
-        return claim.instances.map((inst) => ({
-          type: inst.source,
-          text: inst.text,
-          timestamp: inst.timestamp,
-        }));
-      }),
+  const flaggedFindings = findings.filter((f) => f.severity > 0);
+  const evidenceRefs = dedupeEvidence(
+    flaggedFindings.flatMap((f): EvidenceRef[] => {
+      const claim = claimById.get(f.claim_id);
+      const instanceEvidence = claim
+        ? claim.instances.map((inst) =>
+          evidence(inst.source, inst.text, inst.start_ms)
+        )
+        : [];
+      const productPageEvidence = f.product_page_evidence.trim()
+        ? [evidence("product_page", f.product_page_evidence)]
+        : [];
+      return [...instanceEvidence, ...productPageEvidence];
+    }),
   );
 
   const worstFinding = findings.reduce<SubstantiationFinding | null>(
     (worst, f) => (!worst || f.severity > worst.severity ? f : worst),
     null,
   );
-  const worstScore = worstSeverityScore(findings.map((f) => f.severity));
-  const severity = mapSeverityScore(worstScore);
-  const failed = worstScore > 0;
+  const severity = highestFailedSeverity(subChecks);
+  const failedOverall = severity !== "none";
   const skippedCount = triage.filter((t) => !t.is_verifiable_claim).length;
 
   return {
@@ -134,118 +160,181 @@ export function evaluateProductTruth(
     metric_name: "Product Truth / Claim Support",
     question:
       "Are all explicit product claims supported by product page or source materials?",
-    result: failed ? "false" : "true",
+    result: failedOverall ? "false" : "true",
     severity,
     confidence: worstFinding
       ? bucketConfidence(worstFinding.confidence_score)
       : "high",
-    evidence,
-    explanation: failed && worstFinding
+    evidence: evidenceRefs,
+    explanation: failedOverall && worstFinding
       ? worstFinding.issue_description
       : `${findings.length} claim(s) examined${
         skippedCount
           ? `, ${skippedCount} additional puffery statement(s) skipped`
           : ""
       }; none conflict with the product page.`,
-    suggested_correction: failed && worstFinding
+    suggested_correction: failedOverall && worstFinding
       ? worstFinding.recommendation
       : undefined,
-    correction_type: failed ? "rewrite" : "none",
+    correction_type: failedOverall ? "rewrite" : "none",
     sub_checks: subChecks,
   };
 }
 
 /* -------------------------------------------------------------------------- */
-/* policy_compliance                                                          */
+/* policy_compliance -- 4 fixed sub_checks, ad-wide, LLM-judged              */
 /* -------------------------------------------------------------------------- */
 
+/** Below this font size, disclaimer text is considered hard to read. */
+const MIN_DISCLAIMER_FONT_PX = 12;
+/** Below this duration, disclaimer text likely can't be read in time. */
+const MIN_DISCLAIMER_DURATION_MS = 2000;
+
 export function evaluatePolicyCompliance(
-  claims: DerivedClaim[],
+  assessment: AdWidePolicyAssessment,
+  transcript: TranscriptSegment[],
   ocr: OCRSegment[],
-  findings: ComplianceFinding[],
-  brief: ParsedCreativeBrief,
 ): MetricResult {
-  const claimById = new Map(claims.map((c) => [c.claim_id, c]));
   const subChecks: SubCheckResult[] = [];
-  const evidence: EvidenceRef[] = [];
+  const evidenceRefs: EvidenceRef[] = [];
 
-  // Deterministic, ad-wide check: does a required disclaimer exist at all?
-  const disclaimerSeg = ocr.find((s) =>
-    s.text.toLowerCase().includes("disclaimer") ||
-    s.text.toLowerCase().includes("results may vary")
-  );
-  const requiresDisclaimer = brief.policy_requirements.some((p) =>
-    p.toLowerCase().includes("disclaimer")
-  );
-  const missingDisclaimer = requiresDisclaimer && !disclaimerSeg;
+  // 1. missing_disclaimer -- semantic presence, entirely LLM-judged.
+  const { disclaimer } = assessment;
+  const disclaimerMissing = disclaimer.required && !disclaimer.present;
 
-  if (missingDisclaimer) {
-    subChecks.push({
-      check_id: "missing_disclaimer",
-      name: "Disclaimer presence",
-      result: "failed",
-      severity: "critical",
-      explanation:
-        "Brief requires a disclaimer but none was detected in OCR text.",
-    });
+  if (disclaimerMissing) {
+    subChecks.push(
+      failed(
+        "missing_disclaimer",
+        "Disclaimer Presence",
+        "critical",
+        disclaimer.explanation ||
+          "A required disclaimer was not found in the ad.",
+      ),
+    );
   } else {
-    subChecks.push({
-      check_id: "missing_disclaimer",
-      name: "Disclaimer presence",
-      result: "passed",
-      severity: "none",
-    });
-    if (disclaimerSeg) {
-      evidence.push({
-        type: "ocr",
-        text: disclaimerSeg.text,
-        timestamp: msToTimestamp(disclaimerSeg.start_ms),
-      });
-    }
+    subChecks.push(passed("missing_disclaimer", "Disclaimer Presence"));
   }
 
-  // Dynamic, per-claim checks from the compliance agent.
-  for (const finding of findings) {
-    const claim = claimById.get(finding.claim_id);
-    subChecks.push({
-      check_id: finding.claim_id,
-      name: claim ? truncate(claim.text) : finding.claim_id,
-      result: finding.severity === 0 ? "passed" : "failed",
-      severity: mapSeverityScore(finding.severity),
-      explanation: finding.issue_description,
-    });
-    if (finding.severity > 0 && claim) {
-      for (const inst of claim.instances) {
-        evidence.push({
-          type: inst.source,
-          text: inst.text,
-          timestamp: inst.timestamp,
-        });
+  let matchedOcrSegment: OCRSegment | undefined;
+  if (disclaimer.present && disclaimer.matched_segment_id) {
+    if (disclaimer.matched_source === "ocr") {
+      matchedOcrSegment = ocr.find((s) =>
+        s.ocr_id === disclaimer.matched_segment_id
+      );
+      if (matchedOcrSegment) {
+        evidenceRefs.push(
+          evidence("ocr", matchedOcrSegment.text, matchedOcrSegment.start_ms),
+        );
       }
-      if (finding.policy_excerpt) {
-        // NOTE: EvidenceRef.type has no "regulatory_guidance" option in
-        // shared/schemas.ts -- mapped to "metadata" as a placeholder.
-        evidence.push({
-          type: "metadata",
-          text: finding.policy_excerpt,
-          timestamp: "",
-        });
+    } else if (disclaimer.matched_source === "transcript") {
+      const seg = transcript.find((s) =>
+        s.segment_id === disclaimer.matched_segment_id
+      );
+      if (seg) {
+        evidenceRefs.push(evidence("transcript", seg.text, seg.start_ms));
       }
     }
   }
 
-  const globalSeverityScore: SeverityScore = missingDisclaimer ? 4 : 0;
-  const worstScore = Math.max(
-    globalSeverityScore,
-    worstSeverityScore(findings.map((f) => f.severity)),
-  ) as SeverityScore;
-  const severity = mapSeverityScore(worstScore);
-  const failed = worstScore > 0;
+  // 2 & 3. Contrast/duration only assessable when the disclaimer is
+  // confirmed present AND on-screen (OCR) -- a spoken-only disclaimer, or a
+  // missing one, has no font size or on-screen duration to evaluate.
+  if (matchedOcrSegment) {
+    const fontSize = matchedOcrSegment.font_size_px;
+    if (fontSize !== undefined) {
+      subChecks.push(
+        fontSize < MIN_DISCLAIMER_FONT_PX
+          ? failed(
+            "disclaimer_contrast_low",
+            "Disclaimer Visibility",
+            "low",
+            `The font size of the disclaimer text is ${fontSize}px, below the required ${MIN_DISCLAIMER_FONT_PX}px safe limit.`,
+          )
+          : passed("disclaimer_contrast_low", "Disclaimer Visibility"),
+      );
+    } else {
+      subChecks.push(
+        cannotAssess(
+          "disclaimer_contrast_low",
+          "Disclaimer Visibility",
+          "No font size metadata available for the matched disclaimer segment.",
+        ),
+      );
+    }
 
-  const worstFinding = findings.reduce<ComplianceFinding | null>(
-    (worst, f) => (!worst || f.severity > worst.severity ? f : worst),
-    null,
-  );
+    const duration = matchedOcrSegment.on_screen_duration_ms;
+    subChecks.push(
+      duration < MIN_DISCLAIMER_DURATION_MS
+        ? failed(
+          "disclaimer_duration_insufficient",
+          "Disclaimer Duration",
+          "low",
+          `The disclaimer was on screen for ${duration}ms, below the ${MIN_DISCLAIMER_DURATION_MS}ms readability minimum.`,
+        )
+        : passed("disclaimer_duration_insufficient", "Disclaimer Duration"),
+    );
+  } else {
+    const reason = disclaimerMissing
+      ? "No disclaimer was found to assess."
+      : "The disclaimer was found only in spoken audio, not on-screen text -- contrast and duration don't apply.";
+    subChecks.push(
+      cannotAssess("disclaimer_contrast_low", "Disclaimer Visibility", reason),
+    );
+    subChecks.push(
+      cannotAssess(
+        "disclaimer_duration_insufficient",
+        "Disclaimer Duration",
+        reason,
+      ),
+    );
+  }
+
+  // 4. policy_violation_depicted
+  const { policy_depiction } = assessment;
+  if (policy_depiction.detected) {
+    subChecks.push(
+      failed(
+        "policy_violation_depicted",
+        "Policy Depiction Check",
+        mapSeverityScore(policy_depiction.severity) as Exclude<
+          SeverityLevel,
+          "none" | "cannot_assess"
+        >,
+        policy_depiction.description,
+      ),
+    );
+    if (policy_depiction.matched_segment_id) {
+      if (policy_depiction.matched_source === "ocr") {
+        const seg = ocr.find((s) =>
+          s.ocr_id === policy_depiction.matched_segment_id
+        );
+        if (seg) evidenceRefs.push(evidence("ocr", seg.text, seg.start_ms));
+      } else if (policy_depiction.matched_source === "transcript") {
+        const seg = transcript.find((s) =>
+          s.segment_id === policy_depiction.matched_segment_id
+        );
+        if (seg) {
+          evidenceRefs.push(evidence("transcript", seg.text, seg.start_ms));
+        }
+      }
+    }
+  } else {
+    subChecks.push(
+      passed("policy_violation_depicted", "Policy Depiction Check"),
+    );
+  }
+
+  const severity = highestFailedSeverity(subChecks);
+  const failedOverall = severity !== "none";
+  const worstFailed = worstFailedSubCheck(subChecks);
+
+  const confidences = [
+    disclaimer.confidence_score,
+    policy_depiction.confidence_score,
+  ];
+  const avgConfidence = confidences.reduce((s, c) => s + c, 0) /
+    confidences.length;
 
   return {
     metric_id: "policy_compliance",
@@ -253,23 +342,19 @@ export function evaluatePolicyCompliance(
     metric_name: "Policy / Compliance Readiness",
     question:
       "Does the video avoid obvious policy, compliance, or disclosure issues?",
-    result: failed ? "false" : "true",
+    result: failedOverall ? "false" : "true",
     severity,
-    confidence: worstFinding
-      ? bucketConfidence(worstFinding.confidence_score)
-      : "medium",
-    evidence: dedupeEvidence(evidence),
-    explanation: missingDisclaimer
-      ? "A required disclaimer is missing from the ad entirely."
-      : failed && worstFinding
-      ? worstFinding.issue_description
-      : "Required disclaimers are present and no examined claim raised a compliance concern.",
-    suggested_correction: missingDisclaimer
-      ? "Add the required disclaimer to the ad."
-      : failed && worstFinding
-      ? worstFinding.recommendation
+    confidence: bucketConfidence(avgConfidence),
+    evidence: dedupeEvidence(evidenceRefs),
+    explanation: failedOverall
+      ? worstFailed?.explanation ?? "A policy compliance issue was found."
+      : "Required disclaimers are present and no policy violations were detected.",
+    suggested_correction: failedOverall
+      ? (disclaimerMissing
+        ? "Add the required disclaimer to the ad."
+        : worstFailed?.explanation)
       : undefined,
-    correction_type: failed ? "edit_recommendation" : "none",
+    correction_type: failedOverall ? "edit_recommendation" : "none",
     sub_checks: subChecks,
   };
 }
