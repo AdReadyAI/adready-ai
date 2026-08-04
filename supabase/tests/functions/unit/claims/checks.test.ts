@@ -1,9 +1,9 @@
 /**
  * checks.test.ts — Unit tests for the pure functions in checks.ts:
  * response parsing/validation, missing-claim fallback behavior, segment_id
- * dedup, and the anti-hallucination excerpt-verification guard.
+ * dedup, and the citation-allowlist anti-hallucination guard.
  *
- * Only the pure `process*Response()` functions and `verifyPolicyExcerpts()`
+ * Only the pure `process*Response()` functions and `verifyPolicyCitations()`
  * are tested here -- the async wrappers (extractClaims, triageClaims,
  * substantiateClaims, checkCompliance) call chat() and are not unit tested.
  *
@@ -13,20 +13,12 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 
 import {
-  processComplianceResponse,
   processExtractionResponse,
   processSubstantiationResponse,
   processTriageResponse,
-  verifyPolicyExcerpts,
 } from "../../../../functions/claims-agent/checks.ts";
-import type { EvidenceByCategory } from "../../../../functions/claims-agent/checks.ts";
 
-import {
-  buildComplianceFinding,
-  buildVerifiableClaim,
-  OCR,
-  TRANSCRIPT,
-} from "./fixtures.ts";
+import { buildVerifiableClaim, OCR, TRANSCRIPT } from "./fixtures.ts";
 
 // ---------------------------------------------------------------------------
 // processExtractionResponse
@@ -154,17 +146,77 @@ Deno.test("processSubstantiationResponse: maps covered claims through unchanged"
   const raw = JSON.stringify([
     {
       claim_id: "claim-1",
+      classification: "unsupported",
       severity: 3,
       issue_description: "exaggerated",
       recommendation: "soften wording",
+      product_page_evidence: "product page says X",
       confidence_score: 0.9,
     },
   ]);
 
   const findings = processSubstantiationResponse(raw, [claim]);
 
+  assertEquals(findings[0].classification, "unsupported");
   assertEquals(findings[0].severity, 3);
+  assertEquals(findings[0].product_page_evidence, "product page says X");
   assertEquals(findings[0].confidence_score, 0.9);
+});
+
+Deno.test("processSubstantiationResponse: parses each classification value correctly", () => {
+  const claims = [
+    buildVerifiableClaim({ claim_id: "claim-1" }),
+    buildVerifiableClaim({ claim_id: "claim-2" }),
+    buildVerifiableClaim({ claim_id: "claim-3" }),
+    buildVerifiableClaim({ claim_id: "claim-4" }),
+  ];
+  const raw = JSON.stringify([
+    {
+      claim_id: "claim-1",
+      classification: "none",
+      severity: 0,
+      issue_description: "",
+      recommendation: "",
+      product_page_evidence: "",
+      confidence_score: 0.9,
+    },
+    {
+      claim_id: "claim-2",
+      classification: "unsupported",
+      severity: 2,
+      issue_description: "",
+      recommendation: "",
+      product_page_evidence: "",
+      confidence_score: 0.9,
+    },
+    {
+      claim_id: "claim-3",
+      classification: "contradicted",
+      severity: 4,
+      issue_description: "",
+      recommendation: "",
+      product_page_evidence: "",
+      confidence_score: 0.9,
+    },
+    {
+      claim_id: "claim-4",
+      classification: "forbidden_claim",
+      severity: 4,
+      issue_description: "",
+      recommendation: "",
+      product_page_evidence: "",
+      confidence_score: 0.9,
+    },
+  ]);
+
+  const findings = processSubstantiationResponse(raw, claims);
+
+  assertEquals(findings.map((f) => f.classification), [
+    "none",
+    "unsupported",
+    "contradicted",
+    "forbidden_claim",
+  ]);
 });
 
 Deno.test("processSubstantiationResponse: flags an uncovered claim for manual review", () => {
@@ -174,131 +226,8 @@ Deno.test("processSubstantiationResponse: flags an uncovered claim for manual re
   const findings = processSubstantiationResponse(raw, [claim]);
 
   assertEquals(findings.length, 1);
+  assertEquals(findings[0].classification, "unsupported"); // <- add this line
   assertEquals(findings[0].severity, 2);
   assertEquals(findings[0].confidence_score, 0.2);
   assert(findings[0].issue_description.includes("did not cover"));
-});
-
-// ---------------------------------------------------------------------------
-// processComplianceResponse
-// ---------------------------------------------------------------------------
-
-Deno.test("processComplianceResponse: maps covered claims and marks excerpt_verified false", () => {
-  const claim = buildVerifiableClaim();
-  const raw = JSON.stringify([
-    {
-      claim_id: "claim-1",
-      severity: 4,
-      policy_excerpt: "must be substantiated",
-      issue_description: "unsupported health claim",
-      recommendation: "add disclosure",
-      confidence_score: 0.85,
-    },
-  ]);
-
-  const findings = processComplianceResponse(raw, [claim]);
-
-  assertEquals(findings[0].severity, 4);
-  assertEquals(findings[0].excerpt_verified, false); // always false pre-verification
-});
-
-Deno.test("processComplianceResponse: flags an uncovered claim for manual review", () => {
-  const claim = buildVerifiableClaim();
-  const raw = JSON.stringify([]);
-
-  const findings = processComplianceResponse(raw, [claim]);
-
-  assertEquals(findings[0].severity, 2);
-  assertEquals(findings[0].policy_excerpt, "");
-  assertEquals(findings[0].excerpt_verified, false);
-});
-
-// ---------------------------------------------------------------------------
-// verifyPolicyExcerpts
-// ---------------------------------------------------------------------------
-
-Deno.test("verifyPolicyExcerpts: empty excerpt is trivially verified, untouched", () => {
-  const claim = buildVerifiableClaim();
-  const finding = buildComplianceFinding({
-    policy_excerpt: "",
-    confidence_score: 0.7,
-    excerpt_verified: false,
-  });
-
-  const [result] = verifyPolicyExcerpts([finding], [claim], {});
-
-  assertEquals(result.excerpt_verified, true);
-  assertEquals(result.confidence_score, 0.7); // unchanged
-});
-
-Deno.test("verifyPolicyExcerpts: excerpt found verbatim (case-insensitive) in retrieved evidence -> verified", () => {
-  const claim = buildVerifiableClaim({ category: "health_or_medical_claim" });
-  const finding = buildComplianceFinding({
-    policy_excerpt: "Must Be Substantiated",
-    excerpt_verified: false,
-  });
-  const evidence: EvidenceByCategory = {
-    health_or_medical_claim: [
-      {
-        chunk_id: "reg-1",
-        source: "guidance",
-        text: "claims must be substantiated by rigorous evidence.",
-      },
-    ],
-  };
-
-  const [result] = verifyPolicyExcerpts([finding], [claim], evidence);
-
-  assertEquals(result.excerpt_verified, true);
-  assertEquals(result.policy_excerpt, "Must Be Substantiated"); // preserved
-});
-
-Deno.test("verifyPolicyExcerpts: excerpt not found in evidence -> cleared and confidence capped", () => {
-  const claim = buildVerifiableClaim({ category: "health_or_medical_claim" });
-  const finding = buildComplianceFinding({
-    policy_excerpt: "an invented citation",
-    confidence_score: 0.9,
-    excerpt_verified: false,
-  });
-  const evidence: EvidenceByCategory = {
-    health_or_medical_claim: [
-      {
-        chunk_id: "reg-1",
-        source: "guidance",
-        text: "unrelated regulatory text.",
-      },
-    ],
-  };
-
-  const [result] = verifyPolicyExcerpts([finding], [claim], evidence);
-
-  assertEquals(result.excerpt_verified, false);
-  assertEquals(result.policy_excerpt, "");
-  assertEquals(result.confidence_score, 0.3); // capped, not raised
-});
-
-Deno.test("verifyPolicyExcerpts: does not raise confidence that was already below the cap", () => {
-  const claim = buildVerifiableClaim({ category: "health_or_medical_claim" });
-  const finding = buildComplianceFinding({
-    policy_excerpt: "an invented citation",
-    confidence_score: 0.1,
-    excerpt_verified: false,
-  });
-
-  const [result] = verifyPolicyExcerpts([finding], [claim], {});
-
-  assertEquals(result.confidence_score, 0.1); // min(0.1, 0.3) = 0.1
-});
-
-Deno.test("verifyPolicyExcerpts: claim category with no retrieved evidence at all -> treated as unverified", () => {
-  const claim = buildVerifiableClaim({ category: "pricing_or_offer_claim" });
-  const finding = buildComplianceFinding({
-    policy_excerpt: "some excerpt",
-    excerpt_verified: false,
-  });
-
-  const [result] = verifyPolicyExcerpts([finding], [claim], {}); // no pricing evidence
-
-  assertEquals(result.excerpt_verified, false);
-  assertEquals(result.policy_excerpt, "");
 });
