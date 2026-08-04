@@ -64,14 +64,13 @@ createEdgeHandler<ProcessIssuesInput>(
   "process-issues",
   ProcessIssuesSchema,
   async (_req, { body }) => {
-
-    
     const { request_id, batch_id } = body;
-    
+
     const supabase = createSupabaseServiceClient();
-   
-   
-    let queryRequests = supabase.from("requests").select("request_id, batch_id");
+
+    let queryRequests = supabase.from("requests").select(
+      "request_id, batch_id",
+    );
 
     if (request_id) {
       queryRequests = queryRequests.eq("request_id", request_id);
@@ -92,7 +91,6 @@ createEdgeHandler<ProcessIssuesInput>(
     );
     const targetRequestIds = Array.from(requestBatchMap.keys());
 
-   
     const [
       { data: rawResults, error: resultsErr },
       { data: rawSubChecks, error: subChecksErr },
@@ -121,7 +119,6 @@ createEdgeHandler<ProcessIssuesInput>(
     const failedSubChecks = (rawSubChecks || []) as unknown as SubCheckRow[];
     const evidenceList = (rawEvidence || []) as unknown as EvidenceRow[];
 
-   
     const issuesMap = new Map<string, IssueRecord>();
 
     for (const result of allResults) {
@@ -194,7 +191,6 @@ createEdgeHandler<ProcessIssuesInput>(
       });
     }
 
-    
     const { data: insertedIssues, error: insertErr } = await supabase
       .from("issues")
       .upsert(issuesToInsert, { onConflict: "request_id,metric_id" })
