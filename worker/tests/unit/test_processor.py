@@ -1,5 +1,6 @@
 """Unit tests for the worker processor orchestration (app/processor.py)."""
 
+from unittest.mock import MagicMock
 from types import SimpleNamespace
 
 import pytest
@@ -66,6 +67,43 @@ class FakeDB:
 
     def completed_analyzers(self):
         return self._done
+
+
+class FakeProductContextDB:
+    """Record the Product Context orchestration without touching Postgres."""
+
+    def __init__(self, url):
+        self.url = url
+        self.raw_text = None
+
+    def product_url_requiring_context(self):
+        return self.url
+
+    def upsert_product_context(self, raw_text, reference_asset_urls):
+        self.raw_text = raw_text
+
+
+def test_populate_product_context_extracts_and_persists_page_text():
+    db = FakeProductContextDB("https://example.com/product")
+    extractor = MagicMock()
+    extractor.extract.return_value = SimpleNamespace(
+        raw_text="Product facts",
+        reference_asset_urls=("https://example.com/product.jpg",),
+    )
+
+    processor._populate_product_context(db, extractor=extractor)
+
+    assert db.raw_text == "Product facts"
+
+
+def test_populate_product_context_skips_request_without_pending_url():
+    db = FakeProductContextDB(None)
+    extractor = MagicMock()
+
+    processor._populate_product_context(db, extractor=extractor)
+
+    extractor.extract.assert_not_called()
+    assert db.raw_text is None
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +280,13 @@ def _wire_process_message(
         def completed_analyzers(self):
             return done or set()
 
+        def product_url_requiring_context(self):
+            return None
+
+        def upsert_product_context(self, raw_text, reference_asset_urls):
+            if recorder is not None:
+                recorder["product_context"] = raw_text
+
         def persist_results(self, results, errors):
             if recorder is not None:
                 recorder["persisted"] = (results, errors)
@@ -324,8 +369,6 @@ def test_process_message_with_all_stub_tasks_does_not_crash(monkeypatch):
     results, errors = recorder["persisted"]
     assert results == {}
     assert errors == {}
-
-
 def test_process_message_persists_quality_frames(monkeypatch):
     recorder = {}
     flag = QualityFlag(index=0, timestamp=0.0, reasons=("blur",), scores={})
@@ -533,6 +576,10 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
 
         def __init__(self, cur, request_id):
             self.request_id = request_id
+
+        def product_url_requiring_context(self):
+            """Model a request whose product context is already complete."""
+            return None
 
         def completed_analyzers(self):
             return set()

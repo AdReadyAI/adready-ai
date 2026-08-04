@@ -16,6 +16,7 @@ from app.schemas import JobPayload
 from app.errors import TransientError
 from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS, SUPABASE_URL
 from analyzer.output_models import TaskResult
+from app.product_context import ProductPageExtractor
 from app.ocr_runs import OcrRunLifecycle
 from app.supabase import Supabase
 
@@ -46,9 +47,11 @@ def process_message(cur, msg_id, payload):
     payload = _parse_payload(msg_id, payload)
     ocr_configuration = OcrRuntimeConfig.from_env()
     request_id = payload.request_id
+    db = Supabase(cur=cur, request_id=request_id)
 
     job_start = time.perf_counter()
     logger.info("[job %s] Processing: %s", msg_id, request_id)
+    _populate_product_context(db)
     with tempfile.TemporaryDirectory(prefix=f"job_{msg_id}_") as work_dir:
         preprocessor = VideoPreprocessor(payload, work_dir)
         with phase(logger, f"[job {msg_id}] Preprocessing"):
@@ -59,7 +62,6 @@ def process_message(cur, msg_id, payload):
             ocr_adapter=_build_ocr_adapter(),
             ocr_candidate_mode=ocr_configuration.candidate_mode,
         )
-        db = Supabase(cur=cur, request_id=request_id)
 
         quality_result = artifact.probe_results.get("quality")
         if quality_result is not None:
@@ -100,6 +102,25 @@ def process_message(cur, msg_id, payload):
             raise RuntimeError(f"[job {msg_id}] analyzers failed: {list(errors)}")
 
     logger.info("[job %s] Done in %.2fs", msg_id, time.perf_counter() - job_start)
+
+
+def _populate_product_context(
+    db: Supabase,
+    extractor: ProductPageExtractor | None = None,
+) -> None:
+    """Populate missing Product Context from the Review Request's product URL."""
+    product_url = db.product_url_requiring_context()
+    if product_url is None:
+        return
+
+    # Extraction stays outside the persistence layer so network behavior and
+    # database writes remain independently testable and retryable.
+    page_extractor = extractor or ProductPageExtractor()
+    context = page_extractor.extract(product_url)
+    db.upsert_product_context(
+        context.raw_text,
+        context.reference_asset_urls,
+    )
 
 
 def _parse_payload(msg_id, payload: dict) -> JobPayload:
