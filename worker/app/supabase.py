@@ -54,6 +54,8 @@ class Supabase:
         for name, error in errors.items():
             self._upsert_processing(name, "error", None, error)
 
+    def mark_processing(self, task_name: str) -> None:
+        self._upsert_processing(task_name, "processing", None)
     def persist_quality_frames(self, flags: list[QualityFlag]) -> None:
         """Replace this request's flagged-frame evidence (delete + reinsert,
         same as _replace_rows) so a retried job doesn't duplicate rows —
