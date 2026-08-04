@@ -18,12 +18,12 @@ const ProcessIssuesSchema = z
 type ProcessIssuesInput = z.infer<typeof ProcessIssuesSchema>;
 
 import {
-  RequestRow,
   AgentResultRow,
-  SubCheckRow,
+  buildIssuesSummary,
   EvidenceRow,
   IssueRecord,
-  buildIssuesSummary,
+  RequestRow,
+  SubCheckRow,
 } from "./logic.ts";
 
 createEdgeHandler<ProcessIssuesInput>(
@@ -89,7 +89,7 @@ createEdgeHandler<ProcessIssuesInput>(
       allResults,
       failedSubChecks,
       evidenceList,
-      requestBatchMap
+      requestBatchMap,
     );
 
     if (issuesToInsert.length === 0) {

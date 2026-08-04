@@ -1,5 +1,10 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { buildIssuesSummary, AgentResultRow, SubCheckRow, EvidenceRow } from "../../../functions/process-issues/logic.ts";
+import {
+  AgentResultRow,
+  buildIssuesSummary,
+  EvidenceRow,
+  SubCheckRow,
+} from "../../../functions/process-issues/logic.ts";
 
 Deno.test("buildIssuesSummary constructs simple issue correctly", () => {
   const requestBatchMap = new Map([["req-1", "batch-1"]]);
@@ -14,7 +19,7 @@ Deno.test("buildIssuesSummary constructs simple issue correctly", () => {
       confidence: "medium",
       metric_name: "My Metric",
       suggested_correction: "Fix it",
-    }
+    },
   ];
 
   const issues = buildIssuesSummary(results, [], [], requestBatchMap);
@@ -43,7 +48,7 @@ Deno.test("buildIssuesSummary normalizes invalid severities and confidences", ()
       result: "false",
       severity: "super-critical", // invalid
       confidence: "100%", // invalid
-    }
+    },
   ];
 
   const issues = buildIssuesSummary(results, [], [], requestBatchMap);
@@ -61,16 +66,16 @@ Deno.test("buildIssuesSummary extracts timestamp from evidence", () => {
       metric_id: "m-1",
       agent: "agent-1",
       result: "false",
-    }
+    },
   ];
-  
+
   const evidences: EvidenceRow[] = [
     {
       request_id: "req-1",
       metric_id: "m-1",
       agent: "agent-1",
       evidence_timestamp: "00:15",
-    }
+    },
   ];
 
   const issues = buildIssuesSummary(results, [], evidences, requestBatchMap);
@@ -87,16 +92,16 @@ Deno.test("buildIssuesSummary triggers if result is true but has failed subcheck
       metric_id: "m-2",
       agent: "agent-2",
       result: "true",
-    }
+    },
   ];
-  
+
   const subChecks: SubCheckRow[] = [
     {
       request_id: "req-2",
       metric_id: "m-2",
       agent: "agent-2",
       result: "false", // triggers failure
-    }
+    },
   ];
 
   const issues = buildIssuesSummary(results, subChecks, [], requestBatchMap);
@@ -113,7 +118,7 @@ Deno.test("buildIssuesSummary ignores true results with no failed subchecks", ()
       metric_id: "m-2",
       agent: "agent-2",
       result: "true",
-    }
+    },
   ];
 
   const issues = buildIssuesSummary(results, [], [], requestBatchMap);

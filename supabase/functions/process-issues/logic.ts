@@ -45,7 +45,7 @@ export function buildIssuesSummary(
   allResults: AgentResultRow[],
   failedSubChecks: SubCheckRow[],
   evidenceList: EvidenceRow[],
-  requestBatchMap: Map<string, string>
+  requestBatchMap: Map<string, string>,
 ): IssueRecord[] {
   const issuesMap = new Map<string, IssueRecord>();
 
