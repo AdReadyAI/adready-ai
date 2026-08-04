@@ -107,8 +107,8 @@ export interface ResultTable {
 
 /**
  * Public Score Engine response.
- * result_table → result_score_table + result_score_dimensions (orchestrator);
- * issues[] → public.issues rows (orchestrator adds request_id + batch_id).
+ * result_table → persisted by score-result Edge onto result_score_* (026).
+ * issues[] → public.issues (owned elsewhere; score-result does not write them).
  */
 export interface ScoreTablesOutput {
   result_table: ResultTable;

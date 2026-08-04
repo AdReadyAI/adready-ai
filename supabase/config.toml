@@ -430,6 +430,12 @@ import_map = "./deno.json"
 [functions.visual-quality-agent]
 import_map = "./deno.json"
 
+[functions.score-engine]
+import_map = "./deno.json"
+
+[functions.score-result]
+import_map = "./deno.json"
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 [functions.shared]
