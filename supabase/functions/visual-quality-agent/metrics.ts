@@ -1,3 +1,11 @@
+import {
+  cannotAssess,
+  evidence,
+  failed,
+  passed,
+  rollupChecks,
+} from "../shared/checks.ts";
+
 import type {
   AgentContext,
   EvidenceRef,
@@ -5,14 +13,6 @@ import type {
   SeverityLevel,
   SubCheckResult,
 } from "../shared/schemas.ts";
-
-import {
-  cannotAssess,
-  evidence,
-  failed,
-  highestFailedSeverity,
-  passed,
-} from "../shared/index.ts";
 
 import type { VisualAuditFinding } from "./visual-audit.ts";
 
@@ -34,28 +34,6 @@ const VISUAL_FINDING_SEVERITY: Record<
 };
 
 /**
- * Rolls up sub-checks, treating "any cannot_assess" as its own outcome when
- * nothing has failed. Unlike the shared `rollupChecks`, a single cannot_assess
- * check is enough to produce a "cannot_assess" result here, as long as no
- * check has failed (failed always takes precedence).
- */
-function rollupWithCannotAssess(
-  checks: SubCheckResult[],
-): { result: MetricResult["result"]; severity: SeverityLevel } {
-  const failedSeverity = highestFailedSeverity(checks);
-  if (failedSeverity !== "none") {
-    return { result: "false", severity: failedSeverity };
-  }
-
-  const hasCannotAssess = checks.some((c) => c.result === "cannot_assess");
-  if (hasCannotAssess) {
-    return { result: "cannot_assess", severity: "cannot_assess" };
-  }
-
-  return { result: "true", severity: "none" };
-}
-
-/**
  * Evaluates all six production-readiness checks
  * and synthesizes the final MetricResult.
  */
@@ -71,7 +49,13 @@ export function evaluateProductionReadiness(
     c.result === "cannot_assess"
   );
 
-  const { result, severity } = rollupWithCannotAssess(subChecks);
+  const rolledUp = rollupChecks(subChecks);
+  const result = rolledUp.result === "true" && cannotAssessChecks.length > 0
+    ? "cannot_assess"
+    : rolledUp.result;
+  const severity = rolledUp.result === "true" && cannotAssessChecks.length > 0
+    ? "cannot_assess"
+    : rolledUp.severity;
 
   const confidenceValues = outcomes
     .filter((o) => o.check.result !== "cannot_assess")
