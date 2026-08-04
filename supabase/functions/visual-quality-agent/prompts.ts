@@ -84,6 +84,7 @@ export function buildVisualAuditUserPrompt(
     video_metadata: unknown;
     ocr_segments: unknown[];
     visual_frames: unknown[];
+    visual_findings: unknown[];
   },
 ): string {
   return `
@@ -97,6 +98,9 @@ ${JSON.stringify(context.ocr_segments, null, 2)}
 
 VISUAL FRAMES:
 ${JSON.stringify(context.visual_frames, null, 2)}
+
+VISUAL FINDINGS:
+${JSON.stringify(context.visual_findings, null, 2)}
 
 Return JSON in exactly this structure:
 

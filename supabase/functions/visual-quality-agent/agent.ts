@@ -1,20 +1,11 @@
-import {
-  AgentRunRequestSchema,
-  MetricResultSchema,
-} from "../shared/schemas.ts";
+import { loadAgentContext, persistMetricResults } from "../shared/index.ts";
+import { validateMetricResults } from "../shared/validation.ts";
 
 import type { AgentRunRequest, MetricResult } from "../shared/schemas.ts";
 
 import { auditVisualQuality } from "./visual-audit.ts";
 
 import { evaluateProductionReadiness } from "./metrics.ts";
-
-import { loadAgentContext, persistMetricResults } from "../shared/index.ts";
-
-export const VisualQualityAgentRequestSchema = AgentRunRequestSchema;
-
-export type VisualQualityAgentRequest = AgentRunRequest;
-
 
 /**
  * Runs the Visual Quality Agent pipeline.
@@ -26,19 +17,19 @@ export type VisualQualityAgentRequest = AgentRunRequest;
  * 5. Persists the result and sub-checks.
  */
 export async function runVisualQualityAgent(
-  request: VisualQualityAgentRequest,
+  request: AgentRunRequest,
   { userId }: { userId: string },
 ): Promise<MetricResult> {
   const context = await loadAgentContext(request.request_id, { userId });
 
   const visualFindings = await auditVisualQuality(context);
 
-  const result = MetricResultSchema.parse(
+  const [result] = validateMetricResults([
     evaluateProductionReadiness(
       context,
       visualFindings,
     ),
-  );
+  ]);
 
   await persistMetricResults(
     context.request_id,

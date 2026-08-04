@@ -73,6 +73,8 @@ export async function auditVisualQuality(
         ocr_segments: context.ocr_segments,
 
         visual_frames: context.visual_frames,
+
+        visual_findings: context.quality_frames,
       }),
     },
   ]);
