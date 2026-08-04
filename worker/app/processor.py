@@ -10,6 +10,7 @@ from app.schemas import JobPayload
 from app.errors import TransientError
 from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS
 from analyzer.output_models import TaskResult
+from app.product_context import ProductPageExtractor
 from app.supabase import Supabase
 
 
@@ -17,14 +18,15 @@ from app.supabase import Supabase
 def process_message(cur, msg_id, payload):
     payload = _parse_payload(msg_id, payload)
     request_id = payload.request_id
+    db = Supabase(cur=cur, request_id=request_id)
 
     logger.info("[job %s] Processing: %s", msg_id, request_id)
+    _populate_product_context(db)
     with tempfile.TemporaryDirectory(prefix=f"job_{msg_id}_") as work_dir:
         preprocessor = VideoPreprocessor(payload, work_dir)
         artifact = preprocessor.prepare()
 
         analyzer = VideoAnalyzer(artifact)
-        db = Supabase(cur=cur, request_id=request_id)
         results, errors = _run_analysis(db, analyzer)
 
         db.persist_results(results, errors)
@@ -33,6 +35,25 @@ def process_message(cur, msg_id, payload):
             raise RuntimeError(f"[job {msg_id}] analyzers failed: {list(errors)}")
     
     logger.info("[job %s] Done", msg_id)
+
+
+def _populate_product_context(
+    db: Supabase,
+    extractor: ProductPageExtractor | None = None,
+) -> None:
+    """Populate missing Product Context from the Review Request's product URL."""
+    product_url = db.product_url_requiring_context()
+    if product_url is None:
+        return
+
+    # Extraction stays outside the persistence layer so network behavior and
+    # database writes remain independently testable and retryable.
+    page_extractor = extractor or ProductPageExtractor()
+    context = page_extractor.extract(product_url)
+    db.upsert_product_context(
+        context.raw_text,
+        context.reference_asset_urls,
+    )
 
 
 def _parse_payload(msg_id, payload: dict) -> JobPayload:
