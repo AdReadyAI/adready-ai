@@ -6,11 +6,9 @@ import { createClient } from "npm:@supabase/supabase-js@2";
  * Evaluates agent test results for a given `request_id` or `batch_id`.
  * Filters metrics that failed (or have failed sub-checks) and updates/upserts
  * them into the `public.issues` table for downstream consumption.
- * 
- * 
+ *
  * NOTE : subchecks  are discarded for now , it will be too much informations to display .
  */
-
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -47,12 +45,13 @@ Deno.serve(async (req) => {
 
   const { request_id, batch_id } = body;
   if (!request_id && !batch_id) {
-    return jsonResponse(400, { error: "Provide either request_id or batch_id" });
+    return jsonResponse(400, {
+      error: "Provide either request_id or batch_id",
+    });
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const supabaseKey =
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
     Deno.env.get("SUPABASE_ANON_KEY") ??
     "";
 
@@ -69,11 +68,14 @@ Deno.serve(async (req) => {
   const { data: targetRequests, error: reqsErr } = await queryRequests;
 
   if (reqsErr || !targetRequests || targetRequests.length === 0) {
-    return jsonResponse(404, { error: "No requests found matching criteria", details: reqsErr });
+    return jsonResponse(404, {
+      error: "No requests found matching criteria",
+      details: reqsErr,
+    });
   }
 
   const requestBatchMap = new Map<string, string>(
-    targetRequests.map((r) => [r.request_id, r.batch_id])
+    targetRequests.map((r) => [r.request_id, r.batch_id]),
   );
   const targetRequestIds = Array.from(requestBatchMap.keys());
 
@@ -83,7 +85,10 @@ Deno.serve(async (req) => {
     .in("request_id", targetRequestIds);
 
   if (resultsErr) {
-    return jsonResponse(500, { error: "Error fetching agent_results", details: resultsErr });
+    return jsonResponse(500, {
+      error: "Error fetching agent_results",
+      details: resultsErr,
+    });
   }
 
   const { data: failedSubChecks, error: subChecksErr } = await supabase
@@ -93,7 +98,10 @@ Deno.serve(async (req) => {
     .in("result", ["false", "failed"]);
 
   if (subChecksErr) {
-    return jsonResponse(500, { error: "Error fetching sub-checks", details: subChecksErr });
+    return jsonResponse(500, {
+      error: "Error fetching sub-checks",
+      details: subChecksErr,
+    });
   }
 
   const { data: evidenceList, error: evidenceErr } = await supabase
@@ -102,14 +110,19 @@ Deno.serve(async (req) => {
     .in("request_id", targetRequestIds);
 
   if (evidenceErr) {
-    return jsonResponse(500, { error: "Error fetching evidence", details: evidenceErr });
+    return jsonResponse(500, {
+      error: "Error fetching evidence",
+      details: evidenceErr,
+    });
   }
 
   const issuesMap = new Map<string, Record<string, unknown>>();
 
   for (const result of (allResults || [])) {
     const resultFailedSubChecks = (failedSubChecks || []).filter(
-      (sc) => sc.request_id === result.request_id && sc.metric_id === result.metric_id && sc.agent === result.agent
+      (sc) =>
+        sc.request_id === result.request_id &&
+        sc.metric_id === result.metric_id && sc.agent === result.agent,
     );
 
     if (result.result !== "false" && resultFailedSubChecks.length === 0) {
@@ -122,18 +135,18 @@ Deno.serve(async (req) => {
       (ev) =>
         ev.request_id === result.request_id &&
         ev.agent === result.agent &&
-        ev.metric_id === result.metric_id
+        ev.metric_id === result.metric_id,
     );
 
-    const timestampEvidence = matchingEvidences.find((ev) => ev.evidence_timestamp);
+    const timestampEvidence = matchingEvidences.find((ev) =>
+      ev.evidence_timestamp
+    );
 
+    const detailText = (result.explanation || "").trim(); // should be changed to let later.
 
-    const detailText = (result.explanation || "").trim();  // should be changed to let later.
-   
-    
-    /* 
+    /*
     // we discard the subchecks for now , it will be too much informations to display .
-    
+
     if (resultFailedSubChecks.length > 0) {
       if (detailText.length > 0) detailText += "\n\n";
       detailText += "Failed Checks:";
@@ -154,13 +167,20 @@ Deno.serve(async (req) => {
     }
     */
 
-    const validSeverities = ['none', 'low', 'medium', 'high', 'critical', 'cannot_assess'];
+    const validSeverities = [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "critical",
+      "cannot_assess",
+    ];
     let severity = (result.severity || "none").toLowerCase();
     if (!validSeverities.includes(severity)) {
       severity = "none";
     }
 
-    const validConfidences = ['low', 'medium', 'high', 'unknown'];
+    const validConfidences = ["low", "medium", "high", "unknown"];
     let confidence = (result.confidence || "unknown").toLowerCase();
     if (!validConfidences.includes(confidence)) {
       confidence = "unknown";
@@ -196,7 +216,10 @@ Deno.serve(async (req) => {
     .select();
 
   if (insertErr) {
-    return jsonResponse(500, { error: "Error inserting issues", details: insertErr });
+    return jsonResponse(500, {
+      error: "Error inserting issues",
+      details: insertErr,
+    });
   }
 
   return jsonResponse(200, {
