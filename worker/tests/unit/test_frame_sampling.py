@@ -1,11 +1,6 @@
 """Unit tests for the frame-sampling decode pass and probe registry."""
 
 import os
-
-os.environ["DATABASE_URL"] = "mock_db"
-os.environ.setdefault("SUPABASE_URL", "http://localhost:54321")
-os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
-
 from dataclasses import fields
 from unittest.mock import MagicMock
 
@@ -25,6 +20,16 @@ from analyzer.frame_sampling.base import (
     register_probe,
 )
 from analyzer.frame_sampling.context import FrameContext
+from analyzer.frame_sampling.probes.adaptive import (
+    AdaptiveSampler,
+    AdaptiveSamplerResult,
+)
+from analyzer.frame_sampling.probes.quality import QualityProbe, QualityProbeResult
+from analyzer.text_detection.east import (
+    EastTextRegionDetector,
+    EastUnavailableError,
+)
+from analyzer.frame_sampling.probes.text import TextProbe
 from analyzer.frame_sampling.sampler import FrameSampler
 from analyzer.frame_sampling.store import FrameStore
 from analyzer.types import VideoMetadata
@@ -66,11 +71,19 @@ def test_registered_probes_in_stage_order():
         "QualityProbe",
         "TextProbe",
         "ProductProbe",
+        "LogoProbe",
     ]
 
 
 def test_stage_is_strictly_ordered():
-    assert Stage.SCENE < Stage.SAMPLE < Stage.QUALITY < Stage.TEXT < Stage.PRODUCT
+    assert (
+        Stage.SCENE
+        < Stage.SAMPLE
+        < Stage.QUALITY
+        < Stage.TEXT
+        < Stage.PRODUCT
+        < Stage.LOGO
+    )
 
 
 def test_register_probe_sorts_by_stage(monkeypatch):
@@ -105,6 +118,130 @@ def test_probe_result_is_subclassable_carrier():
         cuts: list = field(default_factory=list)
 
     assert WithExtras(cuts=[1.0]).cuts == [1.0]
+
+
+# ---- AdaptiveSampler ----
+def _adaptive(fps=30.0):
+    """Construct and configure an AdaptiveSampler (configure() is required)."""
+    sampler = AdaptiveSampler()
+    setup = MagicMock()
+    setup.video_metadata.fps = fps
+    sampler.configure(setup)
+    return sampler
+
+
+def test_adaptive_sampler_seeds_first_frame(tmp_path):
+    store = FrameStore(str(tmp_path))
+    sampler = _adaptive()
+
+    for index in range(3):
+        ctx = _ctx(index, index / 30, _frame())
+        ctx.store = store
+        sampler.process(ctx)
+
+    result = sampler.finalize()
+
+    # Even with no change signal, the opening frame is always kept.
+    assert [frame.timestamp for frame in store.manifest()] == [pytest.approx(0.0)]
+    assert result == AdaptiveSamplerResult(keyframe_count=1, keyframe_indices=(0,))
+
+
+def test_adaptive_sampler_keeps_shot_starts_and_resets_budget(tmp_path):
+    store = FrameStore(str(tmp_path))
+    sampler = _adaptive()
+    frames = [
+        (0, 0.3, False),
+        (1, 0.3, True),
+        (2, 0.3, False),
+    ]
+
+    for index, content_val, shot_boundary in frames:
+        ctx = _ctx(index, index / 30, _frame())
+        ctx.store = store
+        ctx.content_val = content_val
+        ctx.shot_boundary = shot_boundary
+        sampler.process(ctx)
+
+    result = sampler.finalize()
+
+    # Seed (0) plus the shot boundary (1); budget at frame 2 hasn't crossed.
+    assert [frame.timestamp for frame in store.manifest()] == [
+        pytest.approx(0.0),
+        pytest.approx(1 / 30),
+    ]
+    assert result.keyframe_indices == (0, 1)
+
+
+def test_adaptive_sampler_keeps_when_change_budget_reaches_threshold(tmp_path):
+    store = FrameStore(str(tmp_path))
+    sampler = _adaptive()
+    sampler._min_gap = 1  # isolate the change-budget trigger from the cooldown
+
+    for index, content_val in enumerate([0.2, 0.2, 0.1, 0.4, 0.1]):
+        ctx = _ctx(index, index / 30, _frame())
+        ctx.store = store
+        ctx.content_val = content_val
+        sampler.process(ctx)
+
+    result = sampler.finalize()
+    manifest = store.manifest()
+
+    # Seed (0), then the budget crosses 0.5 at frame 3 (0.2+0.2+0.1+0.4).
+    assert [frame.timestamp for frame in manifest] == [
+        pytest.approx(0.0),
+        pytest.approx(3 / 30),
+    ]
+    assert all(frame.tags == ("keyframe",) for frame in manifest)
+    assert result.keyframe_count == 2
+
+
+def test_adaptive_sampler_min_gap_suppresses_bursts(tmp_path):
+    store = FrameStore(str(tmp_path))
+    sampler = _adaptive()
+    sampler._min_gap = 3  # cooldown: no keyframes closer than 3 frames apart
+
+    for index in range(7):
+        ctx = _ctx(index, index / 30, _frame())
+        ctx.store = store
+        ctx.content_val = 1.0  # over threshold every frame
+        sampler.process(ctx)
+
+    result = sampler.finalize()
+
+    # Without the cooldown this would keep every frame; instead it spaces by 3.
+    assert result.keyframe_indices == (0, 3, 6)
+
+
+def test_adaptive_sampler_max_gap_forces_keyframe_on_static(tmp_path):
+    store = FrameStore(str(tmp_path))
+    sampler = _adaptive()
+    sampler._max_gap = 4  # ceiling: force a keyframe at least every 4 frames
+
+    for index in range(9):
+        ctx = _ctx(index, index / 30, _frame())
+        ctx.store = store
+        ctx.content_val = 0.0  # fully static: budget never grows
+        sampler.process(ctx)
+
+    result = sampler.finalize()
+
+    # Seed (0), then forced every 4 frames despite zero change.
+    assert result.keyframe_indices == (0, 4, 8)
+
+
+def test_adaptive_sampler_configure_derives_gaps_from_fps():
+    sampler = AdaptiveSampler()
+    setup = MagicMock()
+
+    setup.video_metadata.fps = 30.0
+    sampler.configure(setup)
+    assert sampler._min_gap == 6    # round(0.2 s * 30 fps)
+    assert sampler._max_gap == 60   # round(2.0 s * 30 fps)
+
+    setup.video_metadata.fps = 60.0
+    sampler.configure(setup)
+    assert sampler._min_gap == 12   # gaps scale with fps -> constant real-time spacing
+    assert sampler._max_gap == 120
 
 
 def test_frame_selection_holds_no_pixels():
@@ -225,8 +362,8 @@ def test_run_produces_manifest_from_keeping_probe(tmp_path, monkeypatch):
 
 
 # ---- probe stubs contract ----
-# Probes that have a real implementation and are covered by their own tests.
-_IMPLEMENTED_PROBES = {"scene"}
+# Probes with a real implementation, covered by their own tests.
+_IMPLEMENTED_PROBES = {"scene", "adaptive", "quality"}
 
 
 def test_probe_stubs_are_noop(tmp_path):
@@ -256,10 +393,10 @@ def test_probe_configure_default_is_noop():
     assert _MinimalProbe().configure(setup) is None
 
 
-def test_probe_setup_folder_paths_default_empty():
+def test_probe_setup_image_paths_default_empty():
     setup = ProbeSetup(video_metadata=_metadata(), work_dir="/tmp")
-    assert setup.product_imgs_folder_path == ""
-    assert setup.logo_imgs_folder_path == ""
+    assert setup.product_image_paths == []
+    assert setup.logo_paths == []
 
 
 def test_sampler_configures_probes_with_job_inputs(tmp_path, monkeypatch):
@@ -283,14 +420,14 @@ def test_sampler_configures_probes_with_job_inputs(tmp_path, monkeypatch):
         "v.mp4",
         _metadata(),
         str(tmp_path),
-        product_imgs_folder_path="prod",
-        logo_imgs_folder_path="logo",
+        product_image_paths=["prod"],
+        logo_paths=["logo"],
     )
     probe = sampler.probes[0]
     assert probe.setup.video_metadata is sampler.metadata
     assert probe.setup.work_dir == str(tmp_path)
-    assert probe.setup.product_imgs_folder_path == "prod"
-    assert probe.setup.logo_imgs_folder_path == "logo"
+    assert probe.setup.product_image_paths == ["prod"]
+    assert probe.setup.logo_paths == ["logo"]
 
 
 # ---- name-collision guard ----
@@ -341,6 +478,47 @@ class _GoodKeeper(Probe):
 
     def finalize(self):
         return ProbeResult()
+
+
+def test_runtime_text_probe_uses_east_adapter(tmp_path):
+    """Only the registered runtime TextProbe receives the real EAST adapter."""
+    sampler = _sampler(tmp_path)
+
+    text_probe = next(
+        probe for probe in sampler.probes if isinstance(probe, TextProbe)
+    )
+
+    assert isinstance(text_probe._detector, EastTextRegionDetector)
+
+
+def test_unavailable_east_does_not_disable_unrelated_probe(
+    tmp_path,
+    monkeypatch,
+):
+    """An OCR-local model failure leaves other sampler analyses operational."""
+    import analyzer.text_detection.east as east
+
+    sampler = _sampler(tmp_path)
+    text_probe = next(
+        probe for probe in sampler.probes if isinstance(probe, TextProbe)
+    )
+    frame = _frame()
+    context = sampler._build_context(0, frame)
+    monkeypatch.setattr(sampler, "_decode", lambda: iter([context]))
+
+    def unavailable_model():
+        """Represent the packaged EAST graph being absent at inference time."""
+        raise EastUnavailableError("EAST graph is unavailable")
+
+    monkeypatch.setattr(east, "load_east_network", unavailable_model)
+    sampler.probes = [text_probe, _GoodKeeper()]
+
+    manifest = sampler.run()
+
+    assert isinstance(sampler.probe_errors["text"], EastUnavailableError)
+    assert "text" not in sampler.probe_results
+    assert "good" in sampler.probe_results
+    assert len(manifest) == 1
 
 
 def test_run_isolates_failing_process(tmp_path, monkeypatch):
@@ -414,6 +592,130 @@ def test_run_isolates_failing_finalize(tmp_path, monkeypatch):
 def test_frame_context_shot_boundary_default(tmp_path):
     ctx = _sampler(tmp_path)._build_context(0, _frame())
     assert ctx.shot_boundary is False
+
+
+# ---- QualityProbe ----
+def _quality_ctx(index, gray, shot_boundary=False, store=None):
+    """A single-channel synthetic frame, like _ctx() but with a controlled
+    grayscale pattern instead of _frame()'s random noise.
+    """
+    ctx = FrameContext(
+        index=index,
+        timestamp=index / 30,
+        frame=np.stack([gray, gray, gray], axis=-1),
+        gray=gray,
+        small=gray,
+        edges=gray,
+        shot_boundary=shot_boundary,
+    )
+    ctx.store = store
+    return ctx
+
+
+def _solid(value, height=20, width=20):
+    return np.full((height, width), value, dtype=np.uint8)
+
+
+def _edge(low, high, height=20, width=20):
+    """A single clean vertical edge — sharp and high-contrast without the
+    per-pixel alternation that (realistically) also trips the noise/grain
+    heuristic, the same way real fine texture can.
+    """
+    gray = np.full((height, width), low, dtype=np.uint8)
+    gray[:, width // 2 :] = high
+    return gray
+
+
+def test_quality_probe_flags_flat_frame_as_blur_and_low_contrast(tmp_path):
+    store = FrameStore(str(tmp_path))
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _solid(128), store=store))
+
+    assert probe._flags[0].reasons == ("blur", "contrast")
+    # FrameStore holds tags in a set and sorts them on manifest() — alphabetical,
+    # not insertion order.
+    assert store.manifest()[0].tags == ("blur", "contrast", "quality")
+
+
+def test_quality_probe_does_not_flag_sharp_high_contrast_frame(tmp_path):
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _edge(100, 160)))
+
+    assert probe._flags == []
+
+
+def test_quality_probe_flags_near_black_frame_as_exposure(tmp_path):
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _solid(0)))
+
+    assert "exposure" in probe._flags[0].reasons
+    assert probe._flags[0].scores["mean_luma"] == pytest.approx(0.0)
+
+
+def test_quality_probe_temporal_spike_lands_on_dark_frame_is_cut_to_black(tmp_path):
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _solid(200)))
+    probe.process(_quality_ctx(1, _solid(0)))
+
+    assert "cut_to_black" in probe._flags[-1].reasons
+
+
+def test_quality_probe_temporal_spike_with_shot_boundary_is_cut(tmp_path):
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _solid(50)))
+    probe.process(_quality_ctx(1, _solid(200), shot_boundary=True))
+
+    assert "cut" in probe._flags[-1].reasons
+
+
+def test_quality_probe_temporal_spike_without_shot_boundary_is_flicker(tmp_path):
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _solid(50)))
+    probe.process(_quality_ctx(1, _solid(200), shot_boundary=False))
+
+    assert "flicker" in probe._flags[-1].reasons
+
+
+def test_quality_probe_flags_freeze_after_sustained_static_run(tmp_path):
+    from config.settings import QUALITY_FREEZE_MIN_FRAMES
+
+    probe = QualityProbe()
+    for index in range(QUALITY_FREEZE_MIN_FRAMES + 2):
+        probe.process(_quality_ctx(index, _solid(128)))
+
+    freeze_hits = [f for f in probe._flags if "freeze" in f.reasons]
+    # Flagged once, on the frame where the sustained run first crosses the
+    # threshold — not on every frame after, which would flood the manifest.
+    # The first frame has no predecessor (no delta at all), so it takes
+    # QUALITY_FREEZE_MIN_FRAMES + 1 frames to accumulate that many
+    # low-delta transitions.
+    assert len(freeze_hits) == 1
+    assert freeze_hits[0].index == QUALITY_FREEZE_MIN_FRAMES
+
+
+def test_quality_probe_finalize_returns_accumulated_flags(tmp_path):
+    probe = QualityProbe()
+    probe.process(_quality_ctx(0, _solid(128)))
+
+    result = probe.finalize()
+
+    assert isinstance(result, QualityProbeResult)
+    assert len(result.flags) == 1
+
+
+def test_quality_probe_unflagged_frame_is_not_kept(tmp_path):
+    store = FrameStore(str(tmp_path))
+    probe = QualityProbe()
+
+    probe.process(_quality_ctx(0, _edge(100, 160), store=store))
+
+    assert store.manifest() == []
 
 
 # ---- store.keep_frame ----

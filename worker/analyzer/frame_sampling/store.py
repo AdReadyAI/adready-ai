@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import cv2
 
-from analyzer.types import Frame
+if TYPE_CHECKING:
+    from analyzer.types import Frame
 
 
 @dataclass
@@ -38,7 +42,9 @@ class FrameStore:
 
     def manifest(self) -> list[Frame]:
         """Build the tagged Frame manifest, ordered by frame index."""
+        from analyzer.types import Frame
+
         return [
-            Frame(timestamp=entry.timestamp, path=entry.path, tags=tuple(sorted(entry.tags)))
-            for _, entry in sorted(self._kept.items())
+            Frame(index=index, timestamp=entry.timestamp, path=entry.path, tags=tuple(sorted(entry.tags)))
+            for index, entry in sorted(self._kept.items())
         ]

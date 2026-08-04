@@ -418,6 +418,9 @@ import_map = "./deno.json"
 [functions.cta-effectiveness-agent]
 import_map = "./deno.json"
 
+[functions.parse-creative-brief]
+import_map = "./deno.json"
+
 [functions.product-representation-agent]
 import_map = "./deno.json"
 
@@ -429,6 +432,8 @@ import_map = "./deno.json"
 
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
+[functions.shared]
+enabled = false
 
 [analytics]
 enabled = true

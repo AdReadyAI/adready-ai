@@ -1,4 +1,5 @@
-import { createClient, User } from "@supabase/supabase-js";
+import { User } from "@supabase/supabase-js";
+import { createSupabaseClient } from "./clients.ts";
 
 function authError(message: string, status: number): Response {
   return new Response(
@@ -32,9 +33,7 @@ export async function getAuthenticatedUser(req: Request): Promise<User> {
     );
   }
 
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
+  const supabase = createSupabaseClient(req);
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) {
     throw authError("Invalid or expired token", 401);

@@ -1,18 +1,41 @@
+import bisect
 import inspect
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import assemblyai as aai
 import httpx
 
-from analyzer.types import Artifacts
+from analyzer.frame_sampling.probes.text import TextProbeResult
+from analyzer.ocr.pipeline import (
+    FixedRateOcrAnalysis,
+    FixedRateOcrPipeline,
+)
+from analyzer.ocr.recognition import OcrAdapter
+from analyzer.ocr.routing import OcrCandidateMode
+from analyzer.types import Artifacts, Frame
+from analyzer import detection_heuristics as dh
+from analyzer.object_detector import Detection, ReferenceDetector
+from analyzer.visual_captioner import VisualCaptioner
 from config.connection import get_aai_transcriber
+from config.settings import (
+    LOGO_DETECTION_LOW_CONFIDENCE,
+    PRODUCT_DETECTION_CONFIDENCE,
+    REFERENCE_DETECTION_MAX_WORKERS,
+    VISUAL_CAPTION_MAX_WORKERS,
+)
+from config.settings import logger
 from app.errors import PermanentError, TransientError
 
 from analyzer.output_models import (
     TranscriptSegment,
     TranscriptionResult,
-    ObjectDetectionResult,
-    ContextResult,
-    OcrResult
+    LogoFrameResult,
+    LogoFrameRow,
+    ProductFrameResult,
+    ProductFrameRow,
+    VisualFrameResult,
+    VisualFrameRow,
 )
 
 
@@ -27,15 +50,22 @@ def analysis_task(name: str):
 
 
 class VideoAnalyzer:
-    def __init__(self, artifacts: Artifacts):
+    def __init__(
+        self,
+        artifacts: Artifacts,
+        ocr_adapter: OcrAdapter | None = None,
+        ocr_candidate_mode: OcrCandidateMode = OcrCandidateMode.FIXED_4FPS,
+    ):
         self.artifacts = artifacts
-
-        
+        self.ocr_adapter = ocr_adapter
+        self.ocr_candidate_mode = ocr_candidate_mode
         self.transcriber = get_aai_transcriber()
 
     @analysis_task("transcription")
-    def transcribe(self) -> TranscriptionResult: 
-
+    def transcribe(self) -> TranscriptionResult | None:
+        if self.artifacts.audio_path is None:
+            logger.info("No audio track available; skipping transcription")
+            return None
 
         if not os.path.exists(self.artifacts.audio_path):
             raise PermanentError(f"Audio file not found: {self.artifacts.audio_path}")
@@ -84,20 +114,186 @@ class VideoAnalyzer:
         
 
     @analysis_task("ocr")
-    def ocr(self) -> OcrResult:
-            pass
+    def ocr(self) -> FixedRateOcrAnalysis | None:
+        """Run OCR through the configured fixed or cascade candidate mode."""
+        if self.ocr_adapter is None:
+            # An unconfigured hosted provider leaves the durable OCR Run
+            # resumable instead of creating a misleading empty result.
+            return None
 
+        text_result = self.artifacts.probe_results.get("text")
+        text_segments = (
+            tuple(text_result.text_segments)
+            if isinstance(text_result, TextProbeResult)
+            else ()
+        )
+        cascade_failure_reason = (
+            "text_detection_unavailable"
+            if (
+                self.ocr_candidate_mode is not OcrCandidateMode.FIXED_4FPS
+                and not isinstance(text_result, TextProbeResult)
+            )
+            else None
+        )
+        return FixedRateOcrPipeline(
+            self.ocr_adapter,
+            requested_mode=self.ocr_candidate_mode,
+        ).run(
+            video_path=self.artifacts.video_path,
+            metadata=self.artifacts.video_metadata,
+            work_dir=self.artifacts.work_dir,
+            text_segments=text_segments,
+            cascade_failure_reason=cascade_failure_reason,
+        )
 
-    @analysis_task("object_detection")
-    def detect_objects(self) -> ObjectDetectionResult:
-        pass
+    @analysis_task("product_detection")
+    def detect_product(self) -> ProductFrameResult:
+        rows = self._detect_reference_frames(
+            tag="product",
+            reference_paths=self.artifacts.product_image_paths,
+            confidence=PRODUCT_DETECTION_CONFIDENCE,
+            row_builder=self._product_row,
+        )
+        return ProductFrameResult(rows=rows)
 
+    @analysis_task("logo_detection")
+    def detect_logo(self) -> LogoFrameResult:
+        rows = self._detect_reference_frames(
+            tag="logo",
+            reference_paths=self.artifacts.logo_paths,
+            confidence=LOGO_DETECTION_LOW_CONFIDENCE,
+            row_builder=self._logo_row,
+        )
+        return LogoFrameResult(rows=rows)
+
+    def _detect_reference_frames(self, tag, reference_paths, confidence, row_builder):
+        """Run OWLv2 on every candidate frame tagged `tag`; skip unconfirmed ones."""
+        candidates = [frame for frame in self.artifacts.frames if tag in frame.tags]
+        if not candidates or not reference_paths:
+            return []
+
+        detector = ReferenceDetector(list(reference_paths), label=tag)
+
+        rows = []
+        with ThreadPoolExecutor(max_workers=REFERENCE_DETECTION_MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(detector.detect, frame.path, confidence=confidence): frame
+                for frame in candidates
+            }
+            for future in as_completed(futures):
+                frame = futures[future]
+                try:
+                    detection = future.result()
+                except TransientError:
+                    logger.exception(
+                        "OWLv2 request failed for frame %s, skipping this frame", frame.index
+                    )
+                    continue
+                if detection is None:
+                    continue
+                rows.append(row_builder(frame, detection))
+
+        rows.sort(key=lambda r: r.timestamp_ms)
+        return rows
+
+    @staticmethod
+    def _product_row(frame: Frame, detection: Detection) -> ProductFrameRow:
+        return ProductFrameRow(
+            frame_id=dh.frame_id("p", frame),
+            timestamp_ms=dh.timestamp_ms(frame),
+            location=dh.location(detection),
+            confidence_score=detection.confidence,
+            prominence=dh.product_prominence(detection),
+            focus_quality=dh.focus_quality(frame.path, detection),
+            framing=dh.framing(detection),
+        )
+
+    @staticmethod
+    def _logo_row(frame: Frame, detection: Detection) -> LogoFrameRow:
+        return LogoFrameRow(
+            frame_id=dh.frame_id("l", frame),
+            timestamp_ms=dh.timestamp_ms(frame),
+            location=dh.location(detection),
+            confidence_score=detection.confidence,
+            prominence=dh.logo_prominence(detection),
+            reference_match=dh.reference_match_label(detection.confidence),
+        )
 
     @analysis_task("context")
-    def context(self) -> ContextResult:
-        pass
+    def context(self) -> VisualFrameResult:
+        keyframes = [f for f in self.artifacts.frames if "keyframe" in f.tags]
+        if not keyframes:
+            return VisualFrameResult(rows=[])
 
-  
+        scene_result = self.artifacts.probe_results.get("scene")
+        shots = scene_result.shots if scene_result else []
+        fps = self.artifacts.video_metadata.fps or 0.0
+
+        shot_starts = [s.start_index for s in shots]
+        fade_indices = {round(f * fps) for f in (scene_result.fades if scene_result else [])}
+        shot_has_fade = [
+            any(idx in fade_indices for idx in range(s.start_index, s.end_index + 1))
+            for s in shots
+        ]
+
+        def shot_info(frame_index: int) -> tuple[int | None, bool, bool]:
+            """Returns (shot_index, is_shot_start, is_fade) for one frame index."""
+            i = bisect.bisect_right(shot_starts, frame_index) - 1
+            if i < 0 or not (shots[i].start_index <= frame_index <= shots[i].end_index):
+                return None, False, False
+            return i, frame_index == shots[i].start_index, shot_has_fade[i]
+
+        captioner = VisualCaptioner()
+        with ThreadPoolExecutor(max_workers=VISUAL_CAPTION_MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(
+                    captioner.caption, frame.path, is_shot_start=shot_info(frame.index)[1]
+                ): frame
+                for frame in keyframes
+            }
+            rows = []
+            for future in as_completed(futures):
+                frame = futures[future]
+                shot_index, is_shot_start, is_fade = shot_info(frame.index)
+                try:
+                    caption = future.result()
+                except (TransientError, PermanentError):
+                    logger.exception(
+                        "Captioning failed for frame %s, keeping row with empty caption fields",
+                        frame.index,
+                    )
+                    rows.append(VisualFrameRow(
+                        frame_id=dh.frame_id("v", frame),
+                        timestamp_ms=dh.timestamp_ms(frame),
+                        image_url=None,
+                        action=None,
+                        framing_composition=None,
+                        people=None,
+                        color_palette=None,
+                        background=None,
+                        technical_flags=[],
+                        shot_index=shot_index,
+                        is_shot_start=is_shot_start,
+                        is_fade=is_fade,
+                    ))
+                    continue
+                rows.append(VisualFrameRow(
+                    frame_id=dh.frame_id("v", frame),
+                    timestamp_ms=dh.timestamp_ms(frame),
+                    image_url=None,
+                    action=caption.action,
+                    framing_composition=caption.framing_composition,
+                    people=caption.people,
+                    color_palette=caption.color_palette,
+                    background=caption.background,
+                    technical_flags=caption.technical_flags,
+                    shot_index=shot_index,
+                    is_shot_start=is_shot_start,
+                    is_fade=is_fade,
+                ))
+
+        rows.sort(key=lambda r: r.timestamp_ms)
+        return VisualFrameResult(rows=rows)
 
     def analysis_tasks(self):
         return {

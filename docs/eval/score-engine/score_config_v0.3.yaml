@@ -1,0 +1,87 @@
+# AdReady Score Engine Config v0.3
+# Companion to score_engine_proposal_v0.3.md
+
+version: "0.3"
+
+# Locked 2026-07-24: Plan A (Plan B retained below for reference only)
+active_weight_plan: "A"
+
+severity_deductions:
+  none: 0
+  low: 5
+  medium: 20
+  high: 40
+  critical: 100
+
+thresholds:
+  ready_min: 85
+  needs_revision_min: 65
+
+gating_rules:
+  - metric_id: production_readiness
+    min_severity: high
+    label: Asset Readiness
+  - metric_id: policy_compliance
+    min_severity: high
+    label: Compliance Readiness
+
+scored_high_critical_is_gating: false
+
+# Plan A (locked): audience_channel_fit 15; creative_effectiveness 5→10
+# Rationale: merged question still covers channel/placement/audience → keep higher weight;
+#            creative was underweighted at 5 → +5 to 10. CTA stays at 10.
+weights_plan_a:
+  brief_adherence: 20
+  product_truth: 20
+  product_clarity: 15
+  audience_channel_fit: 15
+  brand_fit: 10
+  cta_clarity: 10
+  creative_effectiveness: 10
+  production_readiness: 0
+  policy_compliance: 0
+
+# Plan B (not selected): audience_channel_fit 10; cta 15; creative 5→10
+weights_plan_b:
+  brief_adherence: 20
+  product_truth: 20
+  product_clarity: 15
+  audience_channel_fit: 10
+  brand_fit: 10
+  cta_clarity: 15
+  creative_effectiveness: 10
+  production_readiness: 0
+  policy_compliance: 0
+
+display_dimensions:
+  claims_accuracy:
+    metrics: [product_truth]
+  product_representation:
+    metrics: [product_clarity]
+  storyline_brief:
+    metrics: [brief_adherence, creative_effectiveness, audience_channel_fit]
+  cta_effectiveness:
+    metrics: [cta_clarity]
+  brand_alignment:
+    metrics: [brand_fit]
+  visual_asset_quality:
+    metrics: [production_readiness]
+    also_gating: true
+
+dimension_merge: weight_aware_average
+
+priority_fix_sort:
+  - gating_first
+  - severity_desc
+  - weight_desc
+
+gating_sort_effective_weight: 100
+
+# Confidence: issue/fix-list only (non-scoring)
+confidence:
+  levels: [high, medium, low]
+  omitted_means: unknown
+  apply_to: fix_list_items_only
+  affects_scores: false
+  affects_dimensions: false
+  affects_status: false
