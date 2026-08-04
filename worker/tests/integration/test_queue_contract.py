@@ -832,6 +832,10 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
         def __init__(self, cur, request_id):
             self.request_id = request_id
 
+        def product_url_requiring_context(self):
+            """Keep this OCR scenario independent of Product Context work."""
+            return None
+
         def completed_analyzers(self):
             """Leave only OCR pending through the real analyzer registry."""
             return {
