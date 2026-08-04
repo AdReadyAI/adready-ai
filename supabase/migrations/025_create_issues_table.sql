@@ -46,3 +46,8 @@ CREATE INDEX IF NOT EXISTS idx_issues_batch_id
 ON public.issues(batch_id);
 
 ALTER TABLE public.issues ENABLE ROW LEVEL SECURITY;
+
+
+grant select, insert, update, delete on table
+  public.issues
+to service_role;
