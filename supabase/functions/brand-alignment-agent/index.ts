@@ -24,7 +24,11 @@ createEdgeHandler(
         }),
       ]);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error
+        ? error.message
+        : typeof error === "object" && error !== null
+        ? JSON.stringify(error)
+        : String(error);
       const isNotFound = /not found for this request/i.test(message);
 
       console.error("[brand-alignment-agent] Execution failed:", {
