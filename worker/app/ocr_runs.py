@@ -62,6 +62,7 @@ class OcrRunLifecycle:
         # Durable completion is authoritative on redelivery, so OCR must
         # not be repeated even when the queue delivers the request again.
         if status == "completed":
+            self._mark_shared_completed()
             return None
 
         if metadata.duration_s > 60:
@@ -172,7 +173,29 @@ class OcrRunLifecycle:
             safe_error = f"{type(error).__name__}: OCR completion failed"
             self._mark_failed(ocr_run_id, safe_error)
             raise
+        self._mark_shared_completed()
         return completion if result_created else None
+
+    def _mark_shared_completed(self) -> None:
+        """Project durable OCR completion into the shared analyzer status index."""
+        self.cur.execute(
+            """
+            INSERT INTO video_processing (
+              request_id,
+              task_name,
+              status,
+              result_table,
+              error
+            )
+            VALUES (%s, 'ocr', 'success', 'ocr_results', NULL)
+            ON CONFLICT (request_id, task_name)
+            DO UPDATE SET status = 'success',
+                          result_table = 'ocr_results',
+                          error = NULL,
+                          updated_at = now();
+            """,
+            (self.request_id,),
+        )
 
     def _mark_failed(
         self,

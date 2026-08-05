@@ -12,7 +12,7 @@ from analyzer.frame_sampling.probes.text import TextDetection
 
 
 EAST_MODEL_PATH = (
-    Path(__file__).parents[3]
+    Path(__file__).parents[2]
     / "assets"
     / "models"
     / "frozen_east_text_detection.pb"

@@ -22,6 +22,7 @@ from analyzer.ocr.recognition import (
 from analyzer.types import Artifacts, VideoMetadata
 from analyzer.video_analyzer import VideoAnalyzer
 from app.ocr_runs import OcrRunLifecycle
+from app.supabase import Supabase
 
 
 @pytest.mark.integration
@@ -853,11 +854,12 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
         }
     )
 
-    class NoOpGenericPersistence:
-        """Confirm OCR bypasses the generalized task-result tables."""
+    class StatusOnlyGenericPersistence:
+        """Expose shared status while keeping OCR results in OCR-owned tables."""
 
         def __init__(self, cur, request_id):
             self.request_id = request_id
+            self._status = Supabase(cur, request_id)
 
         def product_url_requiring_context(self):
             """Keep this OCR scenario independent of Product Context work."""
@@ -871,6 +873,11 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
                 "logo_detection",
                 "context",
             }
+
+        def mark_processing(self, task_name):
+            """Use the production shared-status write for the pending OCR task."""
+            assert task_name == "ocr"
+            self._status.mark_processing(task_name)
 
         def persist_video_metadata(self, metadata, scene_result):
             """Accept main's metadata write outside generic task results."""
@@ -912,7 +919,7 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
     monkeypatch.setattr(
         processor,
         "Supabase",
-        NoOpGenericPersistence,
+        StatusOnlyGenericPersistence,
     )
 
     payload = {
@@ -959,6 +966,20 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
                 )
                 ocr_run_id, status = cursor.fetchone()
                 assert status == "completed"
+                cursor.execute(
+                    """
+                    SELECT status, result_table, error
+                    FROM video_processing
+                    WHERE request_id = %s
+                      AND task_name = 'ocr';
+                    """,
+                    (request_id,),
+                )
+                assert cursor.fetchone() == (
+                    "success",
+                    "ocr_results",
+                    None,
+                )
                 cursor.execute(
                     """
                     SELECT

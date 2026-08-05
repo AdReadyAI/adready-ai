@@ -631,6 +631,7 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
 
         def mark_processing(self, task_name):
             """Accept main's in-flight analyzer status transition."""
+            execution_events.append(f"{task_name}-processing")
 
         def persist_quality_frames(self, flags):
             """Accept main's optional quality persistence."""
@@ -684,5 +685,7 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
         "ocr-lifecycle-created",
         "ocr-lifecycle",
         "ocr-analysis",
+        "ocr-processing",
         "transcription",
+        "transcription-processing",
     }
