@@ -24,10 +24,16 @@ BEGIN;
 
 -- ---------------------------------------------------------------- dev user
 -- Password: devpassword123
+-- The empty strings are not decoration. GoTrue scans these token columns into
+-- non-nullable Go strings, so leaving them NULL makes every login fail with
+-- "Database error querying schema" (HTTP 500) rather than a credentials error.
 insert into auth.users (
   instance_id, id, aud, role, email, encrypted_password,
   email_confirmed_at, created_at, updated_at,
-  raw_app_meta_data, raw_user_meta_data
+  raw_app_meta_data, raw_user_meta_data,
+  confirmation_token, recovery_token, email_change_token_new, email_change,
+  email_change_token_current, phone_change, phone_change_token,
+  reauthentication_token
 )
 values (
   '00000000-0000-0000-0000-000000000000',
@@ -37,7 +43,8 @@ values (
   crypt('devpassword123', gen_salt('bf')),
   now(), now(), now(),
   '{"provider":"email","providers":["email"]}'::jsonb,
-  '{}'::jsonb
+  '{}'::jsonb,
+  '', '', '', '', '', '', '', ''
 )
 on conflict (id) do nothing;
 

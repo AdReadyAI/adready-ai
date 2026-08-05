@@ -100,6 +100,12 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-05** — Added the Result UI data layer. `lib/resultsTransform.ts` is
+  pure (rows -> `VideoResult[]`: severity filtering, both sort orders, timestamp
+  normalization, derived summaries) and `lib/results.ts` does the four queries.
+  Split so the transforms are testable without env vars or a database — 30 unit
+  tests in `resultsTransform.test.ts`. Note `result_score_dimensions` has no
+  `batch_id`, so it filters on request ids while the others filter on the batch.
 - **2026-08-05** — `types/results.ts` rewritten against the database's CHECK
   constraints ahead of wiring ResultPage to real data. `ShipStatus` gains
   `unassessed` (`Cannot Assess`), `Severity` covers all six values migration 025
