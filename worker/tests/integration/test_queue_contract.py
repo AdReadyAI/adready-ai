@@ -48,6 +48,8 @@ def test_jobs_queue_and_enqueue_function_exist() -> None:
 
 
 @pytest.mark.integration
+def test_video_processing_status_check_allows_processing() -> None:
+    """The 'processing' status must be a valid in-flight state, not just success/error."""
 def test_ocr_evidence_bucket_is_private_and_worker_owned() -> None:
     """Representative OCR frames remain private service-role evidence."""
     database_url = os.environ.get(
@@ -59,6 +61,19 @@ def test_ocr_evidence_bucket_is_private_and_worker_owned() -> None:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
+                SELECT pg_get_constraintdef(oid)
+                FROM pg_constraint
+                WHERE conrelid = 'public.video_processing'::regclass
+                  AND conname = 'video_processing_status_check';
+                """
+            )
+            row = cursor.fetchone()
+
+    assert row is not None, "video_processing_status_check constraint is missing"
+    constraint_def = row[0]
+    assert "processing" in constraint_def
+    assert "success" in constraint_def
+    assert "error" in constraint_def
                 SELECT public, file_size_limit, allowed_mime_types
                 FROM storage.buckets
                 WHERE id = 'ocr-evidence';
