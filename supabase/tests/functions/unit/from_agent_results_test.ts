@@ -1,9 +1,9 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { ALL_METRIC_IDS } from "../../../functions/_shared/score-engine/config.ts";
-import { metricInputsFromAgentResults } from "../../../functions/_shared/score-engine/fromAgentResults.ts";
-import { resultTableToDbRows } from "../../../functions/_shared/score-engine/persistResultTable.ts";
-import { scoreEngine } from "../../../functions/_shared/score-engine/scoreEngine.ts";
-import type { AgentResultScoreRow } from "../../../functions/_shared/score-engine/fromAgentResults.ts";
+import { ALL_METRIC_IDS } from "../../../functions/shared/score-engine/config.ts";
+import { metricInputsFromAgentResults } from "../../../functions/shared/score-engine/fromAgentResults.ts";
+import { resultTableToDbRows } from "../../../functions/shared/score-engine/persistResultTable.ts";
+import { scoreEngine } from "../../../functions/shared/score-engine/scoreEngine.ts";
+import type { AgentResultScoreRow } from "../../../functions/shared/score-engine/fromAgentResults.ts";
 
 function fullAgentRows(
   patch: Partial<Record<string, Partial<AgentResultScoreRow>>> = {},

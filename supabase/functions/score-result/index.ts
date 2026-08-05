@@ -16,7 +16,7 @@ import {
   metricInputsFromAgentResults,
   resultTableToDbRows,
   scoreEngine,
-} from "../_shared/score-engine/index.ts";
+} from "../shared/score-engine/index.ts";
 import { createSupabaseServiceClient } from "../shared/clients.ts";
 import { createEdgeHandler } from "../shared/handler.ts";
 import { err, ok } from "../shared/response.ts";

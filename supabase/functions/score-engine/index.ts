@@ -13,7 +13,7 @@ import { z } from "zod";
 import {
   parseScoreEngineRequest,
   scoreEngine,
-} from "../_shared/score-engine/index.ts";
+} from "../shared/score-engine/index.ts";
 import { createEdgeHandler } from "../shared/handler.ts";
 import { err, ok } from "../shared/response.ts";
 
