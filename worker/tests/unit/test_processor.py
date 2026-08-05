@@ -629,6 +629,9 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
         def completed_analyzers(self):
             return set()
 
+        def mark_processing(self, task_name):
+            """Accept main's in-flight analyzer status transition."""
+
         def persist_quality_frames(self, flags):
             """Accept main's optional quality persistence."""
 
