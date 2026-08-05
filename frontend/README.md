@@ -100,6 +100,15 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-05** — `types/results.ts` rewritten against the database's CHECK
+  constraints ahead of wiring ResultPage to real data. `ShipStatus` gains
+  `unassessed` (`Cannot Assess`), `Severity` covers all six values migration 025
+  allows, and the new `DisplaySeverity` excludes `none`/`cannot_assess` so the
+  compiler stops a filtered severity reaching a component. `score`, `Metric.value`,
+  and the nullable `Issue` fields are now `| null` — null is not zero. Presentation
+  fields (`severityLabel`, `frameLabel`, `repairTitle`) and `tag` are gone; `tag`
+  becomes `metricId`. Types-only change: `IssueRow`, `status.ts`, and `ResultPage`
+  don't compile until the components are updated.
 - **2026-08-02** — Both writes in `CampaignForm`'s submit are now idempotent, so
   retrying after a failed brief save can't duplicate a batch. `request_id` is
   minted client-side and the `requests` write is an upsert with
