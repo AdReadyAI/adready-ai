@@ -68,7 +68,11 @@ export function evidence(
   timestampMs?: number | string,
   endTimestampMs?: number,
 ): EvidenceRef {
-  return { type, text, timestamp: timestampFromMs(timestampMs, endTimestampMs) };
+  return {
+    type,
+    text,
+    timestamp: timestampFromMs(timestampMs, endTimestampMs),
+  };
 }
 
 export function passed(checkId: string, name: string): SubCheckResult {

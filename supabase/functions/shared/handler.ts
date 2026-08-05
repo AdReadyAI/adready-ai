@@ -55,7 +55,9 @@ export function createEdgeHandler<T>(
           if (validationErr instanceof z.ZodError) {
             return err(
               "VALIDATION_ERROR",
-              validationErr.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join("; "),
+              validationErr.errors.map((e) =>
+                `${e.path.join(".")}: ${e.message}`
+              ).join("; "),
               400,
             );
           }
@@ -71,7 +73,7 @@ export function createEdgeHandler<T>(
       console.error(`[${name}] Handler error:`, res);
       return err(
         "INTERNAL_ERROR",
-        res instanceof Error ? res.message : "Unexpected server error",
+        "Unexpected server error",
         500,
       );
     }
