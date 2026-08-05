@@ -138,7 +138,7 @@ jobs:
     needs: [quality, unit-tests, integration-tests, container]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    environment: adready-ai/production
+    environment: production
     concurrency:
       group: railway-worker-production
       cancel-in-progress: false
@@ -158,6 +158,8 @@ jobs:
 
       # The project token is scoped to one Railway project and environment.
       - name: Deploy media worker
-        run: railway up . --path-as-root --service "$RAILWAY_SERVICE" --ci
+        run: >-
+          railway up . --path-as-root --service "$RAILWAY_SERVICE"
+          --environment production --ci
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
