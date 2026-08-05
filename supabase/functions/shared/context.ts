@@ -38,7 +38,7 @@ export async function loadAgentContext(
   const supabase = createSupabaseServiceClient();
   const { data: request, error: requestError } = await supabase
     .from("requests")
-    .select("request_id, campaign_goal")
+    .select("request_id, campaign_goal, batch_id")
     .eq("request_id", requestId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -74,10 +74,12 @@ export async function loadAgentContext(
     logoFramesResponse,
     qualityFramesResponse,
   ] = await Promise.all([
-    supabase.from("parsed_creative_briefs").select("*").eq(
-      "request_id",
-      requestId,
-    ).maybeSingle(),
+    request.batch_id
+      ? supabase.from("parsed_creative_briefs").select("*").eq(
+        "batch_id",
+        request.batch_id,
+      ).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
     supabase.from("video_metadata").select("*").eq("request_id", requestId)
       .maybeSingle(),
     supabase.from("product_context").select("*").eq("request_id", requestId)
