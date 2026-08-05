@@ -1,111 +1,27 @@
 /**
- * cta-effectiveness-agent/index.ts — CTA Effectiveness Agent
+ * cta-effectiveness-agent/index.ts — Call to Action (CTA) Effectiveness Agent
  *
- * Owned by: Kira Cho
+ * MAPPED METRIC:
+ *   - cta_clarity ("Is there a clear and appropriate next step for the viewer?")
  *
- * MAPPED METRICS & INTERNAL SUB-CHECKS (Mental Checklist):
+ * SUB-CHECKS (9 total):
+ *   Deterministic (Config-gated):
+ *     - cta_buried: CTA appears only in opening seconds and never repeats at close
+ *     - cta_mistimed: CTA does not land in closing portion of runtime or dwells too briefly
+ *     - cta_low_visibility: On-screen CTA region or font size below legibility threshold
+ *     - cta_platform_mismatch: CTA phrasing violates platform conventions
+ *   LLM Evaluated (Two-call pipeline):
+ *     - cta_absent: Presence from Call 1 acquisition, severity goal-conditional
+ *     - cta_language_weak: Phrasing is passive or vague rather than action-oriented
+ *     - cta_goal_mismatch: CTA type clashes with campaign goal benchmark
+ *     - cta_no_urgency: Conversion-goal CTA lacks time-pressure or incentive cues
+ *     - cta_destination_unclear: Destination (site, store, app) not specified
  *
- *   1. cta_clarity ("Is there a clear and appropriate next step for the viewer?")
- *      [ ] cta_absent: No spoken, visual, or written CTA present in the video.
- *      [ ] cta_buried: CTA is shown only in the first 5 seconds and never repeated at the closing end.
- *      [ ] cta_mistimed: CTA doesn't land in the last 20-30% of the runtime, or dwells too briefly to register.
- *      [ ] cta_language_weak: CTA language is too passive, vague, or non-specific.
- *      [ ] cta_goal_mismatch: CTA style mismatch against campaign objective (e.g. conversion requires strong action).
- *      [ ] cta_no_urgency: No urgency or incentive language where the goal calls for it (conversion only).
- *      [ ] cta_destination_unclear: The destination (website, store, app) isn't stated clearly.
- *      [ ] cta_low_visibility: CTA contrast ratio is too low or font size is illegible.
- *      [ ] cta_platform_mismatch: Phrasing violates platform swipe/action conventions (e.g. "swipe up" on modern TikTok).
- *
- * DB CONTEXT:
- *   - Loads transcript, OCR, video metadata, parsed brief, campaign goal, and
- *     platform context by request_id.
- *   - Derives CTA candidates from transcript/OCR text; detected CTAs are not
- *     supplied by the media pipeline.
- *
- * OUTPUT JSON STRUCTURE:
- *   [
- *     {
- *       "metric_id": "cta_clarity",
- *       "agent": "cta_effectiveness",
- *       "metric_name": "CTA Clarity",
- *       "question": "Is there a clear and appropriate next step for the viewer?",
- *       "result": "false",
- *       "severity": "critical",
- *       "confidence": "high",
- *       "evidence": [
- *         {
- *           "type": "brief",
- *           "text": "Required CTA: Try Mango Moon",
- *           "timestamp": ""
- *         },
- *         {
- *           "type": "visual",
- *           "text": "No CTA visible on screen or spoken in audio.",
- *           "timestamp": ""
- *         }
- *       ],
- *       "explanation": "The required CTA 'Try Mango Moon' is entirely missing on this conversion-focused campaign.",
- *       "suggested_correction": "Add a prominent closing end card with the button text 'Try Mango Moon'.",
- *       "correction_type": "edit_recommendation",
- *       "sub_checks": [
- *         {
- *           "check_id": "cta_absent",
- *           "name": "CTA Presence",
- *           "result": "failed",
- *           "severity": "critical",
- *           "explanation": "No verbal or visual CTA was found."
- *         },
- *         {
- *           "check_id": "cta_buried",
- *           "name": "CTA Position Check",
- *           "result": "passed",
- *           "severity": "none"
- *         },
- *         {
- *           "check_id": "cta_mistimed",
- *           "name": "CTA Timing Check",
- *           "result": "passed",
- *           "severity": "none"
- *         },
- *         {
- *           "check_id": "cta_language_weak",
- *           "name": "CTA Phrasing Check",
- *           "result": "passed",
- *           "severity": "none"
- *         },
- *         {
- *           "check_id": "cta_goal_mismatch",
- *           "name": "CTA Goal Alignment",
- *           "result": "passed",
- *           "severity": "none"
- *         },
- *         {
- *           "check_id": "cta_no_urgency",
- *           "name": "CTA Urgency Check",
- *           "result": "passed",
- *           "severity": "none"
- *         },
- *         {
- *           "check_id": "cta_destination_unclear",
- *           "name": "CTA Destination Check",
- *           "result": "passed",
- *           "severity": "none"
- *         },
- *         {
- *           "check_id": "cta_low_visibility",
- *           "name": "CTA Visibility Check",
- *           "result": "passed",
- *           "severity": "none"
- *         },
- *         {
- *           "check_id": "cta_platform_mismatch",
- *           "name": "CTA Platform Alignment",
- *           "result": "passed",
- *           "severity": "none"
- *         }
- *       ]
- *     }
- *   ]
+ * ARCHITECTURE:
+ *   Two-stage LLM evaluation pipeline. Call 1 derives canonical CTA occurrences with
+ *   numeric timestamps from transcript and OCR segments. Call 2 evaluates qualitative
+ *   sub-checks against campaign goal benchmarks. Deterministic checks evaluate arithmetic
+ *   rules in code. Results roll up worst-wins into cta_clarity.
  */
 
 import {
@@ -115,25 +31,22 @@ import {
   persistMetricResults,
   validateMetricResults,
 } from "../shared/index.ts";
+
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
+
 import { runCtaAgent } from "./agent.ts";
 
-// createEdgeHandler wraps CORS, auth, and AgentRunRequest validation. The agent
-// loads its AgentContext from the DB by request_id, then always returns its
-// single cta_clarity metric_result, degrading to cannot_assess rather than
-// throwing.
 createEdgeHandler(
   "cta-effectiveness-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
-    const context = await loadAgentContext(ctx.body.request_id, {
-      userId: ctx.user.id,
-    });
+    const requestId = ctx.body.request_id;
+    const context = await loadAgentContext(requestId, { userId: ctx.user.id });
     const results = await runCtaAgent(context);
-    // Validate the assembled results once, then use the validated array for both
-    // persistence and the HTTP response so what we store and what we return match.
     const validated = validateMetricResults(results);
-    await persistMetricResults(ctx.body.request_id, validated);
+
+    await persistMetricResults(requestId, validated);
+
     return ok(validated);
   },
 );

@@ -1,42 +1,47 @@
 /**
- * prompts.ts — CTA agent prompt builders (Call 1 + Call 2).
- *
- * Call 1 derives the canonical CTA list from transcript and OCR (there is no
- * detected_ctas primitive), catching implicit CTAs and reporting each with the
- * numeric start_ms/end_ms of its source segment. Call 2 evaluates the five LLM
- * sub-checks against the resolved goal benchmark and the brief's required CTAs.
- * Functional first drafts, expected to be tuned.
+ * prompts.ts — LLM prompt builders for CTA acquisition and evaluation
  */
 
 import type { ChatMessage } from "../shared/llm.ts";
+
 import type { AgentContext } from "../shared/schemas.ts";
+
 import type { GoalBenchmark } from "./config.ts";
+
 import type { CtaAcquisition } from "./response_schemas.ts";
 
+function compactTranscript(ctx: AgentContext) {
+  return (ctx.transcript_segments ?? []).map((s) => ({
+    start_ms: s.start_ms,
+    end_ms: s.end_ms,
+    text: s.text,
+  }));
+}
+
+function compactOcr(ctx: AgentContext) {
+  return (ctx.ocr_segments ?? []).map((o) => ({
+    start_ms: o.start_ms,
+    end_ms: o.end_ms,
+    text: o.text,
+  }));
+}
+
 function acquisitionInput(ctx: AgentContext): string {
-  return JSON.stringify(
-    {
-      duration_ms: ctx.video_metadata.duration_ms,
-      transcript_segments: ctx.transcript_segments,
-      ocr_segments: ctx.ocr_segments,
-    },
-    null,
-    2,
-  );
+  return JSON.stringify({
+    duration_ms: ctx.video_metadata.duration_ms,
+    transcript_segments: compactTranscript(ctx),
+    ocr_segments: compactOcr(ctx),
+  });
 }
 
 export function acquisitionPrompt(ctx: AgentContext): ChatMessage[] {
   const system =
-    "You are finding every call to action in a short-form ad. You are given the transcript_segments (spoken) and " +
-    "ocr_segments (on-screen text), each with start_ms and end_ms, and the total duration. Derive every CTA from " +
-    "them — there is no pre-extracted list. An implicit CTA counts, such as a product shown together with a URL or " +
-    'a store name with no explicit "shop now" phrasing. Return only JSON with three fields. ctas is an array of ' +
-    "{text, source, start_ms, end_ms, explicit}, where source is audio (from transcript), on_screen (from OCR), " +
-    "or visual, start_ms/end_ms are copied from the segment the CTA was found in, and explicit is true for " +
-    "imperative CTA language and false for an implicit one; list every occurrence, including a soft mid-video CTA " +
-    "and a hard closing CTA as separate entries. cta_present is true if the array is non-empty and false " +
-    "otherwise. overall_confidence is high, medium, or low. Do not judge whether the CTAs are good, do not assign " +
-    "severity, and do not recommend fixes.";
+    "You are finding every call to action in a short-form ad. You are given transcript_segments and " +
+    "ocr_segments with start_ms and end_ms, and the total duration. Derive every CTA from them. An " +
+    "implicit CTA counts (such as a product shown together with a URL). Return ONLY valid JSON: " +
+    '{ "ctas": [{ "text": "...", "source": "audio"|"on_screen"|"visual", "start_ms": 123, "end_ms": 456, ' +
+    '"explicit": true|false }], "cta_present": true|false, "overall_confidence": "high"|"medium"|"low" }.';
+
   return [
     { role: "system", content: system },
     { role: "user", content: acquisitionInput(ctx) },
@@ -48,26 +53,21 @@ function evaluationInput(
   acquisition: CtaAcquisition | null,
   benchmark: GoalBenchmark | null,
 ): string {
-  return JSON.stringify(
-    {
-      campaign_goal: ctx.campaign_goal,
-      resolved_benchmark: benchmark, // null until the goal→CTA-type table is populated
-      required_ctas_from_brief: ctx.parsed_creative_brief.required_ctas,
-      canonical_ctas: acquisition?.ctas ?? null, // null when Call 1 could not acquire
-      transcript_segments: ctx.transcript_segments,
-      ocr_segments: ctx.ocr_segments,
-    },
-    null,
-    2,
-  );
+  return JSON.stringify({
+    campaign_goal: ctx.campaign_goal,
+    resolved_benchmark: benchmark,
+    required_ctas_from_brief: ctx.parsed_creative_brief.required_ctas,
+    canonical_ctas: acquisition?.ctas ?? null,
+    transcript_segments: compactTranscript(ctx),
+    ocr_segments: compactOcr(ctx),
+  });
 }
 
 const CTA_CLARITY_RUBRIC =
-  "Severity rubric for cta_clarity (grade each sub-check against this; do not invent a scale). " +
+  "Severity rubric for cta_clarity: " +
   "cta_language_weak (range none→medium). cta_goal_mismatch (range none→high). cta_no_urgency (range none→low; " +
-  "applies ONLY when campaign_goal is conversion — for any other goal return passed/none). " +
-  "cta_destination_unclear (range none→medium). cta_absent (range none→critical, goal-conditional: awareness " +
-  "none, consideration medium, repurchase high, conversion critical).";
+  "applies ONLY when campaign_goal is conversion). cta_destination_unclear (range none→medium). " +
+  "cta_absent (range none→critical, goal-conditional: awareness none, consideration medium, repurchase high, conversion critical).";
 
 export function evaluationPrompt(
   ctx: AgentContext,
@@ -75,32 +75,17 @@ export function evaluationPrompt(
   benchmark: GoalBenchmark | null,
 ): ChatMessage[] {
   const system =
-    "You are evaluating the call to action in a short-form ad against the cta_clarity metric. You are given the " +
-    "canonical CTA list from the previous step (each with text, source, timestamp, and whether it is explicit), " +
-    "the campaign_goal and its resolved benchmark (none, soft, strong, or loyalty, with examples; null if not " +
-    "yet available), the brief's required CTAs, and the transcript_segments and ocr_segments for context.\n\n" +
-    "Run each of these sub-checks and report each separately: (1) cta_absent — is a CTA, explicit or implicit, " +
-    'genuinely present at all? (2) cta_language_weak — is the wording specific and action-oriented ("Shop now", ' +
-    '"Get 20% off") rather than passive or vague ("Check us out")? (3) cta_goal_mismatch — does the CTA\'s type ' +
-    "match what the campaign goal calls for, comparing against the brief's required CTA where given? These two " +
-    "are distinct: cta_language_weak judges the wording's strength, cta_goal_mismatch judges the CTA type against " +
-    "the goal — do not fail both for the same single observation. (4) " +
-    'cta_no_urgency — does the CTA carry a time-pressure or incentive cue ("today only", "free shipping")? This ' +
-    "applies only when campaign_goal is conversion; for any other goal return passed with severity none. (5) " +
-    "cta_destination_unclear — would a viewer know where the CTA sends them (a website, store, or app named or " +
-    "shown)?\n\n" +
+    "You are evaluating the call to action in a short-form ad against the cta_clarity metric. " +
+    "Evaluate these sub-checks: (1) cta_absent, (2) cta_language_weak, (3) cta_goal_mismatch, " +
+    "(4) cta_no_urgency (applies ONLY when campaign_goal is conversion; return passed/none for other goals), " +
+    "(5) cta_destination_unclear.\n\n" +
     CTA_CLARITY_RUBRIC +
-    "\n\nReturn ONLY a single JSON object with these exact TOP-LEVEL keys and NO wrapper object around them: " +
-    '"sub_checks" (array of { check_id, result: passed|failed|cannot_assess, severity: ' +
-    "none|low|medium|high|critical, explanation (only when failed, quoting the CTA text and its timestamp) }), " +
-    'where check_id is the exact snake_case identifier — one of "cta_absent", "cta_language_weak", ' +
-    '"cta_goal_mismatch", "cta_no_urgency", "cta_destination_unclear" — and NEVER the list number, ' +
-    '"confidence" (high|medium|low), "evidence" (array of { type: transcript|ocr|visual|brief|metadata, text, ' +
-    'timestamp }), "explanation", "suggested_correction" (a specific CTA rewrite or placement fix), ' +
-    '"correction_type". Do not nest confidence/evidence/explanation under any other key. Whenever any sub-check ' +
-    "fails, you MUST include a non-empty top-level explanation and at least one evidence entry quoting the CTA " +
-    "text and its timestamp — do not return a failure with no evidence. Set correction_type to none when nothing " +
-    "needs fixing. Use cannot_assess when the inputs do not let you judge a sub-check; do not guess.";
+    "\n\nReturn ONLY a single JSON object with these top-level keys: " +
+    '"sub_checks": [{ "check_id": "...", "result": "passed"|"failed"|"cannot_assess", ' +
+    '"severity": "none"|"low"|"medium"|"high"|"critical", "explanation": "..." }], ' +
+    '"confidence": "high"|"medium"|"low", "evidence": [{ "type": "transcript"|"ocr"|"visual"|"brief"|"metadata", "text": "...", "timestamp": "..." }], ' +
+    '"explanation": "...", "suggested_correction": "...", "correction_type": "...".';
+
   return [
     { role: "system", content: system },
     { role: "user", content: evaluationInput(ctx, acquisition, benchmark) },
