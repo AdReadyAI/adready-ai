@@ -99,14 +99,7 @@ export const VisualFrameSchema = z.object({
       mood: z.string(),
     }),
   ),
-  technical_flags: z.array(
-    z.enum([
-      "ai_artifacts",
-      "poor_framing_lighting",
-      "jarring_transitions",
-      "illegible_text",
-    ]),
-  ).default([]),
+  technical_flags: z.array(z.string()).default([]),
   shot_index: optionalDatabaseField(z.number().int().nonnegative()),
   is_shot_start: z.boolean().default(false),
   is_fade: z.boolean().default(false),

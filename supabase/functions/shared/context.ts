@@ -38,7 +38,7 @@ export async function loadAgentContext(
   const supabase = createSupabaseServiceClient();
   const { data: request, error: requestError } = await supabase
     .from("requests")
-    .select("request_id, campaign_goal")
+    .select("request_id, batch_id, campaign_goal")
     .eq("request_id", requestId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -53,6 +53,13 @@ export async function loadAgentContext(
   const transcriptionId = processing?.find((row) =>
     row.task_name === "transcription"
   )?.id;
+  const contextId = processing?.find((row) => row.task_name === "context")?.id;
+  const productDetectionId = processing?.find((row) =>
+    row.task_name === "product_detection"
+  )?.id;
+  const logoDetectionId = processing?.find((row) =>
+    row.task_name === "logo_detection"
+  )?.id;
 
   const [
     briefResponse,
@@ -63,10 +70,11 @@ export async function loadAgentContext(
     visualResponse,
     productFramesResponse,
     logoFramesResponse,
+    qualityFramesResponse,
   ] = await Promise.all([
     supabase.from("parsed_creative_briefs").select("*").eq(
-      "request_id",
-      requestId,
+      "batch_id",
+      request!.batch_id,
     ).maybeSingle(),
     supabase.from("video_metadata").select("*").eq("request_id", requestId)
       .maybeSingle(),
@@ -80,14 +88,23 @@ export async function loadAgentContext(
     supabase.from("ocr_segments").select(
       "ocr_id, frame_ids, start_ms, end_ms, text, on_screen_duration_ms, region_size, font_size_px",
     ).eq("request_id", requestId),
-    supabase.from("visual_frames").select(
-      "frame_id, timestamp_ms, image_url, visual_description, people, color_palette, background, camera_movement, technical_flags",
-    ).eq("request_id", requestId),
-    supabase.from("product_frames").select(
-      "frame_id, timestamp_ms, location, confidence_score, prominence, focus_quality, framing, usage_context",
-    ).eq("request_id", requestId),
-    supabase.from("logo_frames").select(
-      "frame_id, timestamp_ms, location, confidence_score, prominence, reference_match",
+    contextId
+      ? supabase.from("visual_frames").select(
+        "frame_id, timestamp_ms, image_url, action, framing_composition, people, color_palette, background, technical_flags, shot_index, is_shot_start, is_fade",
+      ).eq("processing_id", contextId)
+      : Promise.resolve({ data: [], error: null }),
+    productDetectionId
+      ? supabase.from("product_frames").select(
+        "frame_id, timestamp_ms, location, confidence_score, prominence, focus_quality, framing",
+      ).eq("processing_id", productDetectionId)
+      : Promise.resolve({ data: [], error: null }),
+    logoDetectionId
+      ? supabase.from("logo_frames").select(
+        "frame_id, timestamp_ms, location, confidence_score, prominence, reference_match",
+      ).eq("processing_id", logoDetectionId)
+      : Promise.resolve({ data: [], error: null }),
+    supabase.from("quality_frames").select(
+      "frame_id, timestamp_ms, reasons, sharpness, crushed_frac, blown_frac, mean_luma, contrast, grain, blockiness, temporal_delta",
     ).eq("request_id", requestId),
   ]);
 
@@ -101,6 +118,7 @@ export async function loadAgentContext(
       visualResponse,
       productFramesResponse,
       logoFramesResponse,
+      qualityFramesResponse,
     ]
   ) {
     if (response.error) throw response.error;
@@ -119,6 +137,7 @@ export async function loadAgentContext(
     visual_frames: visualResponse.data ?? [],
     product_frames: productFramesResponse.data ?? [],
     logo_frames: logoFramesResponse.data ?? [],
+    quality_frames: qualityFramesResponse.data ?? [],
     product_context: productContextResponse.data ?? undefined,
   });
 }
