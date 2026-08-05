@@ -107,7 +107,7 @@ Deno.test("isSparseAnalysis: true when frames are too few for the runtime", () =
       corruption_detected: false,
     },
     visual_frames: [
-      { frame_id: "f1", timestamp_ms: 0, visual_description: "one frame" },
+      { frame_id: "f1", timestamp_ms: 0, action: "one frame", technical_flags: [], is_shot_start: true, is_fade: false },
     ],
   });
   assertEquals(isSparseAnalysis(ctx, arc("high")), true);
