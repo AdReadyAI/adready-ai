@@ -21,21 +21,54 @@ export function severityRank(severity: SeverityLevel): number {
   return SEVERITY_RANK[severity];
 }
 
-export function timestampFromMs(milliseconds?: number): string {
-  if (milliseconds === undefined) return "";
-  const seconds = Math.floor(milliseconds / 1000);
+export function formatMs(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   return `${String(minutes).padStart(2, "0")}:${
     String(seconds % 60).padStart(2, "0")
   }`;
 }
 
+export function timestampFromMs(
+  startMs?: number | string,
+  endMs?: number,
+): string {
+  if (startMs === undefined || startMs === "") return "";
+
+  if (typeof startMs === "string") {
+    if (startMs.includes("-")) {
+      const parts = startMs.split("-");
+      if (parts.length === 2) {
+        const sNum = Number(parts[0].trim());
+        const eNum = Number(parts[1].trim());
+        if (!isNaN(sNum) && !isNaN(eNum)) {
+          return `${formatMs(sNum)} - ${formatMs(eNum)}`;
+        }
+      }
+    }
+    const num = Number(startMs);
+    if (!isNaN(num)) {
+      return timestampFromMs(num, endMs);
+    }
+    return startMs;
+  }
+
+  const startFormatted = formatMs(startMs);
+  if (endMs !== undefined && endMs !== startMs) {
+    const endFormatted = formatMs(endMs);
+    return `${startFormatted} - ${endFormatted}`;
+  }
+
+  return startFormatted;
+}
+
 export function evidence(
   type: EvidenceRef["type"],
   text: string,
-  timestampMs?: number,
+  timestampMs?: number | string,
+  endTimestampMs?: number,
 ): EvidenceRef {
-  return { type, text, timestamp: timestampFromMs(timestampMs) };
+  return { type, text, timestamp: timestampFromMs(timestampMs, endTimestampMs) };
 }
 
 export function passed(checkId: string, name: string): SubCheckResult {
