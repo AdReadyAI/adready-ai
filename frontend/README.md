@@ -100,6 +100,18 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-06** — **Export Report** on ResultPage now downloads a PDF of the
+  whole batch instead of a JSON dump; the JSON export is gone. The document
+  (`components/results/ReportDocument.tsx`, built with `@react-pdf/renderer`) is a
+  cover page with the ranking, then one page per video carrying its scorecard and
+  full issue list. It is **only ever loaded through the dynamic `import()` in
+  `lib/downloadReport.ts`** — that keeps ~1.4MB out of the main bundle, so nothing
+  may import it statically. Anything the export and the screen both say now lives
+  in `lib/reportModel.ts` (filename, empty-issue copy gated on status, `scoreText`
+  so a null score never prints as 0) and colours come from new `pdf` hex fields on
+  `status.ts`, so the two cannot drift. The button shows a pending state while the
+  chunk downloads and reports failures beside itself rather than replacing the
+  results.
 - **2026-08-05** — ResultPage now renders live data and the mock is gone. Route
   is `/result/:batchId` (refreshable and shareable; `CampaignForm` navigates
   there), progress is real — a video appears once it has a score row, polling
