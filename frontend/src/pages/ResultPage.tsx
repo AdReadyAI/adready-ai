@@ -22,6 +22,7 @@ import IssueRow from '../components/results/IssueRow'
 import MetricBar from '../components/results/MetricBar'
 import RankCard from '../components/results/RankCard'
 import { STATUS } from '../components/results/status'
+import { downloadReport } from '../lib/downloadReport'
 import { fetchBatchResults } from '../lib/results'
 import type { BatchResults } from '../lib/results'
 import { emptyIssuesCopy, scoreText } from '../lib/reportModel'
@@ -129,6 +130,8 @@ export default function ResultPage() {
   const [timedOut, setTimedOut] = useState(false)
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
   const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!batchId) return null
@@ -198,34 +201,21 @@ export default function ResultPage() {
     setExpandedIssueId(next?.issues[0]?.id ?? null)
   }
 
-  function exportReport() {
-    if (!data) return
+  async function exportReport() {
+    if (!data || !batchId) return
 
-    const report = {
-      generatedAt: new Date().toISOString(),
-      batchId,
-      videos: data.videos.map((video) => ({
-        rank: video.rank,
-        name: video.name,
-        score: video.score,
-        status: STATUS[video.status].label,
-        metrics: video.metrics,
-        issues: video.issues.map((issue) => ({
-          metricId: issue.metricId,
-          severity: issue.severity,
-          timestamp: issue.timestamp,
-          detail: issue.detail,
-        })),
-      })),
+    setExporting(true)
+    setExportError(null)
+    try {
+      await downloadReport(data, batchId)
+    } catch (err) {
+      // Surfaced next to the button rather than through the page-level `error`
+      // state: a failed export is no reason to replace results the user can
+      // still read.
+      setExportError(getErrorMessage(err, 'Could not build the PDF'))
+    } finally {
+      setExporting(false)
     }
-
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'adready-results.json'
-    anchor.click()
-    URL.revokeObjectURL(url)
   }
 
   // ---- the five states --------------------------------------------------
@@ -290,14 +280,23 @@ export default function ResultPage() {
             how they ranked and what to fix.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={exportReport}
-          className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"
-        >
-          <DownloadIcon className="h-4 w-4" />
-          Export Report
-        </button>
+        <div className="flex flex-col items-end">
+          <button
+            type="button"
+            onClick={() => void exportReport()}
+            disabled={exporting}
+            aria-busy={exporting}
+            className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-violet-400"
+          >
+            <DownloadIcon className="h-4 w-4" />
+            {/* The first click pays for the lazy PDF chunk on top of the render,
+                so without this the button looks dead for a beat. */}
+            {exporting ? 'Preparing PDF…' : 'Export Report'}
+          </button>
+          {exportError !== null && (
+            <p className="mt-2 max-w-xs text-right text-sm text-red-600">{exportError}</p>
+          )}
+        </div>
       </div>
 
       <p className="mb-3 mt-8 text-sm font-semibold text-slate-800">Creative Ranking</p>
