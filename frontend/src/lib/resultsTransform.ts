@@ -113,15 +113,24 @@ function padSeconds(seconds: number): string {
   return seconds < 10 ? `0${seconds}` : String(seconds)
 }
 
+function formatSeconds(total: number): string {
+  return `${Math.floor(total / 60)}:${padSeconds(total % 60)}`
+}
+
 /**
- * `issues.video_timestamp` is TEXT with no format guarantee — producers may
- * write "0:22", "00:15", or raw seconds like "14.5". Normalize to M:SS.
+ * `issues.video_timestamp` as a number of seconds, for seeking a video element.
  *
- * An unrecognized format is returned trimmed rather than dropped: showing an
- * odd-looking timestamp beats silently hiding the only pointer to where in the
- * video the problem is.
+ * The column is TEXT with no format guarantee — producers may write "0:22",
+ * "00:15", or raw seconds like "14.5" — so every accepted format is parsed here
+ * and nowhere else. Returns null for anything unrecognized, which is stricter
+ * than `normalizeTimestamp`: a timestamp we cannot turn into a number cannot be
+ * seeked to, even though it is still worth displaying.
+ *
+ * Fractional seconds are floored to match the displayed label. Seeking to 14
+ * when the chip reads 0:14 is right; seeking to 14.5 while showing 0:14 would
+ * put the player a frame past the moment the user was pointed at.
  */
-export function normalizeTimestamp(raw: string | null | undefined): string | null {
+export function parseTimestampSeconds(raw: string | null | undefined): number | null {
   if (raw === null || raw === undefined) return null
 
   const trimmed = raw.trim()
@@ -129,16 +138,36 @@ export function normalizeTimestamp(raw: string | null | undefined): string | nul
 
   const clock = trimmed.match(/^(\d+):([0-5]?\d)$/)
   if (clock) {
-    return `${Number(clock[1])}:${padSeconds(Number(clock[2]))}`
+    return Number(clock[1]) * 60 + Number(clock[2])
   }
 
   const seconds = trimmed.match(/^\d+(\.\d+)?$/)
   if (seconds) {
-    const total = Math.floor(Number(trimmed))
-    return `${Math.floor(total / 60)}:${padSeconds(total % 60)}`
+    return Math.floor(Number(trimmed))
   }
 
-  return trimmed
+  return null
+}
+
+/**
+ * The same value as a M:SS label for display.
+ *
+ * Deliberately built on top of `parseTimestampSeconds` rather than re-parsing:
+ * two parsers that drift apart would show one time and seek to another.
+ *
+ * An unrecognized format is returned trimmed rather than dropped: showing an
+ * odd-looking timestamp beats silently hiding the only pointer to where in the
+ * video the problem is. Such a value has a label but no seconds, so it renders
+ * a chip and no playable clip.
+ */
+export function normalizeTimestamp(raw: string | null | undefined): string | null {
+  if (raw === null || raw === undefined) return null
+
+  const trimmed = raw.trim()
+  if (trimmed === '') return null
+
+  const seconds = parseTimestampSeconds(trimmed)
+  return seconds === null ? trimmed : formatSeconds(seconds)
 }
 
 // ---- presentation helpers ------------------------------------------------
@@ -177,6 +206,18 @@ export function videoNameFromPaths(paths: string[] | null): string {
 
   const basename = first.split('/').pop()
   return basename && basename !== '' ? basename : 'Untitled video'
+}
+
+/**
+ * The object key to sign when playing the video back.
+ *
+ * `video_storage_paths` is an array because the column is shared with the
+ * multi-asset shape, but a request carries exactly one video — CampaignForm
+ * writes `[storagePath]`. Taking [0] mirrors `videoNameFromPaths`, so the clip
+ * that plays is always the file whose name is on the card.
+ */
+export function videoPathFromPaths(paths: string[] | null): string | null {
+  return paths?.[0] ?? null
 }
 
 /**
@@ -220,6 +261,7 @@ export function toIssues(rows: IssueRow[]): Issue[] {
       severity: row.severity as DisplaySeverity,
       repairText: row.repair_suggestion,
       timestamp: normalizeTimestamp(row.video_timestamp),
+      timestampSeconds: parseTimestampSeconds(row.video_timestamp),
     }))
     .sort((a, b) => {
       const bySeverity = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]
@@ -275,6 +317,7 @@ export function assembleVideoResults(input: {
     .map((request) => ({
       requestId: request.request_id,
       name: videoNameFromPaths(request.video_storage_paths),
+      videoPath: videoPathFromPaths(request.video_storage_paths),
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
@@ -304,6 +347,7 @@ export function assembleVideoResults(input: {
       requestId: request.requestId,
       rank: 0, // assigned after sorting
       name: request.name,
+      videoPath: request.videoPath,
       score: score.ad_readiness_pct,
       status,
       thumb: thumbByRequest.get(request.requestId) ?? THUMBS[0],

@@ -12,6 +12,7 @@ function issue(overrides: Partial<Issue> = {}): Issue {
     severity: 'high',
     repairText: 'Hold the CTA card for 2s.',
     timestamp: '0:22',
+    timestampSeconds: 22,
     ...overrides,
   }
 }
