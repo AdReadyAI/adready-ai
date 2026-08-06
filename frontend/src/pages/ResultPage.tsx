@@ -24,6 +24,7 @@ import RankCard from '../components/results/RankCard'
 import { STATUS } from '../components/results/status'
 import { fetchBatchResults } from '../lib/results'
 import type { BatchResults } from '../lib/results'
+import { emptyIssuesCopy, scoreText } from '../lib/reportModel'
 import { getErrorMessage } from '../lib/errorMessage'
 
 // Matches task-pipeline-progress-view.md D1 (5000ms) and D9 (10 minutes) so the
@@ -277,6 +278,7 @@ export default function ResultPage() {
 
   const resultStatus = STATUS[selected.status]
   const activeIssueId = expandedIssueId ?? selected.issues[0]?.id ?? null
+  const emptyIssues = emptyIssuesCopy(selected.status)
 
   return (
     <Shell>
@@ -326,7 +328,7 @@ export default function ResultPage() {
             <div
               className={`flex h-44 w-44 items-center justify-center rounded-full border-2 text-6xl font-bold ${resultStatus.bigCircle}`}
             >
-              {selected.score ?? '—'}
+              {scoreText(selected.score)}
             </div>
           </div>
 
@@ -349,32 +351,11 @@ export default function ResultPage() {
           <div className="mt-6 space-y-4">
             {selected.issues.length === 0 ? (
               <div className="rounded-xl border border-slate-200 bg-white px-5 py-10 text-center">
-                {/* Gated on status, not on issue count. Issues with severity
-                    `none` or `cannot_assess` are filtered out, so an empty list
-                    does not prove the creative is clean — claiming "ready to
-                    ship" on a High Risk video would be flatly wrong. */}
-                {selected.status === 'ready' ? (
-                  <>
-                    <p className="text-sm font-medium text-slate-600">No issues found.</p>
-                    <p className="mt-1 text-sm text-slate-400">This creative is ready to ship.</p>
-                  </>
-                ) : selected.status === 'unassessed' ? (
-                  <>
-                    <p className="text-sm font-medium text-slate-600">Nothing to show.</p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      This creative could not be assessed, so no issues were recorded.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium text-slate-600">
-                      No specific issues were listed.
-                    </p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      This creative still scored below the ready-to-ship threshold.
-                    </p>
-                  </>
-                )}
+                {/* Copy is gated on status, not on issue count, and lives in
+                    lib/reportModel.ts so the PDF export says exactly the same
+                    thing. See that function for why the distinction matters. */}
+                <p className="text-sm font-medium text-slate-600">{emptyIssues.title}</p>
+                <p className="mt-1 text-sm text-slate-400">{emptyIssues.body}</p>
               </div>
             ) : (
               selected.issues.map((issue) => (

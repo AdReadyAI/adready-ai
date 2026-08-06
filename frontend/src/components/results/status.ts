@@ -1,5 +1,21 @@
 import type { DisplaySeverity, ShipStatus } from '../../types/results'
 
+/**
+ * The same colours as the Tailwind classes beside them, spelled as hex.
+ *
+ * The PDF export renders outside the DOM, so it has no stylesheet and no
+ * Tailwind — react-pdf takes literal colour values. Keeping those values in this
+ * file rather than in a second table next to the PDF means a status only ever
+ * changes colour in one place, and the exported document cannot drift away from
+ * what the screen shows.
+ */
+interface PdfPalette {
+  /** Fill of the score-breakdown bar. */
+  bar: string
+  pillBg: string
+  pillText: string
+}
+
 export const STATUS: Record<
   ShipStatus,
   {
@@ -8,6 +24,7 @@ export const STATUS: Record<
     scoreBadge: string
     bigCircle: string
     bar: string
+    pdf: PdfPalette
   }
 > = {
   ready: {
@@ -16,6 +33,7 @@ export const STATUS: Record<
     scoreBadge: 'bg-green-50 border-green-300 text-green-600',
     bigCircle: 'bg-green-100 border-green-300 text-green-700',
     bar: 'bg-green-500',
+    pdf: { bar: '#22c55e', pillBg: '#dcfce7', pillText: '#15803d' },
   },
   revision: {
     label: 'Needs Revision',
@@ -23,6 +41,7 @@ export const STATUS: Record<
     scoreBadge: 'bg-amber-50 border-amber-300 text-amber-600',
     bigCircle: 'bg-amber-100 border-amber-300 text-amber-700',
     bar: 'bg-amber-400',
+    pdf: { bar: '#fbbf24', pillBg: '#fef3c7', pillText: '#b45309' },
   },
   nope: {
     label: 'Do not ship',
@@ -30,6 +49,7 @@ export const STATUS: Record<
     scoreBadge: 'bg-red-100 border-red-300 text-red-500',
     bigCircle: 'bg-red-200 border-red-300 text-red-600',
     bar: 'bg-red-400',
+    pdf: { bar: '#f87171', pillBg: '#fee2e2', pillText: '#dc2626' },
   },
   // Deliberately grey rather than red. The pipeline could not evaluate this
   // video at all, which is not the same as it scoring badly — colouring it like
@@ -41,6 +61,7 @@ export const STATUS: Record<
     scoreBadge: 'bg-slate-50 border-slate-300 text-slate-400',
     bigCircle: 'bg-slate-100 border-slate-300 text-slate-400',
     bar: 'bg-slate-300',
+    pdf: { bar: '#cbd5e1', pillBg: '#e2e8f0', pillText: '#475569' },
   },
 }
 
@@ -58,26 +79,36 @@ export const STATUS: Record<
  */
 export const SEVERITY_STYLE: Record<
   DisplaySeverity,
-  { label: string; pill: string; accent: string }
+  {
+    label: string
+    pill: string
+    accent: string
+    /** Hex twins of `pill` and `accent`, for the PDF export. See PdfPalette above. */
+    pdf: { pillBg: string; pillText: string; accent: string }
+  }
 > = {
   critical: {
     label: 'Critical',
     pill: 'bg-red-100 text-red-600',
     accent: 'border-l-red-500',
+    pdf: { pillBg: '#fee2e2', pillText: '#dc2626', accent: '#ef4444' },
   },
   high: {
     label: 'High',
     pill: 'bg-red-100 text-red-600',
     accent: 'border-l-red-500',
+    pdf: { pillBg: '#fee2e2', pillText: '#dc2626', accent: '#ef4444' },
   },
   medium: {
     label: 'Medium',
     pill: 'bg-amber-100 text-amber-700',
     accent: 'border-l-amber-400',
+    pdf: { pillBg: '#fef3c7', pillText: '#b45309', accent: '#fbbf24' },
   },
   low: {
     label: 'Low',
     pill: 'bg-slate-100 text-slate-600',
     accent: 'border-l-slate-300',
+    pdf: { pillBg: '#f1f5f9', pillText: '#475569', accent: '#cbd5e1' },
   },
 }
