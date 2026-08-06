@@ -64,9 +64,13 @@ class FakeAnalyzer:
 class FakeDB:
     def __init__(self, done=None):
         self._done = done or set()
+        self.marked_processing = []
 
     def completed_analyzers(self):
         return self._done
+
+    def mark_processing(self, task_name):
+        self.marked_processing.append(task_name)
 
 
 class FakeProductContextDB:
@@ -126,6 +130,45 @@ def test_run_analysis_skips_completed_tasks():
     assert "transcription" not in results
     assert results == {"context": "CTX"}
     assert errors == {}
+
+
+def test_run_analysis_marks_pending_tasks_as_processing():
+    tasks = {"transcription": lambda: "RESULT", "context": lambda: "CTX"}
+    db = FakeDB(done={"transcription"})
+
+    processor._run_analysis(db, FakeAnalyzer(tasks))
+
+    # already-completed tasks are not re-marked; only pending ones are.
+    assert db.marked_processing == ["context"]
+
+
+def test_run_analysis_marks_all_tasks_processing_before_any_task_runs():
+    # Regression guard: mark_processing must be called for every pending task,
+    # from the calling thread, before the executor starts running task functions.
+    # The Supabase cursor is not thread-safe, so marking must happen serially
+    # up front rather than per-task inside a worker thread.
+    events = []
+
+    class OrderTrackingDB(FakeDB):
+        def mark_processing(self, task_name):
+            events.append(("mark", task_name))
+
+    def make_task(name):
+        def task():
+            events.append(("run", name))
+            return name
+        return task
+
+    tasks = {name: make_task(name) for name in ("transcription", "ocr", "context")}
+    processor._run_analysis(OrderTrackingDB(), FakeAnalyzer(tasks))
+
+    marks = [e for e in events if e[0] == "mark"]
+    runs = [e for e in events if e[0] == "run"]
+    assert {name for _, name in marks} == set(tasks)
+    # every mark happens before every run, regardless of thread scheduling order
+    last_mark_index = max(events.index(m) for m in marks)
+    first_run_index = min(events.index(r) for r in runs)
+    assert last_mark_index < first_run_index
 
 
 def test_run_analysis_routes_exceptions_to_errors():
@@ -280,6 +323,8 @@ def _wire_process_message(
         def completed_analyzers(self):
             return done or set()
 
+        def mark_processing(self, task_name):
+            pass
         def product_url_requiring_context(self):
             return None
 
@@ -584,6 +629,10 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
         def completed_analyzers(self):
             return set()
 
+        def mark_processing(self, task_name):
+            """Accept main's in-flight analyzer status transition."""
+            execution_events.append(f"{task_name}-processing")
+
         def persist_quality_frames(self, flags):
             """Accept main's optional quality persistence."""
 
@@ -636,5 +685,7 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
         "ocr-lifecycle-created",
         "ocr-lifecycle",
         "ocr-analysis",
+        "ocr-processing",
         "transcription",
+        "transcription-processing",
     }

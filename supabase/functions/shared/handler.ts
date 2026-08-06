@@ -2,12 +2,20 @@ import { User } from "@supabase/supabase-js";
 import { z } from "zod";
 import { handleCors } from "./cors.ts";
 import { getAuthenticatedUser } from "./auth.ts";
+import { assertInternalCaller } from "./internalAuth.ts";
 import { err } from "./response.ts";
 
 export type HandlerContext = {
   user: User;
   requestId: string;
 };
+
+export type InternalHandlerContext = {
+  requestId: string;
+};
+export type InternalHandlerContextWithBody<T> =
+  & InternalHandlerContext
+  & { body: T };
 
 export type HandlerContextWithBody<T> = HandlerContext & { body: T };
 
@@ -68,6 +76,64 @@ export function createEdgeHandler<T>(
       } else {
         return await (schemaOrHandler as EdgeHandler)(req, { user, requestId });
       }
+    } catch (res) {
+      if (res instanceof Response) return res;
+      console.error(`[${name}] Handler error:`, res);
+      return err(
+        "INTERNAL_ERROR",
+        "Unexpected server error",
+        500,
+      );
+    }
+  });
+}
+
+/**
+ * Edge Handler wrapper for endpoints only ever called by our own DB triggers
+ * (e.g. the 7 evaluation agents), authenticated via a shared secret instead
+ * of a user's Supabase JWT.
+ */
+export function createInternalEdgeHandler<T>(
+  name: string,
+  schema: z.ZodType<T>,
+  handler: (
+    req: Request,
+    ctx: InternalHandlerContextWithBody<T>,
+  ) => Promise<Response>,
+): void {
+  Deno.serve(async (req) => {
+    const preflight = handleCors(req);
+    if (preflight) return preflight;
+
+    const requestId = crypto.randomUUID();
+
+    try {
+      assertInternalCaller(req);
+
+      let raw: unknown;
+      try {
+        raw = await req.json();
+      } catch {
+        return err("INVALID_JSON", "Request body must be valid JSON", 400);
+      }
+
+      let body: T;
+      try {
+        body = schema.parse(raw);
+      } catch (validationErr) {
+        if (validationErr instanceof z.ZodError) {
+          return err(
+            "VALIDATION_ERROR",
+            validationErr.errors.map((e) =>
+              `${e.path.join(".")}: ${e.message}`
+            ).join("; "),
+            400,
+          );
+        }
+        throw validationErr;
+      }
+
+      return await handler(req, { requestId, body });
     } catch (res) {
       if (res instanceof Response) return res;
       console.error(`[${name}] Handler error:`, res);

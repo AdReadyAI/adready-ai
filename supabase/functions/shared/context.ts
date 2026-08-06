@@ -1,16 +1,17 @@
 /**
  * Shared, request-scoped input loader for every evaluation agent.
  *
- * This is the authorization boundary for service-role reads: callers must pass
- * the authenticated user's ID, and the requested record must belong to them
- * before any related context is loaded.
+ * Agents are only ever invoked internally (see shared/internalAuth.ts), so
+ * there is no end user to scope reads to. userId is accepted only for the
+ * (currently unused) case of a future user-facing re-run path, in which case
+ * it re-adds the request-ownership check below.
  */
 import { createSupabaseServiceClient } from "./clients.ts";
 import { AgentContextSchema } from "./schemas.ts";
 import type { AgentContext } from "./schemas.ts";
 
 export type LoadAgentContextOptions = {
-  userId: string;
+  userId?: string;
 };
 
 function required<T>(value: T | null | undefined, name: string): T {
@@ -29,18 +30,17 @@ function required<T>(value: T | null | undefined, name: string): T {
  */
 export async function loadAgentContext(
   requestId: string,
-  { userId }: LoadAgentContextOptions,
+  { userId }: LoadAgentContextOptions = {},
 ): Promise<AgentContext> {
-  if (!userId) {
-    throw new Error("Authenticated user is required to load agent context.");
-  }
-
   const supabase = createSupabaseServiceClient();
-  const { data: request, error: requestError } = await supabase
+  let requestQuery = supabase
     .from("requests")
-    .select("request_id, campaign_goal")
-    .eq("request_id", requestId)
-    .eq("user_id", userId)
+    .select("request_id, batch_id, campaign_goal")
+    .eq("request_id", requestId);
+  if (userId) {
+    requestQuery = requestQuery.eq("user_id", userId);
+  }
+  const { data: request, error: requestError } = await requestQuery
     .maybeSingle();
   if (requestError) throw requestError;
   required(request, "Request");
@@ -53,13 +53,14 @@ export async function loadAgentContext(
   const transcriptionId = processing?.find((row) =>
     row.task_name === "transcription"
   )?.id;
+  const contextId = processing?.find((row) => row.task_name === "context")?.id;
   const productDetectionId = processing?.find((row) =>
     row.task_name === "product_detection"
   )?.id;
   const logoDetectionId = processing?.find((row) =>
     row.task_name === "logo_detection"
   )?.id;
-  const contextId = processing?.find((row) => row.task_name === "context")?.id;
+
 
   const [
     briefResponse,
@@ -72,10 +73,12 @@ export async function loadAgentContext(
     logoFramesResponse,
     qualityFramesResponse,
   ] = await Promise.all([
-    supabase.from("parsed_creative_briefs").select("*").eq(
-      "request_id",
-      requestId,
-    ).maybeSingle(),
+    request.batch_id
+      ? supabase.from("parsed_creative_briefs").select("*").eq(
+        "batch_id",
+        request.batch_id,
+      ).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
     supabase.from("video_metadata").select("*").eq("request_id", requestId)
       .maybeSingle(),
     supabase.from("product_context").select("*").eq("request_id", requestId)
