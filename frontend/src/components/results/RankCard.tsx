@@ -13,6 +13,12 @@ export default function RankCard({
 }) {
   const s = STATUS[video.status]
 
+  // Unassessed videos sort last, so #1 is normally a real winner. The guard
+  // covers the case where every video in the batch failed to assess — awarding
+  // a green "best in batch" badge to something that was never scored would be
+  // actively misleading.
+  const isTopScorer = video.rank === 1 && video.score !== null
+
   return (
     <button
       type="button"
@@ -25,7 +31,7 @@ export default function RankCard({
     >
       <span
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
-          video.rank === 1
+          isTopScorer
             ? 'bg-green-500 text-white'
             : 'border border-slate-200 bg-white text-slate-600'
         }`}
@@ -46,7 +52,7 @@ export default function RankCard({
       <span
         className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-lg font-bold ${s.scoreBadge}`}
       >
-        {video.score}
+        {video.score ?? '—'}
       </span>
     </button>
   )

@@ -267,7 +267,9 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
       return;
     }
 
-    navigate("/result", {
+    // batchId goes in the path, not just router state: ResultPage reads it from
+    // the URL so a refresh, bookmark, or shared link still resolves the batch.
+    navigate(`/result/${batchId}`, {
       state: {
         batchId,
         requestIds,

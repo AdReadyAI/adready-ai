@@ -100,6 +100,34 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-05** — ResultPage now renders live data and the mock is gone. Route
+  is `/result/:batchId` (refreshable and shareable; `CampaignForm` navigates
+  there), progress is real — a video appears once it has a score row, polling
+  every 4s until the batch completes with a 5min cutoff. `status.ts` gains the
+  grey `unassessed` state and a `SEVERITY_STYLE` map; `IssueRow` no longer paints
+  `critical` the same amber as `medium`; `MetricBar` shows an unassessed
+  dimension as a dashed track and a dash, never a 0% bar; `RankCard` withholds
+  the green winner badge from an unscored video. The "ready to ship" empty state
+  is now gated on status, not issue count — filtered severities mean an empty
+  list no longer proves a creative is clean. Metric labels widened for the
+  longer database dimension names. The loading view is a deliberate placeholder
+  ("N of M scored") — real per-stage progress is a separate task, so this only
+  polls for the pipeline's last stage.
+- **2026-08-05** — Added the Result UI data layer. `lib/resultsTransform.ts` is
+  pure (rows -> `VideoResult[]`: severity filtering, both sort orders, timestamp
+  normalization, derived summaries) and `lib/results.ts` does the four queries.
+  Split so the transforms are testable without env vars or a database — 30 unit
+  tests in `resultsTransform.test.ts`. Note `result_score_dimensions` has no
+  `batch_id`, so it filters on request ids while the others filter on the batch.
+- **2026-08-05** — `types/results.ts` rewritten against the database's CHECK
+  constraints ahead of wiring ResultPage to real data. `ShipStatus` gains
+  `unassessed` (`Cannot Assess`), `Severity` covers all six values migration 025
+  allows, and the new `DisplaySeverity` excludes `none`/`cannot_assess` so the
+  compiler stops a filtered severity reaching a component. `score`, `Metric.value`,
+  and the nullable `Issue` fields are now `| null` — null is not zero. Presentation
+  fields (`severityLabel`, `frameLabel`, `repairTitle`) and `tag` are gone; `tag`
+  becomes `metricId`. Types-only change: `IssueRow`, `status.ts`, and `ResultPage`
+  don't compile until the components are updated.
 - **2026-08-02** — Both writes in `CampaignForm`'s submit are now idempotent, so
   retrying after a failed brief save can't duplicate a batch. `request_id` is
   minted client-side and the `requests` write is an upsert with
