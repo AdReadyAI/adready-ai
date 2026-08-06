@@ -1,14 +1,14 @@
 import { assertEquals, assertMatch } from "@std/assert";
 import {
   buildBrandResult,
-  evaluateLogoChecks,
   type CheckAssessment,
+  evaluateLogoChecks,
 } from "../../../functions/brand-alignment-agent/checks.ts";
 import {
   applyGuidanceGuards,
   evaluateQualitativeChecks,
-  LLMCheckSchema,
   type LLMAssessment,
+  LLMCheckSchema,
 } from "../../../functions/brand-alignment-agent/prompts.ts";
 import type { AgentContext } from "../../../functions/shared/schemas.ts";
 
@@ -35,7 +35,12 @@ function makeContext(overrides: Partial<AgentContext> = {}): AgentContext {
       dropped_frame_markers: [],
     },
     transcript_segments: [
-      { segment_id: "s1", start_ms: 0, end_ms: 3000, text: "Thirsty? Meet Mango Moon." },
+      {
+        segment_id: "s1",
+        start_ms: 0,
+        end_ms: 3000,
+        text: "Thirsty? Meet Mango Moon.",
+      },
     ],
     ocr_segments: [],
     visual_frames: [],
@@ -93,17 +98,29 @@ Deno.test("evaluateLogoChecks: logo_absent fails when brief requires logo but no
 
   assertEquals(result.confidence, "medium");
   assertEquals(result.checks.length, 2);
-  assertEquals(result.checks.find((c) => c.check_id === "logo_absent")?.result, "failed");
-  assertEquals(result.checks.find((c) => c.check_id === "logo_absent")?.severity, "high");
+  assertEquals(
+    result.checks.find((c) => c.check_id === "logo_absent")?.result,
+    "failed",
+  );
+  assertEquals(
+    result.checks.find((c) => c.check_id === "logo_absent")?.severity,
+    "high",
+  );
   // cannot assess accuracy when logo is absent
   const logoAbsent = result.checks.find((c) => c.check_id === "logo_absent");
-  assertEquals(result.checks.find((c) => c.check_id === "logo_incorrect")?.result, "cannot_assess");
+  assertEquals(
+    result.checks.find((c) => c.check_id === "logo_incorrect")?.result,
+    "cannot_assess",
+  );
   // ensure explanation and evidence reflect the absent state
   assertEquals(
     logoAbsent?.explanation,
     "A logo is required by the brief or reference assets, but no reliable logo detection was found.",
   );
-  assertEquals(result.checks.find((c) => c.check_id === "logo_incorrect")?.explanation, undefined);
+  assertEquals(
+    result.checks.find((c) => c.check_id === "logo_incorrect")?.explanation,
+    undefined,
+  );
   assertEquals(result.evidence.length, 0);
 });
 
@@ -127,17 +144,31 @@ Deno.test("evaluateLogoChecks: logo_incorrect fails when reference_match is diff
   const result = evaluateLogoChecks(ctx);
 
   assertEquals(result.checks.length, 2);
-  assertEquals(result.checks.find((c) => c.check_id === "logo_absent")?.result, "passed");
-  assertEquals(result.checks.find((c) => c.check_id === "logo_incorrect")?.result, "failed");
-  assertEquals(result.checks.find((c) => c.check_id === "logo_incorrect")?.severity, "medium");
+  assertEquals(
+    result.checks.find((c) => c.check_id === "logo_absent")?.result,
+    "passed",
+  );
+  assertEquals(
+    result.checks.find((c) => c.check_id === "logo_incorrect")?.result,
+    "failed",
+  );
+  assertEquals(
+    result.checks.find((c) => c.check_id === "logo_incorrect")?.severity,
+    "medium",
+  );
 });
 
 Deno.test("evaluateLogoChecks: frames below confidence 0.5 are treated as absent", () => {
-  const ctx = makeContext({ logo_frames: [makeLogoFrame({ confidence_score: 0.3 })] });
+  const ctx = makeContext({
+    logo_frames: [makeLogoFrame({ confidence_score: 0.3 })],
+  });
   const result = evaluateLogoChecks(ctx);
 
   assertEquals(result.checks.length, 2);
-  assertEquals(result.checks.find((c) => c.check_id === "logo_absent")?.result, "failed");
+  assertEquals(
+    result.checks.find((c) => c.check_id === "logo_absent")?.result,
+    "failed",
+  );
 });
 
 Deno.test("evaluateLogoChecks: logo required via product_context.reference_asset_urls", () => {
@@ -164,7 +195,10 @@ Deno.test("evaluateLogoChecks: logo required via product_context.reference_asset
   const result = evaluateLogoChecks(ctx);
 
   assertEquals(result.checks.length, 2);
-  assertEquals(result.checks.find((c) => c.check_id === "logo_absent")?.result, "failed");
+  assertEquals(
+    result.checks.find((c) => c.check_id === "logo_absent")?.result,
+    "failed",
+  );
 });
 
 // --- buildBrandResult ---
@@ -172,8 +206,18 @@ Deno.test("evaluateLogoChecks: logo required via product_context.reference_asset
 Deno.test("buildBrandResult: result is 'true' when all sub-checks pass", () => {
   const passing: CheckAssessment = {
     checks: [
-      { check_id: "logo_absent", name: "Logo Presence", result: "passed", severity: "none" },
-      { check_id: "logo_incorrect", name: "Logo Accuracy", result: "passed", severity: "none" },
+      {
+        check_id: "logo_absent",
+        name: "Logo Presence",
+        result: "passed",
+        severity: "none",
+      },
+      {
+        check_id: "logo_incorrect",
+        name: "Logo Accuracy",
+        result: "passed",
+        severity: "none",
+      },
     ],
     evidence: [],
     confidence: "high",
@@ -190,16 +234,37 @@ Deno.test("buildBrandResult: result is 'true' when all sub-checks pass", () => {
 Deno.test("buildBrandResult: suggested_correction targets logo_absent when it fails", () => {
   const logo: CheckAssessment = {
     checks: [
-      { check_id: "logo_absent", name: "Logo Presence", result: "failed", severity: "high", explanation: "No logo found." },
-      { check_id: "logo_incorrect", name: "Logo Accuracy", result: "cannot_assess", severity: "cannot_assess" },
+      {
+        check_id: "logo_absent",
+        name: "Logo Presence",
+        result: "failed",
+        severity: "high",
+        explanation: "No logo found.",
+      },
+      {
+        check_id: "logo_incorrect",
+        name: "Logo Accuracy",
+        result: "cannot_assess",
+        severity: "cannot_assess",
+      },
     ],
     evidence: [],
     confidence: "medium",
   };
   const qualitative: CheckAssessment = {
     checks: [
-      { check_id: "color_palette_off", name: "Color Scheme", result: "passed", severity: "none" },
-      { check_id: "brand_voice_drift", name: "Brand Voice", result: "passed", severity: "none" },
+      {
+        check_id: "color_palette_off",
+        name: "Color Scheme",
+        result: "passed",
+        severity: "none",
+      },
+      {
+        check_id: "brand_voice_drift",
+        name: "Brand Voice",
+        result: "passed",
+        severity: "none",
+      },
     ],
     evidence: [],
     confidence: "high",
@@ -215,16 +280,37 @@ Deno.test("buildBrandResult: suggested_correction targets logo_absent when it fa
 Deno.test("buildBrandResult: correction_type is 'rewrite' when only brand_voice_drift fails", () => {
   const logo: CheckAssessment = {
     checks: [
-      { check_id: "logo_absent", name: "Logo Presence", result: "passed", severity: "none" },
-      { check_id: "logo_incorrect", name: "Logo Accuracy", result: "passed", severity: "none" },
+      {
+        check_id: "logo_absent",
+        name: "Logo Presence",
+        result: "passed",
+        severity: "none",
+      },
+      {
+        check_id: "logo_incorrect",
+        name: "Logo Accuracy",
+        result: "passed",
+        severity: "none",
+      },
     ],
     evidence: [],
     confidence: "high",
   };
   const qualitative: CheckAssessment = {
     checks: [
-      { check_id: "color_palette_off", name: "Color Scheme", result: "passed", severity: "none" },
-      { check_id: "brand_voice_drift", name: "Brand Voice", result: "failed", severity: "medium", explanation: "Too formal." },
+      {
+        check_id: "color_palette_off",
+        name: "Color Scheme",
+        result: "passed",
+        severity: "none",
+      },
+      {
+        check_id: "brand_voice_drift",
+        name: "Brand Voice",
+        result: "failed",
+        severity: "medium",
+        explanation: "Too formal.",
+      },
     ],
     evidence: [],
     confidence: "medium",
@@ -235,12 +321,22 @@ Deno.test("buildBrandResult: correction_type is 'rewrite' when only brand_voice_
 
 Deno.test("buildBrandResult: confidence is 'low' when either assessment is low", () => {
   const low: CheckAssessment = {
-    checks: [{ check_id: "logo_absent", name: "Logo", result: "passed", severity: "none" }],
+    checks: [{
+      check_id: "logo_absent",
+      name: "Logo",
+      result: "passed",
+      severity: "none",
+    }],
     evidence: [],
     confidence: "low",
   };
   const high: CheckAssessment = {
-    checks: [{ check_id: "color_palette_off", name: "Color", result: "passed", severity: "none" }],
+    checks: [{
+      check_id: "color_palette_off",
+      name: "Color",
+      result: "passed",
+      severity: "none",
+    }],
     evidence: [],
     confidence: "high",
   };
@@ -297,7 +393,11 @@ Deno.test("LLMCheckSchema: accepts explicit evidence items", () => {
     severity: "medium",
     confidence: "low",
     explanation: "Palette mismatch.",
-    evidence: [{ type: "visual", text: "Frame at 5s shows wrong colors.", timestamp_ms: 5000 }],
+    evidence: [{
+      type: "visual",
+      text: "Frame at 5s shows wrong colors.",
+      timestamp_ms: 5000,
+    }],
   });
 
   assertEquals(parsed.evidence.length, 1);

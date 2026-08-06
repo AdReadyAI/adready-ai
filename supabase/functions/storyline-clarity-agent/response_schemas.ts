@@ -70,7 +70,9 @@ export const StorylineUnifiedResponseSchema = z.object({
   suggested_correction: nullishToUndefined(z.string()),
   correction_type: nullishToUndefined(z.string()),
 });
-export type StorylineUnifiedResponse = z.infer<typeof StorylineUnifiedResponseSchema>;
+export type StorylineUnifiedResponse = z.infer<
+  typeof StorylineUnifiedResponseSchema
+>;
 
 export function extractJsonText(raw: string): string | null {
   if (typeof raw !== "string") return null;

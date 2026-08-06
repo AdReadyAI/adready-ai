@@ -130,7 +130,9 @@ export async function runStorylineAgent(
   let response: StorylineUnifiedResponse | null = null;
 
   try {
-    const rawText = await chat(unifiedStorylinePrompt(ctx, config.arcExpectation));
+    const rawText = await chat(
+      unifiedStorylinePrompt(ctx, config.arcExpectation),
+    );
     response = safeParseJson(rawText, StorylineUnifiedResponseSchema);
   } catch (err) {
     // Single-call failure/timeout fallback protection: degrades LLM checks to cannot_assess
@@ -184,7 +186,9 @@ export function buildChannelReadiness(
       PLACEMENT_MISMATCH.id,
       PLACEMENT_MISMATCH.name,
       "low",
-      `${rawPlacement.explanation ?? ""} (Severity capped to low: the analysis ` +
+      `${
+        rawPlacement.explanation ?? ""
+      } (Severity capped to low: the analysis ` +
         `input is too sparse to judge platform/visual fit confidently.)`.trim(),
     )
     : rawPlacement;

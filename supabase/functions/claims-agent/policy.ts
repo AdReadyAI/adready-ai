@@ -124,10 +124,11 @@ export async function checkAdWidePolicy(
   ocr: OCRSegment[],
   brief: ParsedCreativeBrief,
 ): Promise<AdWidePolicyAssessment> {
-  return chatJSON(
+  const response = await chatJSON(
     AD_WIDE_POLICY_SYSTEM_PROMPT,
     buildAdWidePolicyUserPrompt(transcript, ocr, brief),
     AdWidePolicyResponseSchema,
     "ad-wide-policy",
   );
+  return response;
 }

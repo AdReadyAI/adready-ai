@@ -77,7 +77,7 @@ Severity scale:
 4 = critical issue
 
 Return ONLY valid JSON matching the requested schema.
-`;
+`.trim();
 
 export function buildVisualAuditUserPrompt(
   context: {
