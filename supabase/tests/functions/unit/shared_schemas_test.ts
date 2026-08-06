@@ -1,4 +1,6 @@
 import { assertEquals } from "@std/assert";
+import { normalizeModelSubCheck } from "../../../functions/shared/modelResponse.ts";
+import { chatPayloadBytes } from "../../../functions/shared/llm.ts";
 import {
   AgentContextSchema,
   OCRSegmentSchema,
@@ -92,4 +94,31 @@ Deno.test("agent context accepts nullable Postgres evidence columns", () => {
   assertEquals(context.product_frames[0].location, undefined);
   assertEquals(context.logo_frames[0].reference_match, undefined);
   assertEquals(context.product_context?.raw_text, undefined);
+});
+
+Deno.test("model sub-check normalization abstains on an invalid failed severity", () => {
+  const result = normalizeModelSubCheck(
+    { result: "failed", severity: "none", explanation: "Model contradiction." },
+    "example_check",
+    "Example Check",
+    "Missing response.",
+    "Insufficient evidence.",
+    "Evidence indicates failure.",
+  );
+
+  assertEquals(result, {
+    check_id: "example_check",
+    name: "Example Check",
+    result: "cannot_assess",
+    severity: "cannot_assess",
+    explanation:
+      "The model returned an invalid failed/none result: Model contradiction.",
+  });
+});
+
+Deno.test("chat payload measurement reports encoded message bytes", () => {
+  assertEquals(
+    chatPayloadBytes([{ role: "user", content: "abc" }]),
+    new TextEncoder().encode('[{"role":"user","content":"abc"}]').byteLength,
+  );
 });
