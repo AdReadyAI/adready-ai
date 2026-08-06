@@ -38,7 +38,7 @@ export async function loadAgentContext(
   const supabase = createSupabaseServiceClient();
   const { data: request, error: requestError } = await supabase
     .from("requests")
-    .select("request_id, campaign_goal")
+    .select("request_id, batch_id, campaign_goal")
     .eq("request_id", requestId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -53,14 +53,12 @@ export async function loadAgentContext(
   const transcriptionId = processing?.find((row) =>
     row.task_name === "transcription"
   )?.id;
+  const contextId = processing?.find((row) => row.task_name === "context")?.id;
   const productDetectionId = processing?.find((row) =>
     row.task_name === "product_detection"
   )?.id;
   const logoDetectionId = processing?.find((row) =>
     row.task_name === "logo_detection"
-  )?.id;
-  const contextId = processing?.find((row) =>
-    row.task_name === "context"
   )?.id;
 
   const [
@@ -75,8 +73,8 @@ export async function loadAgentContext(
     qualityFramesResponse,
   ] = await Promise.all([
     supabase.from("parsed_creative_briefs").select("*").eq(
-      "request_id",
-      requestId,
+      "batch_id",
+      request!.batch_id,
     ).maybeSingle(),
     supabase.from("video_metadata").select("*").eq("request_id", requestId)
       .maybeSingle(),
