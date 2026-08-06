@@ -72,10 +72,12 @@ export async function loadAgentContext(
     logoFramesResponse,
     qualityFramesResponse,
   ] = await Promise.all([
-    supabase.from("parsed_creative_briefs").select("*").eq(
-      "batch_id",
-      request!.batch_id,
-    ).maybeSingle(),
+    request.batch_id
+      ? supabase.from("parsed_creative_briefs").select("*").eq(
+        "batch_id",
+        request.batch_id,
+      ).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
     supabase.from("video_metadata").select("*").eq("request_id", requestId)
       .maybeSingle(),
     supabase.from("product_context").select("*").eq("request_id", requestId)
