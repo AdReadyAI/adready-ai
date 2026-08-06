@@ -38,7 +38,7 @@ export async function loadAgentContext(
   const supabase = createSupabaseServiceClient();
   const { data: request, error: requestError } = await supabase
     .from("requests")
-    .select("request_id, campaign_goal, batch_id")
+    .select("request_id, batch_id, campaign_goal")
     .eq("request_id", requestId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -53,14 +53,12 @@ export async function loadAgentContext(
   const transcriptionId = processing?.find((row) =>
     row.task_name === "transcription"
   )?.id;
+  const contextId = processing?.find((row) => row.task_name === "context")?.id;
   const productDetectionId = processing?.find((row) =>
     row.task_name === "product_detection"
   )?.id;
   const logoDetectionId = processing?.find((row) =>
     row.task_name === "logo_detection"
-  )?.id;
-  const contextId = processing?.find((row) =>
-    row.task_name === "context"
   )?.id;
 
   const [

@@ -22,6 +22,7 @@ from analyzer.ocr.recognition import (
 from analyzer.types import Artifacts, VideoMetadata
 from analyzer.video_analyzer import VideoAnalyzer
 from app.ocr_runs import OcrRunLifecycle
+from app.supabase import Supabase
 
 
 @pytest.mark.integration
@@ -50,8 +51,6 @@ def test_jobs_queue_and_enqueue_function_exist() -> None:
 @pytest.mark.integration
 def test_video_processing_status_check_allows_processing() -> None:
     """The 'processing' status must be a valid in-flight state, not just success/error."""
-def test_ocr_evidence_bucket_is_private_and_worker_owned() -> None:
-    """Representative OCR frames remain private service-role evidence."""
     database_url = os.environ.get(
         "TEST_DATABASE_URL",
         "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
@@ -74,6 +73,20 @@ def test_ocr_evidence_bucket_is_private_and_worker_owned() -> None:
     assert "processing" in constraint_def
     assert "success" in constraint_def
     assert "error" in constraint_def
+
+
+@pytest.mark.integration
+def test_ocr_evidence_bucket_is_private_and_worker_owned() -> None:
+    """Representative OCR frames remain private service-role evidence."""
+    database_url = os.environ.get(
+        "TEST_DATABASE_URL",
+        "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+    )
+
+    with psycopg2.connect(database_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
                 SELECT public, file_size_limit, allowed_mime_types
                 FROM storage.buckets
                 WHERE id = 'ocr-evidence';
@@ -841,11 +854,12 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
         }
     )
 
-    class NoOpGenericPersistence:
-        """Confirm OCR bypasses the generalized task-result tables."""
+    class StatusOnlyGenericPersistence:
+        """Expose shared status while keeping OCR results in OCR-owned tables."""
 
         def __init__(self, cur, request_id):
             self.request_id = request_id
+            self._status = Supabase(cur, request_id)
 
         def product_url_requiring_context(self):
             """Keep this OCR scenario independent of Product Context work."""
@@ -859,6 +873,11 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
                 "logo_detection",
                 "context",
             }
+
+        def mark_processing(self, task_name):
+            """Use the production shared-status write for the pending OCR task."""
+            assert task_name == "ocr"
+            self._status.mark_processing(task_name)
 
         def persist_video_metadata(self, metadata, scene_result):
             """Accept main's metadata write outside generic task results."""
@@ -900,7 +919,7 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
     monkeypatch.setattr(
         processor,
         "Supabase",
-        NoOpGenericPersistence,
+        StatusOnlyGenericPersistence,
     )
 
     payload = {
@@ -947,6 +966,20 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
                 )
                 ocr_run_id, status = cursor.fetchone()
                 assert status == "completed"
+                cursor.execute(
+                    """
+                    SELECT status, result_table, error
+                    FROM video_processing
+                    WHERE request_id = %s
+                      AND task_name = 'ocr';
+                    """,
+                    (request_id,),
+                )
+                assert cursor.fetchone() == (
+                    "success",
+                    "ocr_results",
+                    None,
+                )
                 cursor.execute(
                     """
                     SELECT

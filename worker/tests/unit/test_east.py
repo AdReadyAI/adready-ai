@@ -2,6 +2,7 @@
 
 import hashlib
 import math
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -76,6 +77,15 @@ def clear_east_cache():
     east.load_east_network.cache_clear()
     yield
     east.load_east_network.cache_clear()
+
+
+def test_default_graph_path_targets_worker_packaged_artifact():
+    """The OCR loader resolves the graph under the worker root in every runtime."""
+    worker_root = Path(east.__file__).parents[2]
+
+    assert east.EAST_MODEL_PATH == (
+        worker_root / "assets" / "models" / "frozen_east_text_detection.pb"
+    )
 
 
 def test_missing_graph_is_ocr_specific_unavailability(tmp_path, monkeypatch):
