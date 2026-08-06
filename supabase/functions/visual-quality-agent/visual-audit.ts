@@ -59,27 +59,45 @@ export type VisualAuditFinding = z.infer<
 export async function auditVisualQuality(
   context: AgentContext,
 ): Promise<VisualAuditFinding[]> {
-  const response = await chat([
-    {
-      role: "system",
-      content: VISUAL_AUDIT_SYSTEM_PROMPT,
-    },
+  const userPrompt = buildVisualAuditUserPrompt({
+    video_metadata: context.video_metadata,
 
-    {
-      role: "user",
-      content: buildVisualAuditUserPrompt({
-        video_metadata: context.video_metadata,
+    ocr_segments: context.ocr_segments,
 
-        ocr_segments: context.ocr_segments,
+    visual_frames: context.visual_frames,
 
-        visual_frames: context.visual_frames,
+    visual_findings: context.quality_frames,
+  });
 
-        visual_findings: context.quality_frames,
-      }),
-    },
-  ]);
+  const MAX_ATTEMPTS = 3;
+  let parsed: unknown;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const messages: {
+      role: "system" | "assistant" | "user";
+      content: string;
+    }[] = [
+      { role: "system", content: VISUAL_AUDIT_SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ];
+    if (attempt > 0) {
+      messages.push({ role: "assistant", content: "(invalid JSON)" });
+      messages.push({
+        role: "user",
+        content:
+          "Your previous response was not valid JSON. Respond with ONLY valid JSON matching the requested schema, with no other text.",
+      });
+    }
+    const response = await chat(messages);
 
-  const parsed = parseLLMJson(response);
+    try {
+      parsed = parseLLMJson(response);
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (parsed === undefined) throw lastError;
 
   const validated = VisualAuditResponseSchema.parse(
     parsed,
@@ -110,6 +128,21 @@ export async function auditVisualQuality(
   return validated.findings;
 }
 
+function extractJsonSubstring(raw: string): string {
+  const candidates: string[] = [];
+  const arrStart = raw.indexOf("[");
+  const arrEnd = raw.lastIndexOf("]");
+  if (arrStart !== -1 && arrEnd > arrStart) {
+    candidates.push(raw.slice(arrStart, arrEnd + 1));
+  }
+  const objStart = raw.indexOf("{");
+  const objEnd = raw.lastIndexOf("}");
+  if (objStart !== -1 && objEnd > objStart) {
+    candidates.push(raw.slice(objStart, objEnd + 1));
+  }
+  return candidates.sort((a, b) => b.length - a.length)[0] ?? raw;
+}
+
 function parseLLMJson(
   content: string,
 ): unknown {
@@ -134,8 +167,14 @@ function parseLLMJson(
       cleaned,
     );
   } catch {
-    throw new Error(
-      "Visual quality LLM returned invalid JSON.",
-    );
+    try {
+      return JSON.parse(extractJsonSubstring(cleaned));
+    } catch {
+      throw new Error(
+        `Visual quality LLM returned invalid JSON. Raw response (first 300 chars): ${
+          content.slice(0, 300)
+        }`,
+      );
+    }
   }
 }

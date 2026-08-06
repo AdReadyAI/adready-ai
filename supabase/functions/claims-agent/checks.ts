@@ -119,6 +119,21 @@ const SubstantiationResponseSchema = z.array(z.object({
   confidence_score: z.number().min(0).max(1),
 }));
 
+function extractJsonSubstring(raw: string): string {
+  const candidates: string[] = [];
+  const arrStart = raw.indexOf("[");
+  const arrEnd = raw.lastIndexOf("]");
+  if (arrStart !== -1 && arrEnd > arrStart) {
+    candidates.push(raw.slice(arrStart, arrEnd + 1));
+  }
+  const objStart = raw.indexOf("{");
+  const objEnd = raw.lastIndexOf("}");
+  if (objStart !== -1 && objEnd > objStart) {
+    candidates.push(raw.slice(objStart, objEnd + 1));
+  }
+  return candidates.sort((a, b) => b.length - a.length)[0] ?? raw;
+}
+
 function parseLLMJson<T>(
   raw: string,
   schema: z.ZodType<T>,
@@ -131,12 +146,16 @@ function parseLLMJson<T>(
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripped);
-  } catch (e) {
-    throw new Error(
-      `${context}: LLM response was not valid JSON (${
-        (e as Error).message
-      }). Raw response (first 300 chars): ${raw.slice(0, 300)}`,
-    );
+  } catch {
+    try {
+      parsed = JSON.parse(extractJsonSubstring(stripped));
+    } catch (e) {
+      throw new Error(
+        `${context}: LLM response was not valid JSON (${
+          (e as Error).message
+        }). Raw response (first 300 chars): ${raw.slice(0, 300)}`,
+      );
+    }
   }
   const result = schema.safeParse(parsed);
   if (!result.success) {
@@ -145,6 +164,46 @@ function parseLLMJson<T>(
     );
   }
   return result.data;
+}
+
+const JSON_RETRY_CORRECTION =
+  "Your previous response was not valid JSON. Respond with ONLY valid JSON matching the requested schema, with no other text.";
+
+/**
+ * Sends one LLM check with retry-with-correction.
+ *
+ * The free model pool occasionally replies with prose instead of JSON.
+ * On a failed parse, the model is told its last reply was not valid JSON
+ * and asked again (max `maxAttempts` times).
+ */
+export async function chatJSON<T>(
+  systemPrompt: string,
+  userPrompt: string,
+  schema: z.ZodType<T>,
+  context: string,
+  maxAttempts = 3,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const messages: {
+      role: "system" | "assistant" | "user";
+      content: string;
+    }[] = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ];
+    if (attempt > 0) {
+      messages.push({ role: "assistant", content: "(invalid JSON)" });
+      messages.push({ role: "user", content: JSON_RETRY_CORRECTION });
+    }
+    const raw = await chat(messages);
+    try {
+      return parseLLMJson(raw, schema, context);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -200,11 +259,17 @@ export async function extractClaims(
   ocr: OCRSegment[],
 ): Promise<DerivedClaim[]> {
   if (transcript.length === 0 && ocr.length === 0) return [];
-  const raw = await chat([
-    { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
-    { role: "user", content: buildExtractionUserPrompt(transcript, ocr) },
-  ]);
-  return processExtractionResponse(raw, transcript, ocr);
+  const parsed = await chatJSON(
+    EXTRACTION_SYSTEM_PROMPT,
+    buildExtractionUserPrompt(transcript, ocr),
+    ExtractionResponseSchema,
+    "claims-extraction",
+  );
+  return processExtractionResponse(
+    JSON.stringify(parsed),
+    transcript,
+    ocr,
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -236,11 +301,13 @@ export async function triageClaims(
   brief: ParsedCreativeBrief,
 ): Promise<TriageResult[]> {
   if (claims.length === 0) return [];
-  const raw = await chat([
-    { role: "system", content: buildTriageSystemPrompt() },
-    { role: "user", content: buildTriageUserPrompt(claims, brief) },
-  ]);
-  return processTriageResponse(raw, claims);
+  const parsed = await chatJSON(
+    buildTriageSystemPrompt(),
+    buildTriageUserPrompt(claims, brief),
+    TriageResponseSchema,
+    "claims-triage",
+  );
+  return processTriageResponse(JSON.stringify(parsed), claims);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -282,12 +349,11 @@ export async function substantiateClaims(
   productContext: ProductContext | undefined,
 ): Promise<SubstantiationFinding[]> {
   if (claims.length === 0) return [];
-  const raw = await chat([
-    { role: "system", content: SUBSTANTIATION_SYSTEM_PROMPT },
-    {
-      role: "user",
-      content: buildSubstantiationUserPrompt(claims, brief, productContext),
-    },
-  ]);
-  return processSubstantiationResponse(raw, claims);
+  const parsed = await chatJSON(
+    SUBSTANTIATION_SYSTEM_PROMPT,
+    buildSubstantiationUserPrompt(claims, brief, productContext),
+    SubstantiationResponseSchema,
+    "claims-substantiation",
+  );
+  return processSubstantiationResponse(JSON.stringify(parsed), claims);
 }

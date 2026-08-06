@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { chat } from "../shared/index.ts";
+import { chatJSON } from "./checks.ts";
 import type {
   OCRSegment,
   ParsedCreativeBrief,
@@ -66,6 +66,21 @@ const AdWidePolicyResponseSchema = z.object({
   }),
 });
 
+function extractJsonSubstring(raw: string): string {
+  const candidates: string[] = [];
+  const arrStart = raw.indexOf("[");
+  const arrEnd = raw.lastIndexOf("]");
+  if (arrStart !== -1 && arrEnd > arrStart) {
+    candidates.push(raw.slice(arrStart, arrEnd + 1));
+  }
+  const objStart = raw.indexOf("{");
+  const objEnd = raw.lastIndexOf("}");
+  if (objStart !== -1 && objEnd > objStart) {
+    candidates.push(raw.slice(objStart, objEnd + 1));
+  }
+  return candidates.sort((a, b) => b.length - a.length)[0] ?? raw;
+}
+
 function parseLLMJson<T>(
   raw: string,
   schema: z.ZodType<T>,
@@ -78,12 +93,16 @@ function parseLLMJson<T>(
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripped);
-  } catch (e) {
-    throw new Error(
-      `${context}: LLM response was not valid JSON (${
-        (e as Error).message
-      }). Raw response (first 300 chars): ${raw.slice(0, 300)}`,
-    );
+  } catch {
+    try {
+      parsed = JSON.parse(extractJsonSubstring(stripped));
+    } catch (e) {
+      throw new Error(
+        `${context}: LLM response was not valid JSON (${
+          (e as Error).message
+        }). Raw response (first 300 chars): ${raw.slice(0, 300)}`,
+      );
+    }
   }
   const result = schema.safeParse(parsed);
   if (!result.success) {
@@ -105,12 +124,10 @@ export async function checkAdWidePolicy(
   ocr: OCRSegment[],
   brief: ParsedCreativeBrief,
 ): Promise<AdWidePolicyAssessment> {
-  const raw = await chat([
-    { role: "system", content: AD_WIDE_POLICY_SYSTEM_PROMPT },
-    {
-      role: "user",
-      content: buildAdWidePolicyUserPrompt(transcript, ocr, brief),
-    },
-  ]);
-  return processAdWidePolicyResponse(raw);
+  return chatJSON(
+    AD_WIDE_POLICY_SYSTEM_PROMPT,
+    buildAdWidePolicyUserPrompt(transcript, ocr, brief),
+    AdWidePolicyResponseSchema,
+    "ad-wide-policy",
+  );
 }
