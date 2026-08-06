@@ -1,16 +1,17 @@
 /**
  * Shared, request-scoped input loader for every evaluation agent.
  *
- * This is the authorization boundary for service-role reads: callers must pass
- * the authenticated user's ID, and the requested record must belong to them
- * before any related context is loaded.
+ * Agents are only ever invoked internally (see shared/internalAuth.ts), so
+ * there is no end user to scope reads to. userId is accepted only for the
+ * (currently unused) case of a future user-facing re-run path, in which case
+ * it re-adds the request-ownership check below.
  */
 import { createSupabaseServiceClient } from "./clients.ts";
 import { AgentContextSchema } from "./schemas.ts";
 import type { AgentContext } from "./schemas.ts";
 
 export type LoadAgentContextOptions = {
-  userId: string;
+  userId?: string;
 };
 
 function required<T>(value: T | null | undefined, name: string): T {
@@ -29,18 +30,17 @@ function required<T>(value: T | null | undefined, name: string): T {
  */
 export async function loadAgentContext(
   requestId: string,
-  { userId }: LoadAgentContextOptions,
+  { userId }: LoadAgentContextOptions = {},
 ): Promise<AgentContext> {
-  if (!userId) {
-    throw new Error("Authenticated user is required to load agent context.");
-  }
-
   const supabase = createSupabaseServiceClient();
-  const { data: request, error: requestError } = await supabase
+  let requestQuery = supabase
     .from("requests")
     .select("request_id, batch_id, campaign_goal")
-    .eq("request_id", requestId)
-    .eq("user_id", userId)
+    .eq("request_id", requestId);
+  if (userId) {
+    requestQuery = requestQuery.eq("user_id", userId);
+  }
+  const { data: request, error: requestError } = await requestQuery
     .maybeSingle();
   if (requestError) throw requestError;
   required(request, "Request");

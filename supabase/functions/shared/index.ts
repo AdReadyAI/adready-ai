@@ -1,6 +1,7 @@
 /** Shared Edge Function utilities compatibility barrel. */
 export * from "./clients.ts";
 export * from "./auth.ts";
+export * from "./internalAuth.ts";
 export * from "./cors.ts";
 export * from "./response.ts";
 export * from "./handler.ts";
