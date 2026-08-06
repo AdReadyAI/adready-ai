@@ -1,0 +1,72 @@
+{
+  "variant_id": "variant_001",
+  "review_id": "review_9f2a3b",
+
+  "transcript_segments": [
+    {"segment_id": "t1", "start_ms": 0,    "end_ms": 2000,  "text": "Tired of dull, tired-looking skin every morning?", "speaker": "narrator"},
+    {"segment_id": "t2", "start_ms": 2000, "end_ms": 5000,  "text": "I used to hate what I saw in the mirror.", "speaker": "narrator"},
+    {"segment_id": "t3", "start_ms": 5000, "end_ms": 9000,  "text": "Then I found GlowUp Serum, and everything changed.", "speaker": "narrator"},
+    {"segment_id": "t4", "start_ms": 9000, "end_ms": 12500, "text": "Clinically proven to brighten skin in just two weeks.", "speaker": "narrator"},
+    {"segment_id": "t5", "start_ms": 12500,"end_ms": 15000, "text": "Shop now at glowup dot com and get your glow back.", "speaker": "narrator"}
+  ],
+
+  "ocr_segments": [
+    {"segment_id": "o1", "start_ms": 0,     "end_ms": 2000,  "text": "Tired of dull skin?", "confidence": 0.94, "region": {"x": 40, "y": 800, "w": 600, "h": 90}},
+    {"segment_id": "o2", "start_ms": 5200,  "end_ms": 8800,  "text": "GlowUp Serum", "confidence": 0.97, "region": {"x": 120, "y": 1400, "w": 480, "h": 70}},
+    {"segment_id": "o3", "start_ms": 13000, "end_ms": 15000, "text": "SHOP NOW -> glowup.com", "confidence": 0.65, "region": {"x": 60, "y": 1500, "w": 700, "h": 100}}
+  ],
+
+  "keyframes": [
+    {"frame_id": "kf1", "timestamp_ms": 500,   "image_url": "https://cdn.example.com/frames/variant_001/kf1.jpg",  "scene_id": "s1"},
+    {"frame_id": "kf2", "timestamp_ms": 3000,  "image_url": "https://cdn.example.com/frames/variant_001/kf2.jpg",  "scene_id": "s2"},
+    {"frame_id": "kf3", "timestamp_ms": 5900,  "image_url": "https://cdn.example.com/frames/variant_001/kf3.jpg",  "scene_id": "s3"},
+    {"frame_id": "kf4", "timestamp_ms": 6100,  "image_url": "https://cdn.example.com/frames/variant_001/kf4.jpg",  "scene_id": "s3"},
+    {"frame_id": "kf5", "timestamp_ms": 6300,  "image_url": "https://cdn.example.com/frames/variant_001/kf5.jpg",  "scene_id": "s3"},
+    {"frame_id": "kf6", "timestamp_ms": 7500,  "image_url": "https://cdn.example.com/frames/variant_001/kf6.jpg",  "scene_id": "s3"},
+    {"frame_id": "kf7", "timestamp_ms": 10500, "image_url": "https://cdn.example.com/frames/variant_001/kf7.jpg", "scene_id": "s4"},
+    {"frame_id": "kf8", "timestamp_ms": 13500, "image_url": "https://cdn.example.com/frames/variant_001/kf8.jpg", "scene_id": "s5"}
+  ],
+
+  "scene_segments": [
+    {"scene_id": "s1", "start_ms": 0,     "end_ms": 2000,  "visual_description": "Close-up of a tired-looking woman in dim bathroom lighting, muted color palette, blue-gray tones.", "scene_label": "hook"},
+    {"scene_id": "s2", "start_ms": 2000,  "end_ms": 5000,  "visual_description": "Same woman looking into a mirror, frustrated expression, still dim lighting.", "scene_label": "problem"},
+    {"scene_id": "s3", "start_ms": 5000,  "end_ms": 9000,  "visual_description": "Bright, warm-lit shot of the GlowUp Serum bottle on a marble counter, hand picking it up. Contains a brief jump-cut around 6.0-6.3s.", "scene_label": "solution"},
+    {"scene_id": "s4", "start_ms": 9000,  "end_ms": 12500, "visual_description": "Split-screen before/after of the woman's skin, bright even lighting, warm tones.", "scene_label": "proof"},
+    {"scene_id": "s5", "start_ms": 12500, "end_ms": 15000, "visual_description": "End card, product bottle centered, logo bottom-right, on-screen URL text.", "scene_label": "cta"}
+  ],
+
+  "detected_claims": [
+    {"claim_id": "c1", "text": "Clinically proven to brighten skin in just two weeks.", "source": "transcript", "timestamp_ms": 9000}
+  ],
+
+  "detected_ctas": [
+    {"cta_id": "cta1", "text": "Shop now at glowup dot com", "source": "transcript", "timestamp_ms": 12500, "ocr_confidence": null, "contrast_ratio": null, "region_size": null},
+    {"cta_id": "cta2", "text": "SHOP NOW -> glowup.com", "source": "visual", "timestamp_ms": 13000, "ocr_confidence": 0.65, "contrast_ratio": 2.1, "region_size": 700}
+  ],
+
+  "product_moments": [
+    {"moment_id": "pm1", "start_ms": 5200,  "end_ms": 8800,  "frame_ids": ["kf3", "kf4", "kf5", "kf6"]},
+    {"moment_id": "pm2", "start_ms": 13000, "end_ms": 15000, "frame_ids": ["kf8"]}
+  ],
+
+  "video_metadata": {
+    "duration_ms": 15000,
+    "aspect_ratio": "9:16",
+    "resolution": "1080x1920",
+    "corruption_flag": false,
+    "dropped_frames": 0
+  },
+
+  "creative_brief": "GlowUp Serum 15-second TikTok ad. Required message: highlight the 'clinically proven brightening in 2 weeks' claim and drive viewers to glowup.com. Tone should be relatable and aspirational, targeting women 25-40 interested in skincare. Required CTA: 'Shop now at glowup.com'. Brand logo must appear in the final 3 seconds.",
+
+  "product_context": "GlowUp Serum is a vitamin C brightening serum. Product page lists ingredients and a 'visible results in 2-4 weeks with consistent use' claim based on an internal 4-week user survey (n=32), not a formal clinical study.",
+
+  "campaign_goal": "conversion",
+  "destination_platform": "tiktok",
+
+  "reference_assets": [
+    "https://cdn.example.com/reference/glowup_logo.png",
+    "https://cdn.example.com/reference/glowup_bottle_front.png",
+    "https://cdn.example.com/reference/brand_style_guide.pdf"
+  ]
+}

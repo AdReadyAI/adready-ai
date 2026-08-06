@@ -12,3 +12,9 @@
 
 functions/.env
 snippets/
+
+# Local-only benchmark harness + fixtures (not part of the deployed agents)
+scripts/
+
+# Deno lockfile (not tracked upstream on main)
+deno.lock

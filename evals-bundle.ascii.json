@@ -1,0 +1,386 @@
+{
+  "meta": {
+    "model": "anthropic/claude-sonnet-4.5",
+    "source": "local Supabase seed (DB-loaded AgentContext + persisted to agent_results)",
+    "ran_at": "2026-07-27T21:29:52.248731+00:00",
+    "seeds": [
+      {
+        "name": "mango_moon",
+        "request_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+      },
+      {
+        "name": "glowup_serum",
+        "request_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ]
+  },
+  "results": {
+    "brief_alignment_mango": [
+      {
+        "metric_id": "audience_fit",
+        "agent": "brief_alignment",
+        "metric_name": "Audience Fit",
+        "question": "Does the video speak to the intended audience's needs, motivations, or context?",
+        "result": "true",
+        "severity": "none",
+        "confidence": "high",
+        "evidence": [
+          {
+            "type": "brief",
+            "text": "TARGET AUDIENCE: Gen-Z, 18-24, snack and energy-drink buyers",
+            "timestamp": "N/A"
+          },
+          {
+            "type": "visual",
+            "text": "A young woman on a rooftop takes a sip and smiles; coral and teal color grade; can label clearly visible.",
+            "timestamp": "5000ms"
+          },
+          {
+            "type": "brief",
+            "text": "DESTINATION PLATFORM: tiktok",
+            "timestamp": "N/A"
+          },
+          {
+            "type": "transcript",
+            "text": "Thirsty? Meet Mango Moon.",
+            "timestamp": "0-2500ms"
+          }
+        ],
+        "explanation": "The ad targets Gen-Z effectively through multiple elements: features a young woman demographic match at 5000ms, uses TikTok-appropriate short-form vertical format, employs casual conversational language ('Thirsty? Meet Mango Moon'), and showcases trendy coral/teal color grading popular with this demographic. The rooftop setting and visual style align with Gen-Z social content aesthetics.",
+        "suggested_correction": "none",
+        "correction_type": "none",
+        "sub_checks": [
+          {
+            "check_id": "demographic_mismatch",
+            "name": "Demographic Profile Match",
+            "result": "passed",
+            "severity": "none",
+            "explanation": "Visual and tonal elements align with Gen-Z audience (18-24 year old shown, trendy color palette, casual language, TikTok platform)."
+          },
+          {
+            "check_id": "demographic_restricted",
+            "name": "Age Restriction Check",
+            "result": "passed",
+            "severity": "none",
+            "explanation": "Contains caffeine disclosure present at 4000-6000ms appropriately informs the target energy-drink buying audience without restricting access."
+          }
+        ]
+      },
+      {
+        "metric_id": "brief_adherence",
+        "agent": "brief_alignment",
+        "metric_name": "Brief Adherence",
+        "question": "Does the video satisfy the core campaign objective and required message from the creative brief?",
+        "result": "true",
+        "severity": "none",
+        "confidence": "high",
+        "evidence": [
+          {
+            "type": "brief",
+            "text": "REQUIRED MESSAGES: fun tropical energy, refreshing",
+            "timestamp": "N/A"
+          },
+          {
+            "type": "transcript",
+            "text": "Real tropical mango, a splash of citrus, and just enough kick to keep you going.",
+            "timestamp": "2500-8000ms"
+          },
+          {
+            "type": "transcript",
+            "text": "Ice cold, endlessly refreshing.",
+            "timestamp": "8000-12000ms"
+          },
+          {
+            "type": "brief",
+            "text": "REQUIRED CTAS: Try Mango Moon",
+            "timestamp": "N/A"
+          },
+          {
+            "type": "transcript",
+            "text": "Try Mango Moon today at mangomoon dot com.",
+            "timestamp": "12000-15000ms"
+          },
+          {
+            "type": "ocr",
+            "text": "Try Mango Moon",
+            "timestamp": "12500-15000ms"
+          },
+          {
+            "type": "ocr",
+            "text": "mangomoon.com",
+            "timestamp": "13000-15000ms"
+          },
+          {
+            "type": "brief",
+            "text": "Drive to mangomoon.com",
+            "timestamp": "N/A"
+          }
+        ],
+        "explanation": "All required brief elements are present: (1) 'fun tropical energy' message delivered through 'Real tropical mango...just enough kick to keep you going' at 2500-8000ms plus visual tropical mango slices at 9500ms; (2) 'refreshing' message explicitly stated as 'endlessly refreshing' at 8000-12000ms plus ice/condensation visuals at 500ms and 9500ms; (3) Required CTA 'Try Mango Moon' appears verbatim in both transcript (12000-15000ms) and on-screen text (12500-15000ms); (4) mangomoon.com destination shown in both spoken and visual formats (13000-15000ms OCR, 12000-15000ms transcript). Brand voice is playful and high-energy throughout.",
+        "suggested_correction": "none",
+        "correction_type": "none",
+        "sub_checks": [
+          {
+            "check_id": "required_message_missing",
+            "name": "Creative Brief Message Adherence",
+            "result": "passed",
+            "severity": "none",
+            "explanation": "Both required messages present: 'fun tropical energy' communicated via tropical mango mention and 'kick to keep you going' (2500-8000ms), 'refreshing' explicitly stated (8000-12000ms)."
+          },
+          {
+            "check_id": "objective_missed",
+            "name": "Campaign Objective Alignment",
+            "result": "passed",
+            "severity": "none",
+            "explanation": "Conversion goal supported with clear CTA 'Try Mango Moon' and destination URL mangomoon.com prominently displayed both audibly and visually in closing sequence."
+          }
+        ]
+      }
+    ],
+    "product_representation_mango": [
+      {
+        "metric_id": "product_clarity",
+        "agent": "product_representation",
+        "metric_name": "Product Clarity",
+        "question": "Can a viewer clearly identify what product is being advertised?",
+        "result": "true",
+        "severity": "none",
+        "confidence": "high",
+        "evidence": [
+          {
+            "type": "visual",
+            "text": "Product shown at 500ms: Close-up of a frosty Mango Moon can being pulled from ice, condensation dripping, bright sunlight - product hero shot with full visibility and sharp focus",
+            "timestamp": "500ms"
+          },
+          {
+            "type": "visual",
+            "text": "Product shown at 5000ms: Young woman on rooftop takes a sip and smiles, can label clearly visible, foreground static with sharp focus and full visibility",
+            "timestamp": "5000ms"
+          },
+          {
+            "type": "visual",
+            "text": "Product shown at 13500ms: End card with can centered on teal background, logo bottom-right matches reference",
+            "timestamp": "13500ms"
+          },
+          {
+            "type": "transcript",
+            "text": "Product name spoken: 'Meet Mango Moon'",
+            "timestamp": "0-2500ms"
+          },
+          {
+            "type": "transcript",
+            "text": "Product attributes spoken: 'Real tropical mango, a splash of citrus, and just enough kick to keep you going'",
+            "timestamp": "2500-8000ms"
+          },
+          {
+            "type": "ocr",
+            "text": "On-screen text shows 'Try Mango Moon' matching brief requirement",
+            "timestamp": "12500-15000ms"
+          }
+        ],
+        "explanation": "The product is clearly and consistently represented throughout the ad. The Mango Moon can appears in multiple contexts with excellent visibility and prominence, including a hero shot at opening, in-use consumption shot, and end-card branding. The product name is spoken clearly in the transcript, and key product attributes are communicated effectively.",
+        "correction_type": "none",
+        "sub_checks": [
+          {
+            "check_id": "product_not_shown",
+            "name": "Product Presence Check",
+            "result": "passed",
+            "severity": "none",
+            "explanation": "Product appears at multiple timestamps (500ms, 5000ms, 13500ms) with clear visibility and appropriate prominence throughout the ad"
+          },
+          {
+            "check_id": "product_obscured",
+            "name": "Product Visibility Check",
+            "result": "passed",
+            "severity": "none",
+            "explanation": "All product frames show sharp focus, full visibility, and clear framing. At 500ms and 5000ms the can label is described as clearly visible, and at 13500ms the can is centered on the end card"
+          },
+          {
+            "check_id": "product_appearance_wrong",
+            "name": "Product Appearance",
+            "result": "cannot_assess",
+            "severity": "cannot_assess",
+            "explanation": "No specific packaging description details (colors, graphics, can design) are provided in the brief beyond 'Mango Moon' as the product name. OCR and product context do not contradict any stated packaging requirements. Cannot make definitive judgment without detailed packaging specifications"
+          },
+          {
+            "check_id": "product_name_unspoken",
+            "name": "Brand Name Mention Check",
+            "result": "passed",
+            "severity": "none",
+            "explanation": "Product name 'Mango Moon' is clearly spoken at 0-2500ms ('Meet Mango Moon') and again at 12000-15000ms ('Try Mango Moon today')"
+          },
+          {
+            "check_id": "insufficient_visibility",
+            "name": "Product Screen-Time Coverage",
+            "result": "passed",
+            "severity": "none"
+          }
+        ]
+      }
+    ],
+    "brief_alignment_glowup": [
+      {
+        "metric_id": "audience_fit",
+        "agent": "brief_alignment",
+        "metric_name": "Audience Fit",
+        "question": "Does the video speak to the intended audience's needs, motivations, or context?",
+        "result": "true",
+        "severity": "none",
+        "confidence": "high",
+        "evidence": [
+          {
+            "type": "brief",
+            "text": "women 25-40 interested in skincare",
+            "timestamp": "N/A"
+          },
+          {
+            "type": "transcript",
+            "text": "Tired of dull skin every morning?",
+            "timestamp": "0-2500ms"
+          },
+          {
+            "type": "visual",
+            "text": "Close-up of a person in dim bathroom lighting looking at their reflection.",
+            "timestamp": "500ms"
+          }
+        ],
+        "explanation": "The ad targets the specified demographic effectively with skincare-focused messaging (dull skin concern), relatable tone (morning routine scenario), and aspirational clinical proof. The visual frame shows a relatable bathroom reflection moment that resonates with the target audience's daily experience.",
+        "correction_type": "none",
+        "sub_checks": [
+          {
+            "check_id": "demographic_mismatch",
+            "name": "Demographic Profile Match",
+            "result": "passed",
+            "severity": "none",
+            "explanation": "Content aligns with women 25-40 interested in skincare through relevant pain point and solution messaging."
+          },
+          {
+            "check_id": "demographic_restricted",
+            "name": "Age Restriction Check",
+            "result": "passed",
+            "severity": "none",
+            "explanation": "No content excludes or alienates the target demographic."
+          }
+        ]
+      },
+      {
+        "metric_id": "brief_adherence",
+        "agent": "brief_alignment",
+        "metric_name": "Brief Adherence",
+        "question": "Does the video satisfy the core campaign objective and required message from the creative brief?",
+        "result": "false",
+        "severity": "critical",
+        "confidence": "high",
+        "evidence": [
+          {
+            "type": "brief",
+            "text": "Brand logo must appear in the final 3 seconds.",
+            "timestamp": "N/A"
+          },
+          {
+            "type": "visual",
+            "text": "Close-up of a person in dim bathroom lighting looking at their reflection.",
+            "timestamp": "500ms"
+          },
+          {
+            "type": "brief",
+            "text": "visible brightening in 2-4 weeks",
+            "timestamp": "N/A"
+          },
+          {
+            "type": "transcript",
+            "text": "Clinically proven to brighten skin in just two weeks.",
+            "timestamp": "9000-12500ms"
+          }
+        ],
+        "explanation": "Critical failure: No visual frame descriptions provided for 12000-15000ms (final 3 seconds), so brand logo requirement cannot be verified as present. The required message states '2-4 weeks' but transcript says 'just two weeks' (missing the range's upper bound). Both the required CTA and destination URL are present and correct.",
+        "suggested_correction": "1) Ensure brand logo is visible in final 3 seconds (12000-15000ms). 2) Revise script from 'just two weeks' to 'two to four weeks' or 'in as little as two weeks' to accurately reflect the 2-4 week timeframe specified in the brief.",
+        "correction_type": "technical_fix",
+        "sub_checks": [
+          {
+            "check_id": "required_message_missing",
+            "name": "Creative Brief Message Adherence",
+            "result": "failed",
+            "severity": "medium",
+            "explanation": "The brief requires 'visible brightening in 2-4 weeks' but the transcript states 'just two weeks', omitting the upper bound of the timeframe and potentially setting unrealistic expectations."
+          },
+          {
+            "check_id": "objective_missed",
+            "name": "Campaign Objective Alignment",
+            "result": "failed",
+            "severity": "critical",
+            "explanation": "Brand logo requirement for final 3 seconds cannot be verified as no visual frame descriptions are provided for the 12000-15000ms window. This is a mandatory brand guideline violation."
+          }
+        ]
+      }
+    ],
+    "product_representation_glowup": [
+      {
+        "metric_id": "product_clarity",
+        "agent": "product_representation",
+        "metric_name": "Product Clarity",
+        "question": "Can a viewer clearly identify what product is being advertised?",
+        "result": "false",
+        "severity": "medium",
+        "confidence": "high",
+        "evidence": [
+          {
+            "type": "transcript",
+            "text": "Clinically proven to brighten skin in just two weeks.",
+            "timestamp": "9000-12500ms"
+          },
+          {
+            "type": "product_page",
+            "text": "Verified claims: visible results in 2-4 weeks with consistent use",
+            "timestamp": "N/A"
+          },
+          {
+            "type": "transcript",
+            "text": "No mention of 'GlowUp Serum' by name in the transcript",
+            "timestamp": "0-15000ms"
+          }
+        ],
+        "explanation": "The product representation has two issues: (1) The transcript claims 'just two weeks' for brightening results, while the verified product claim specifies '2-4 weeks with consistent use' - the transcript omits the range and the consistency requirement, potentially overpromising. (2) The product name 'GlowUp Serum' is never spoken in the transcript, which weakens brand recognition and product clarity.",
+        "suggested_correction": "Update transcript at 9000-12500ms to say 'Clinically proven to brighten skin in 2 to 4 weeks with consistent use' and add product name mention, e.g., 'Try GlowUp Serum' in the opening or closing.",
+        "correction_type": "rewrite",
+        "sub_checks": [
+          {
+            "check_id": "product_not_shown",
+            "name": "Product Presence Check",
+            "result": "passed",
+            "severity": "none",
+            "explanation": "Product bottle is shown at 7500ms in foreground with full visibility."
+          },
+          {
+            "check_id": "product_obscured",
+            "name": "Product Visibility Check",
+            "result": "passed",
+            "severity": "none",
+            "explanation": "Product frame indicates sharp focus and fully visible framing with no obstruction noted."
+          },
+          {
+            "check_id": "product_appearance_wrong",
+            "name": "Product Appearance",
+            "result": "cannot_assess",
+            "severity": "cannot_assess",
+            "explanation": "No specific product packaging description or relevant OCR text available to verify if the shown bottle matches the expected appearance."
+          },
+          {
+            "check_id": "product_name_unspoken",
+            "name": "Brand Name Mention Check",
+            "result": "failed",
+            "severity": "medium",
+            "explanation": "The product name 'GlowUp Serum' is never mentioned in the transcript. Only the website 'glowup dot com' is spoken, which provides brand context but not explicit product identification."
+          },
+          {
+            "check_id": "insufficient_visibility",
+            "name": "Product Screen-Time Coverage",
+            "result": "failed",
+            "severity": "medium",
+            "explanation": "Product first appears at 7500ms (after the 3000ms deadline)."
+          }
+        ]
+      }
+    ]
+  }
+}

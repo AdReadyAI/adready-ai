@@ -3,81 +3,41 @@
  *
  * Owned by: Yuchen Lin
  *
- * MAPPED METRICS & INTERNAL SUB-CHECKS (Mental Checklist):
+ * MAPPED METRICS & INTERNAL SUB-CHECKS:
  *
  *   1. product_clarity ("Can a viewer clearly identify what product is being advertised?")
  *      [ ] product_not_shown: Product packaging or product unit never visible.
  *      [ ] product_obscured: Product is in frame but heavily hidden, cropped, or too tiny to notice.
  *      [ ] product_appearance_wrong: Product color, label design, or shape does not match reference assets.
  *      [ ] product_name_unspoken: Brand or product name is never voiced or displayed in overlay text.
+ *      [ ] insufficient_visibility: Deterministic screen-time coverage check (computed, not model-graded).
  *
  * DB CONTEXT:
- *   - Loads product frames, logo frames, transcript/OCR, visual frames, and
- *     product context by request_id.
- *   - Uses product_frames, logo_frames, and frame-level visual context.
- *
- * OUTPUT JSON STRUCTURE:
- *   [
- *     {
- *       "metric_id": "product_clarity",
- *       "agent": "product_representation",
- *       "metric_name": "Product Clarity",
- *       "question": "Can a viewer clearly identify what product is being advertised?",
- *       "result": "false",
- *       "severity": "medium",
- *       "confidence": "high",
- *       "evidence": [
- *         {
- *           "type": "visual",
- *           "text": "Product packaging label is out of focus in all moments.",
- *           "timestamp": "00:12"
- *         }
- *       ],
- *       "explanation": "Product label is blurry and name is not clearly visible when packaging is shown.",
- *       "suggested_correction": "Ensure the high-resolution reference packaging assets are properly rendered and focused during the pack shot.",
- *       "correction_type": "edit_recommendation",
- *       "sub_checks": [
- *         {
- *           "check_id": "product_not_shown",
- *           "name": "Product Presence Check",
- *           "result": "passed",
- *           "severity": "none"
- *         },
- *         {
- *           "check_id": "product_obscured",
- *           "name": "Product Visibility Check",
- *           "result": "failed",
- *           "severity": "medium",
- *           "explanation": "Packaging labels are heavily blurred due to depth-of-field focus issues."
- *         },
- *         {
- *           "check_id": "product_appearance_wrong",
- *           "name": "Product Appearance",
- *           "result": "passed",
- *           "severity": "none"
- *         },
- *         {
- *           "check_id": "product_name_unspoken",
- *           "name": "Brand Name Mention Check",
- *           "result": "passed",
- *           "severity": "none"
- *         }
- *       ]
- *     }
- *   ]
+ *   - Orchestration invokes the agent with a request_id (AgentRunRequestSchema).
+ *   - The agent loads its AgentContext from Supabase by request_id via the shared
+ *     ownership-checked loader (shared/context.ts).
+ *   - LLM calls go through shared/llm.ts (OPENROUTER_MODEL from env — no hardcoded model).
+ *   - Results are validated and persisted to agent_results (+ evidence,
+ *     sub_checks) via shared/persist.ts.
  */
 
-// import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { AgentRunRequestSchema } from "../shared/schemas.ts";
-// import type { MetricResult } from "../shared/schemas.ts";
-// // import { chat } from "../shared/llm.ts";
+import {
+  createEdgeHandler,
+  loadAgentContext,
+  ok,
+  persistMetricResults,
+} from "../shared/index.ts";
+import { AgentRunRequestSchema } from "../shared/schemas.ts";
+import { runProductRepresentationAgent } from "./agent.ts";
 
-// createEdgeHandler("product-representation-agent", AgentRunRequestSchema, async (req, ctx) => {
-//   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by request_id.
-
-//   // TODO: Evaluate product and logo clarity from DB-loaded frame context.
-
-//   const results: MetricResult[] = [];
-//   return ok(results);
-// });
+createEdgeHandler(
+  "product-representation-agent",
+  AgentRunRequestSchema,
+  async (_req, ctx) => {
+    const requestId = ctx.body.request_id;
+    const context = await loadAgentContext(requestId, { userId: ctx.user.id });
+    const results = await runProductRepresentationAgent(context);
+    await persistMetricResults(requestId, results);
+    return ok(results);
+  },
+);
