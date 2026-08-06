@@ -26,6 +26,9 @@ function App() {
           <Route path="privacy" element={<PrivacyPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="upload" element={<UploadPage />} />
+            {/* The batch id lives in the URL so results survive a refresh and
+                can be shared or revisited. Router state does not survive either. */}
+            <Route path="result/:batchId" element={<ResultPage />} />
             <Route path="result" element={<ResultPage />} />
           </Route>
         </Route>

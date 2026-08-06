@@ -157,6 +157,7 @@ __pycache__/
 /.scratch/
 /AGENTS.md
 /CONTEXT.md
+/DEMO.md
 /docs/adr/
 /docs/agents/
 /docs/specs/
