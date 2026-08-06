@@ -61,7 +61,6 @@ export async function loadAgentContext(
     row.task_name === "logo_detection"
   )?.id;
 
-
   const [
     briefResponse,
     metadataResponse,

@@ -16,6 +16,10 @@ export function assertInternalCaller(req: Request): void {
   const secret = Deno.env.get("INTERNAL_TRIGGER_SECRET");
   const authHeader = req.headers.get("Authorization") ?? "";
   if (!secret || !timingSafeEqual(authHeader, `Bearer ${secret}`)) {
-    throw err("UNAUTHENTICATED", "Missing or invalid internal credentials", 401);
+    throw err(
+      "UNAUTHENTICATED",
+      "Missing or invalid internal credentials",
+      401,
+    );
   }
 }
