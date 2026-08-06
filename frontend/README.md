@@ -100,6 +100,19 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-05** — ResultPage now renders live data and the mock is gone. Route
+  is `/result/:batchId` (refreshable and shareable; `CampaignForm` navigates
+  there), progress is real — a video appears once it has a score row, polling
+  every 4s until the batch completes with a 5min cutoff. `status.ts` gains the
+  grey `unassessed` state and a `SEVERITY_STYLE` map; `IssueRow` no longer paints
+  `critical` the same amber as `medium`; `MetricBar` shows an unassessed
+  dimension as a dashed track and a dash, never a 0% bar; `RankCard` withholds
+  the green winner badge from an unscored video. The "ready to ship" empty state
+  is now gated on status, not issue count — filtered severities mean an empty
+  list no longer proves a creative is clean. Metric labels widened for the
+  longer database dimension names. The loading view is a deliberate placeholder
+  ("N of M scored") — real per-stage progress is a separate task, so this only
+  polls for the pipeline's last stage.
 - **2026-08-05** — Added the Result UI data layer. `lib/resultsTransform.ts` is
   pure (rows -> `VideoResult[]`: severity filtering, both sort orders, timestamp
   normalization, derived summaries) and `lib/results.ts` does the four queries.

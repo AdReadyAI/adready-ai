@@ -272,15 +272,19 @@ describe('assembleVideoResults', () => {
     })
 
     expect(partial.videos).toHaveLength(2)
-    expect(partial.pendingCount).toBe(2)
     expect(partial.totalCount).toBe(4)
     expect(partial.complete).toBe(false)
+    // Named, not just counted, so the processing view can list what's still running.
+    expect(partial.pending.map((video) => video.name)).toEqual([
+      'Video_3.mp4',
+      'Video_4.mp4',
+    ])
   })
 
   it('is complete only when every request has a score', () => {
     const done = assembleVideoResults({ requests, scores, dimensions: [], issues: [] })
     expect(done.complete).toBe(true)
-    expect(done.pendingCount).toBe(0)
+    expect(done.pending).toHaveLength(0)
   })
 
   it('is not complete for an empty batch', () => {

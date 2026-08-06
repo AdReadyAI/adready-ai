@@ -34,7 +34,7 @@ export async function fetchBatchResults(batchId: string): Promise<BatchResults> 
   // No requests means the batch id is wrong or isn't ours. Bail before firing
   // three more queries that can only come back empty.
   if (requestRows.length === 0) {
-    return { videos: [], pendingCount: 0, totalCount: 0, complete: false }
+    return { videos: [], pending: [], totalCount: 0, complete: false }
   }
 
   const requestIds = requestRows.map((row) => row.request_id)

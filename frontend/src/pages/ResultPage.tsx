@@ -1,223 +1,223 @@
-// Route: /result — Screen 3 "AI Review" (processing) → Screen 3b "Results &
-// Recommendations" (ranked videos, scorecard, issue deep-dive/repair center).
+// Route: /result/:batchId — the results view: ranked videos, scorecard, and the
+// issue deep-dive. Reads result_score_table / result_score_dimensions / issues
+// via lib/results.ts.
 //
-// The processing view's progress is a simulated easing animation — there's
-// no real job-status API yet, so it's mocked and just transitions to the
-// results view on its own after a short delay.
+// ⚠️ The processing view here is a deliberate PLACEHOLDER, not the real one.
+// The loading experience is owned by `task-pipeline-progress-view.md`, which
+// specifies a weighted progress view over all four pipeline stages plus a
+// `useRequestProgress` hook. This page only knows about the last stage — a video
+// appears once it has a result_score_table row — so it cannot show meaningful
+// movement during preprocessing, analysis, or evaluation.
+//
+// The handoff point is already compatible: that task's D11 completes when every
+// unit is terminal *including* the scoring row, which is exactly the `complete`
+// flag used here. So LiveProcessingView can replace ProcessingPlaceholder
+// without touching anything below it. Poll interval and timeout are set to that
+// task's D1/D9 values for the same reason.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import DownloadIcon from '../components/icons/DownloadIcon'
 import IssueRow from '../components/results/IssueRow'
 import MetricBar from '../components/results/MetricBar'
 import RankCard from '../components/results/RankCard'
 import { STATUS } from '../components/results/status'
-import { RESULTS } from '../mocks/results'
+import { fetchBatchResults } from '../lib/results'
+import type { BatchResults } from '../lib/results'
+import { getErrorMessage } from '../lib/errorMessage'
 
-// ---- processing state -------------------------------------------------
+// Matches task-pipeline-progress-view.md D1 (5000ms) and D9 (10 minutes) so the
+// real progress view is a drop-in swap rather than a behaviour change.
+const POLL_MS = 5000
+const POLL_TIMEOUT_MS = 10 * 60 * 1000
 
-interface VideoJob {
-  name: string
-  thumb: string // tailwind bg class
-  speed: number // relative animation speed
-}
-
-const VIDEOS: VideoJob[] = [
-  { name: 'Video_1.mp4', thumb: 'bg-violet-100 text-violet-500', speed: 0.8 },
-  { name: 'Video_2.mp4', thumb: 'bg-emerald-100 text-emerald-500', speed: 0.55 },
-  { name: 'Video_3.mp4', thumb: 'bg-amber-100 text-amber-500', speed: 1.2 },
-  { name: 'Video_4.mp4', thumb: 'bg-rose-100 text-rose-500', speed: 2.2 },
-]
-
-const CHECKS = [
-  { title: 'Claim accuracy', desc: 'Verifies all claims against your product page', threshold: 10 },
-  { title: 'Storyline clarity', desc: 'Checks narrative flow and scene coherence', threshold: 30 },
-  { title: 'Brief alignment', desc: 'Compares ad against your creative brief', threshold: 50 },
-  { title: 'Product representation', desc: 'Confirms product appears correctly', threshold: 70 },
-  { title: 'Visual quality', desc: 'Detects artifacts, text readability, CTA', threshold: 88 },
-]
-
-// Overall bar eases toward this cap, then a short pause simulates the
-// evaluation wrapping up before the results view takes over.
-const OVERALL_CAP = 97
-const TICK_MS = 15
-
-const PlayIcon = ({ className = '' }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
-    <path d="M8 5.5v13l11-6.5-11-6.5Z" />
-  </svg>
-)
-
-const CheckIcon = ({ className = '' }: { className?: string }) => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
-    <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-
-function VideoTile({ video, progress }: { video: VideoJob; progress: number }) {
-  const done = progress >= 100
+function Shell({ children }: { children: React.ReactNode }) {
+  // Full-bleed out of AppLayout's centered max-w-4xl main (the -mt-8 cancels
+  // that main's py-8 top padding) so the two-column layout has room to breathe.
   return (
-    <div>
-      <div className="flex items-center gap-3">
-        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${video.thumb}`}>
-          <PlayIcon className="h-5 w-5" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold text-slate-900">{video.name}</p>
-          <span
-            className={`mt-1 inline-block rounded-md px-2 py-0.5 text-xs font-medium ${
-              done ? 'bg-green-100 text-green-700' : 'bg-violet-100 text-violet-600'
-            }`}
-          >
-            {done ? 'Completed' : 'In Progress'}
-          </span>
-        </div>
-      </div>
-      <span className="mt-3 block h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-        <span
-          className={`block h-full rounded-full transition-[width] duration-300 ${done ? 'bg-green-500' : 'bg-violet-500'}`}
-          style={{ width: `${progress}%` }}
-        />
-      </span>
+    <div className="relative left-1/2 -mt-8 w-screen -translate-x-1/2 bg-[#f4f4f5] pb-16">
+      <main className="mx-auto max-w-[1240px] px-6 py-8">{children}</main>
     </div>
   )
 }
 
-function ProcessingView({ overall, videoProgress }: { overall: number; videoProgress: number[] }) {
+function Notice({
+  title,
+  body,
+  tone = 'neutral',
+}: {
+  title: string
+  body: string
+  tone?: 'neutral' | 'error'
+}) {
   return (
-    <main className="mx-auto max-w-[1240px] px-6 py-8">
-      <h1 className="text-3xl font-bold text-slate-900">Reviewing your ad creatives...</h1>
-      <p className="mt-1 text-slate-500">Hang tight — this usually takes 2–3 minutes. Don't close this tab.</p>
-
-      <div className="mt-6">
-        <span className="block h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
-          <span
-            className="block h-full rounded-full bg-violet-600 transition-[width] duration-300"
-            style={{ width: `${overall}%` }}
-          />
-        </span>
-        <p className="mt-2 text-sm font-medium text-slate-500">{Math.round(overall)}% complete</p>
+    <Shell>
+      <div
+        className={`rounded-2xl border px-6 py-10 text-center ${
+          tone === 'error' ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'
+        }`}
+      >
+        <p className="text-lg font-bold text-slate-900">{title}</p>
+        <p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">{body}</p>
+        <Link
+          to="/upload"
+          className="mt-6 inline-block rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
+        >
+          Back to upload
+        </Link>
       </div>
-
-      <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <div>
-          <div className="flex flex-col items-center py-6">
-            <div className="flex h-40 w-40 animate-pulse items-center justify-center rounded-full bg-slate-900">
-              <PlayIcon className="h-16 w-16 text-white" />
-            </div>
-            <p className="mt-6 text-xl font-bold text-slate-900">Analyzing your creatives...</p>
-            <p className="mt-1 text-slate-500">This will take a couple of minutes; sit back and relax.</p>
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 gap-x-10 gap-y-8 sm:grid-cols-2">
-            {VIDEOS.map((video, i) => (
-              <VideoTile key={video.name} video={video} progress={videoProgress[i]} />
-            ))}
-          </div>
-
-          <div className="mt-10 rounded-2xl border border-violet-200 bg-violet-50 px-6 py-5">
-            <p className="font-bold text-violet-700">Almost there!</p>
-            <p className="mt-1 text-sm text-violet-600">
-              We'll show you the ranked scorecard and repair recommendations once all checks are done.
-            </p>
-          </div>
-        </div>
-
-        <div className="h-fit rounded-2xl border border-slate-200 bg-white p-6">
-          <p className="text-lg font-bold text-slate-900">What we'll analyze</p>
-          <div className="mt-4 divide-y divide-slate-100">
-            {CHECKS.map((check) => {
-              const done = overall >= check.threshold
-              return (
-                <div key={check.title} className="flex items-start gap-3 py-4 first:pt-0 last:pb-0">
-                  <span
-                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
-                      done ? 'border-green-500 bg-green-500' : 'border-slate-300 bg-white'
-                    }`}
-                  >
-                    {done && <CheckIcon className="h-3 w-3 text-white" />}
-                  </span>
-                  <div>
-                    <p className={`font-semibold ${done ? 'text-slate-900' : 'text-slate-400'}`}>
-                      {check.title}
-                    </p>
-                    <p className={`mt-0.5 text-sm ${done ? 'text-slate-500' : 'text-slate-400'}`}>
-                      {check.desc}
-                    </p>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
-    </main>
+    </Shell>
   )
 }
 
-// ---- page ---------------------------------------------------------------
+/**
+ * PLACEHOLDER loading view. See the file header.
+ *
+ * Shows only what this page can honestly know: how many videos in the batch have
+ * produced a score row. That is the pipeline's final stage, so this sits at 0%
+ * for most of a real run. The weighted, per-stage progress view specified in
+ * task-pipeline-progress-view.md replaces this wholesale — it is intentionally
+ * small so there is little to unpick when that lands.
+ */
+function ProcessingPlaceholder({
+  data,
+  timedOut,
+}: {
+  data: BatchResults
+  timedOut: boolean
+}) {
+  const done = data.videos.length
+
+  return (
+    <Shell>
+      <h1 className="text-3xl font-bold text-slate-900">Reviewing your ad creatives...</h1>
+      <p className="mt-1 text-slate-500">
+        {done} of {data.totalCount} scored. This usually takes 2–3 minutes.
+      </p>
+
+      <div className="mt-8 rounded-2xl border border-slate-200 bg-white px-6 py-8">
+        <div className="flex items-center gap-4">
+          <span className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-slate-900" />
+          <div>
+            <p className="font-semibold text-slate-900">Analyzing your creatives…</p>
+            <p className="mt-0.5 text-sm text-slate-500">
+              {data.pending.length} still processing
+              {data.pending.length > 0 && `: ${data.pending.map((v) => v.name).join(', ')}`}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {timedOut && (
+        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5">
+          <p className="font-bold text-amber-700">This is taking longer than expected.</p>
+          <p className="mt-1 text-sm text-amber-700">
+            We've stopped checking for now. Reload the page to resume.
+          </p>
+        </div>
+      )}
+    </Shell>
+  )
+}
 
 export default function ResultPage() {
-  const [status, setStatus] = useState<'processing' | 'ready'>('processing')
-  const [overall, setOverall] = useState(8)
-  const [videoProgress, setVideoProgress] = useState(() => VIDEOS.map(() => 0))
+  const { batchId } = useParams<{ batchId: string }>()
 
-  // Simulated progress ticking, only while processing.
+  const [data, setData] = useState<BatchResults | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [timedOut, setTimedOut] = useState(false)
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
+  const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    if (!batchId) return null
+
+    try {
+      const next = await fetchBatchResults(batchId)
+      setData(next)
+      setError(null)
+      return next
+    } catch (err) {
+      // An error here is meaningful: RLS denials come back as empty arrays, not
+      // errors, so anything thrown is a genuine failure worth surfacing.
+      setError(getErrorMessage(err, 'Could not load your results'))
+      return null
+    }
+  }, [batchId])
+
   useEffect(() => {
-    if (status !== 'processing') return
-    const id = setInterval(() => {
-      setOverall((prev) => (prev >= OVERALL_CAP - 0.2 ? prev : prev + (OVERALL_CAP - prev) * 0.04))
-      setVideoProgress((prev) =>
-        prev.map((p, i) => {
-          if (p >= 100) return 100
-          const next = p + (100 - p) * 0.035 * VIDEOS[i].speed
-          return next >= 99.5 ? 100 : next
-        }),
-      )
-    }, TICK_MS)
-    return () => clearInterval(id)
-  }, [status])
+    if (!batchId) return
 
-  // Once the bar nears its cap, hold briefly then reveal results. This is a
-  // stand-in for the real "evaluation finished" signal.
-  useEffect(() => {
-    if (status !== 'processing' || overall < OVERALL_CAP - 0.2) return
-    const timeout = setTimeout(() => setStatus('ready'), 800)
-    return () => clearTimeout(timeout)
-  }, [status, overall])
+    let cancelled = false
+    let intervalId: ReturnType<typeof setInterval> | undefined
+    const startedAt = Date.now()
+    setTimedOut(false)
 
-  const [selectedRank, setSelectedRank] = useState(4) // Video_3 by default
-  const selected = useMemo(
-    () => RESULTS.find((video) => video.rank === selectedRank) ?? RESULTS[0],
-    [selectedRank],
-  )
-  const [expandedIssueId, setExpandedIssueId] = useState<string | null>(
-    selected.issues[0]?.id ?? null,
-  )
+    const stop = () => {
+      if (intervalId !== undefined) clearInterval(intervalId)
+      intervalId = undefined
+    }
 
-  const resultStatus = STATUS[selected.status]
+    const tick = async () => {
+      const next = await load()
+      if (cancelled) return
 
-  function selectVideo(rank: number) {
-    setSelectedRank(rank)
-    const next = RESULTS.find((video) => video.rank === rank)
+      if (next?.complete) {
+        stop()
+        return
+      }
+      if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+        setTimedOut(true)
+        stop()
+      }
+    }
+
+    void (async () => {
+      const first = await load()
+      // Only start an interval if the batch is actually still running — a
+      // finished batch should cost exactly one query.
+      if (cancelled || first === null || first.complete) return
+      intervalId = setInterval(() => void tick(), POLL_MS)
+    })()
+
+    return () => {
+      cancelled = true
+      stop()
+    }
+  }, [batchId, load])
+
+  const selected = useMemo(() => {
+    if (!data || data.videos.length === 0) return null
+    return data.videos.find((video) => video.requestId === selectedRequestId) ?? data.videos[0]
+  }, [data, selectedRequestId])
+
+  function selectVideo(requestId: string) {
+    setSelectedRequestId(requestId)
+    const next = data?.videos.find((video) => video.requestId === requestId)
     setExpandedIssueId(next?.issues[0]?.id ?? null)
   }
 
   function exportReport() {
+    if (!data) return
+
     const report = {
       generatedAt: new Date().toISOString(),
-      videos: RESULTS.map((video) => ({
+      batchId,
+      videos: data.videos.map((video) => ({
         rank: video.rank,
         name: video.name,
         score: video.score,
         status: STATUS[video.status].label,
         metrics: video.metrics,
         issues: video.issues.map((issue) => ({
+          metricId: issue.metricId,
+          severity: issue.severity,
           timestamp: issue.timestamp,
-          tag: issue.tag,
           detail: issue.detail,
         })),
       })),
     }
+
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -227,103 +227,170 @@ export default function ResultPage() {
     URL.revokeObjectURL(url)
   }
 
-  return (
-    // Full-bleed out of AppLayout's centered max-w-4xl main (the -mt-8 cancels
-    // that main's py-8 top padding) so the two-column layout has room to
-    // breathe, matching the Figma. The AppLayout header stays as the app chrome.
-    <div className="relative left-1/2 -mt-8 w-screen -translate-x-1/2 bg-[#f4f4f5] pb-16">
-      {status === 'processing' ? (
-        <ProcessingView overall={overall} videoProgress={videoProgress} />
-      ) : (
-        <main className="mx-auto max-w-[1240px] px-6 py-8">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-slate-900">Your results are ready.</h1>
-              <p className="mt-1 text-slate-500">
-                {RESULTS.length} videos reviewed. Here's how they ranked and what to fix.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={exportReport}
-              className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"
-            >
-              <DownloadIcon className="h-4 w-4" />
-              Export Report
-            </button>
-          </div>
+  // ---- the five states --------------------------------------------------
 
-          <p className="mb-3 mt-8 text-sm font-semibold text-slate-800">Creative Ranking</p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {RESULTS.map((video) => (
-              <RankCard
-                key={video.rank}
-                video={video}
-                selected={video.rank === selectedRank}
-                onSelect={() => selectVideo(video.rank)}
-              />
+  if (!batchId) {
+    return (
+      <Notice
+        title="No batch selected"
+        body="This page needs a batch to show. Start a new review from the upload page."
+      />
+    )
+  }
+
+  if (error) {
+    return <Notice title="Could not load your results" body={error} tone="error" />
+  }
+
+  if (!data) {
+    return (
+      <Shell>
+        <p className="text-slate-500">Loading your results…</p>
+      </Shell>
+    )
+  }
+
+  // Zero requests means the batch id is unknown or belongs to someone else.
+  // Those are indistinguishable from here by design: the RLS policies return an
+  // empty set rather than revealing that a batch exists but isn't yours.
+  if (data.totalCount === 0) {
+    return (
+      <Notice
+        title="Batch not found"
+        body="We couldn't find a review with this link, or it belongs to a different account."
+      />
+    )
+  }
+
+  if (!data.complete) {
+    return <ProcessingPlaceholder data={data} timedOut={timedOut} />
+  }
+
+  if (!selected) {
+    return (
+      <Notice
+        title="No results to show"
+        body="This batch finished without producing any scored videos."
+      />
+    )
+  }
+
+  const resultStatus = STATUS[selected.status]
+  const activeIssueId = expandedIssueId ?? selected.issues[0]?.id ?? null
+
+  return (
+    <Shell>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Your results are ready.</h1>
+          <p className="mt-1 text-slate-500">
+            {data.videos.length} {data.videos.length === 1 ? 'video' : 'videos'} reviewed. Here's
+            how they ranked and what to fix.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={exportReport}
+          className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"
+        >
+          <DownloadIcon className="h-4 w-4" />
+          Export Report
+        </button>
+      </div>
+
+      <p className="mb-3 mt-8 text-sm font-semibold text-slate-800">Creative Ranking</p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {data.videos.map((video) => (
+          <RankCard
+            key={video.requestId}
+            video={video}
+            selected={video.requestId === selected.requestId}
+            onSelect={() => selectVideo(video.requestId)}
+          />
+        ))}
+      </div>
+
+      <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+        <div>
+          <p className="text-sm font-medium text-slate-400">See results for...</p>
+          <h2 className="mt-1 text-4xl font-bold tracking-tight text-slate-900">{selected.name}</h2>
+
+          <p className="mb-5 mt-8 text-lg font-bold text-slate-900">Score Breakdown</p>
+          <div className="space-y-4">
+            {selected.metrics.map((metric) => (
+              <MetricBar key={metric.id} metric={metric} barClass={resultStatus.bar} />
             ))}
           </div>
 
-          <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-            <div>
-              <p className="text-sm font-medium text-slate-400">See results for...</p>
-              <h2 className="mt-1 text-4xl font-bold tracking-tight text-slate-900">{selected.name}</h2>
-
-              <p className="mb-5 mt-8 text-lg font-bold text-slate-900">Creative Ranking</p>
-              <div className="space-y-4">
-                {selected.metrics.map((metric) => (
-                  <MetricBar key={metric.label} metric={metric} barClass={resultStatus.bar} />
-                ))}
-              </div>
-
-              <div className="mt-10 flex justify-center">
-                <div
-                  className={`flex h-44 w-44 items-center justify-center rounded-full border-2 text-6xl font-bold ${resultStatus.bigCircle}`}
-                >
-                  {selected.score}
-                </div>
-              </div>
-
-              <p className="mt-8 text-lg leading-relaxed text-slate-600">{selected.summary}</p>
-              <div className="mt-5 flex items-center gap-4">
-                <span className="text-lg font-bold text-slate-800">Status</span>
-                <span className={`rounded-md px-3 py-1 text-lg font-bold ${resultStatus.pill}`}>
-                  {resultStatus.label}
-                </span>
-              </div>
-            </div>
-
-            <div className="border-l-4 border-red-500 pl-6">
-              <h3 className="text-2xl font-bold text-slate-900">Issue Deep Dive &amp; Repair Center</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                {selected.name} · {selected.issues.length} issue
-                {selected.issues.length === 1 ? '' : 's'} found · Sorted by severity
-              </p>
-
-              <div className="mt-6 space-y-4">
-                {selected.issues.length === 0 ? (
-                  <div className="rounded-xl border border-slate-200 bg-white px-5 py-10 text-center">
-                    <p className="text-sm font-medium text-slate-600">No issues found.</p>
-                    <p className="mt-1 text-sm text-slate-400">This creative is ready to ship.</p>
-                  </div>
-                ) : (
-                  selected.issues.map((issue) => (
-                    <IssueRow
-                      key={issue.id}
-                      issue={issue}
-                      expanded={expandedIssueId === issue.id}
-                      onToggle={() =>
-                        setExpandedIssueId(expandedIssueId === issue.id ? null : issue.id)
-                      }
-                    />
-                  ))
-                )}
-              </div>
+          <div className="mt-10 flex justify-center">
+            <div
+              className={`flex h-44 w-44 items-center justify-center rounded-full border-2 text-6xl font-bold ${resultStatus.bigCircle}`}
+            >
+              {selected.score ?? '—'}
             </div>
           </div>
-        </main>
-      )}
-    </div>
+
+          <p className="mt-8 text-lg leading-relaxed text-slate-600">{selected.summary}</p>
+          <div className="mt-5 flex items-center gap-4">
+            <span className="text-lg font-bold text-slate-800">Status</span>
+            <span className={`rounded-md px-3 py-1 text-lg font-bold ${resultStatus.pill}`}>
+              {resultStatus.label}
+            </span>
+          </div>
+        </div>
+
+        <div className="border-l-4 border-red-500 pl-6">
+          <h3 className="text-2xl font-bold text-slate-900">Issue Deep Dive &amp; Repair Center</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            {selected.name} · {selected.issues.length} issue
+            {selected.issues.length === 1 ? '' : 's'} found · Sorted by severity
+          </p>
+
+          <div className="mt-6 space-y-4">
+            {selected.issues.length === 0 ? (
+              <div className="rounded-xl border border-slate-200 bg-white px-5 py-10 text-center">
+                {/* Gated on status, not on issue count. Issues with severity
+                    `none` or `cannot_assess` are filtered out, so an empty list
+                    does not prove the creative is clean — claiming "ready to
+                    ship" on a High Risk video would be flatly wrong. */}
+                {selected.status === 'ready' ? (
+                  <>
+                    <p className="text-sm font-medium text-slate-600">No issues found.</p>
+                    <p className="mt-1 text-sm text-slate-400">This creative is ready to ship.</p>
+                  </>
+                ) : selected.status === 'unassessed' ? (
+                  <>
+                    <p className="text-sm font-medium text-slate-600">Nothing to show.</p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      This creative could not be assessed, so no issues were recorded.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-slate-600">
+                      No specific issues were listed.
+                    </p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      This creative still scored below the ready-to-ship threshold.
+                    </p>
+                  </>
+                )}
+              </div>
+            ) : (
+              selected.issues.map((issue) => (
+                <IssueRow
+                  key={issue.id}
+                  issue={issue}
+                  expanded={activeIssueId === issue.id}
+                  onToggle={() =>
+                    setExpandedIssueId(activeIssueId === issue.id ? null : issue.id)
+                  }
+                />
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </Shell>
   )
 }

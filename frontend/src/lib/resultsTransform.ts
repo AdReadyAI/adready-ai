@@ -46,11 +46,17 @@ export interface IssueRow {
   video_timestamp: string | null
 }
 
+/** A request in the batch with no score row yet — still being processed. */
+export interface PendingVideo {
+  requestId: string
+  name: string
+}
+
 export interface BatchResults {
   /** Videos that have a score row, ranked. Videos still processing are excluded. */
   videos: VideoResult[]
-  /** Requests in the batch with no score row yet. Drives the polling loop. */
-  pendingCount: number
+  /** Named rather than counted so the processing view can list what's still running. */
+  pending: PendingVideo[]
   totalCount: number
   /** True when every request in the batch has a score row. */
   complete: boolean
@@ -280,10 +286,14 @@ export function assembleVideoResults(input: {
   )
 
   const videos: VideoResult[] = []
+  const pending: PendingVideo[] = []
 
   for (const request of namedRequests) {
     const score = scoreByRequest.get(request.requestId)
-    if (!score) continue // still processing — counted as pending below
+    if (!score) {
+      pending.push({ requestId: request.requestId, name: request.name })
+      continue
+    }
 
     const status = toShipStatus(score.readiness_status)
     const videoIssues = toIssues(
@@ -312,9 +322,9 @@ export function assembleVideoResults(input: {
 
   return {
     videos,
-    pendingCount: requests.length - videos.length,
+    pending,
     totalCount: requests.length,
-    complete: requests.length > 0 && videos.length === requests.length,
+    complete: requests.length > 0 && pending.length === 0,
   }
 }
 
