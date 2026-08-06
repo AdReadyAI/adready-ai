@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { sanitizeFilename } from "../lib/sanitizeFilename";
 import { useAuth } from "../contexts/AuthContext";
 import CampaignSection from "../components/upload/campaign_section/CampaignSection";
 import Sidebar from "../components/upload/Sidebar";
@@ -18,24 +19,12 @@ export type UploadedImage = UploadedVideo & {
   kind: "logo" | "product_image";
 };
 
-// Supabase Storage rejects non-ASCII characters in object keys (400
-// InvalidKey), and an unencoded "#" truncates the URL at the fragment
-// delimiter before the request is even sent. Strip diacritics down to their
-// base letter, then replace anything else outside a safe ASCII set with "_" —
-// this is only used to build the storage path; the original name is kept
-// for display.
-function sanitizeFilename(name: string): string {
-  const withoutDiacritics = name.normalize("NFD").replace(/\p{Diacritic}/gu, "");
-  return withoutDiacritics.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_+/g, "_");
-}
-
 export default function UploadPage() {
   const { user } = useAuth();
   const [videos, setVideos] = useState<UploadedVideo[]>([]);
   const [productImages, setProductImages] = useState<UploadedImage[]>([]);
-  // Scopes storage paths for this whole upload session and groups the
-  // resulting `requests` rows together (see CampaignForm — one row per
-  // video, all sharing this batch_id).
+  // Groups everything uploaded in this session; CampaignForm creates one
+  // `requests` row per video and ties them together under this batchId.
   const [batchId] = useState(() => crypto.randomUUID());
 
   function handleFilesSelected(files: File[]) {
