@@ -102,6 +102,24 @@ async function createReviewFixture() {
   return { requestId, batchId, userId: user.id, email, password };
 }
 
+async function insertPassingAtomicMetrics(requestId: string): Promise<void> {
+  await executeFixtureSql(`
+    insert into public.agent_results (
+      request_id, agent, metric_id, metric_name, result, severity
+    ) values
+      ('${requestId}', 'brief_alignment', 'brief_adherence', 'Brief Adherence', 'true', 'none'),
+      ('${requestId}', 'brief_alignment', 'audience_fit', 'Audience Fit', 'true', 'none'),
+      ('${requestId}', 'claims_accuracy', 'product_truth', 'Product Truth', 'true', 'none'),
+      ('${requestId}', 'claims_accuracy', 'policy_compliance', 'Policy Compliance', 'true', 'none'),
+      ('${requestId}', 'product_representation', 'product_clarity', 'Product Clarity', 'true', 'none'),
+      ('${requestId}', 'storyline_clarity', 'channel_readiness', 'Channel Readiness', 'true', 'none'),
+      ('${requestId}', 'storyline_clarity', 'creative_effectiveness', 'Creative Effectiveness', 'true', 'none'),
+      ('${requestId}', 'brand_alignment', 'brand_fit', 'Brand Fit', 'true', 'none'),
+      ('${requestId}', 'cta_effectiveness', 'cta_clarity', 'CTA Clarity', 'true', 'none'),
+      ('${requestId}', 'visual_quality', 'production_readiness', 'Production Readiness', 'true', 'none');
+  `);
+}
+
 async function createUserToken(email: string, password: string) {
   const response = await fetch(
     `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
@@ -230,6 +248,107 @@ Deno.test("trusted agent requests reach body validation", async () => {
     );
 
     assertEquals(response.status, 400, `${agentName} validation status`);
+  }
+});
+
+Deno.test("score-result rejects callers without the internal secret", async () => {
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/score-result`, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer invalid-secret",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      request_id: crypto.randomUUID(),
+      batch_id: crypto.randomUUID(),
+    }),
+  });
+
+  assertEquals(response.status, 401);
+});
+
+Deno.test("score-result atomically persists a complete scorecard", async () => {
+  const fixture = await createReviewFixture();
+
+  try {
+    await insertPassingAtomicMetrics(fixture.requestId);
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/score-result`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${INTERNAL_TRIGGER_SECRET}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          request_id: fixture.requestId,
+          batch_id: fixture.batchId,
+        }),
+      },
+    );
+    assertEquals(response.status, 200, await response.text());
+
+    const scoreResponse = await serviceRequest(
+      `/rest/v1/result_score_table?request_id=eq.${fixture.requestId}` +
+        "&select=ad_readiness_pct,readiness_status",
+      { method: "GET" },
+    );
+    assertEquals(await scoreResponse.json(), [{
+      ad_readiness_pct: 100,
+      readiness_status: "Ready",
+    }]);
+
+    const dimensionsResponse = await serviceRequest(
+      `/rest/v1/result_score_dimensions?request_id=eq.${fixture.requestId}` +
+        "&select=dimension_id",
+      { method: "GET" },
+    );
+    assertEquals((await dimensionsResponse.json()).length, 6);
+
+    // A duplicate dimension fails after the parent upsert and delete begin.
+    // The database function must roll the entire attempted replacement back.
+    const invalidDimensions = Array.from({ length: 6 }, () => ({
+      request_id: fixture.requestId,
+      dimension_id: "claims_accuracy",
+      name: "Claims Accuracy",
+      score: 0,
+    }));
+    const failedReplacement = await fetch(
+      `${SUPABASE_URL}/rest/v1/rpc/replace_launch_readiness_scorecard`,
+      {
+        method: "POST",
+        headers: serviceHeaders,
+        body: JSON.stringify({
+          p_request_id: fixture.requestId,
+          p_batch_id: fixture.batchId,
+          p_config_version: "rollback-test",
+          p_ad_readiness_pct: 0,
+          p_readiness_status: "High Risk",
+          p_dimensions: invalidDimensions,
+        }),
+      },
+    );
+    assertEquals(failedReplacement.ok, false);
+
+    const preservedScoreResponse = await serviceRequest(
+      `/rest/v1/result_score_table?request_id=eq.${fixture.requestId}` +
+        "&select=config_version,ad_readiness_pct,readiness_status",
+      { method: "GET" },
+    );
+    assertEquals(await preservedScoreResponse.json(), [{
+      config_version: "0.3",
+      ad_readiness_pct: 100,
+      readiness_status: "Ready",
+    }]);
+
+    const preservedDimensionsResponse = await serviceRequest(
+      `/rest/v1/result_score_dimensions?request_id=eq.${fixture.requestId}` +
+        "&select=dimension_id",
+      { method: "GET" },
+    );
+    assertEquals((await preservedDimensionsResponse.json()).length, 6);
+  } finally {
+    await deleteReviewFixture(fixture.requestId, fixture.userId);
   }
 });
 
@@ -363,7 +482,6 @@ Deno.test("process-issues persists current failures for an owned batch", async (
     await deleteBatchFixture(fixture.batchId, fixture.userId);
   }
 });
-
 Deno.test("Claims Agent persists its Launch-Readiness Scorecard metrics", async () => {
   const fixture = await createReviewFixture();
   const modelStub = startModelStub(PASSING_CLAIMS_POLICY_RESPONSE);

@@ -430,6 +430,13 @@ verify_jwt = false
 [functions.visual-quality-agent]
 verify_jwt = false
 
+[functions.score-engine]
+import_map = "./deno.json"
+
+[functions.score-result]
+import_map = "./deno.json"
+verify_jwt = false
+
 [edge_runtime.secrets]
 # Evaluation-agent endpoints compare this value with the database trigger's
 # bearer token. Local and CI environments provide a non-production test value.

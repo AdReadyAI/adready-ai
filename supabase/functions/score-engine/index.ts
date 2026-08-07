@@ -3,54 +3,29 @@
  *
  * Stateless HTTP wrapper around the shared Score Engine v0.3.
  * Does not write to Postgres or invoke agents.
+ * For DB import + persist of result tables, use score-result instead.
  *
  * POST /functions/v1/score-engine
  * Body: { "metric_results": MetricInput[] }
- * Response: ScoreTablesOutput ({ result_table, issues })
+ * Requires user Bearer JWT (see functions/shared createEdgeHandler).
  */
+import { z } from "zod";
 import {
   parseScoreEngineRequest,
   scoreEngine,
-} from "../_shared/score-engine/index.ts";
+} from "../shared/score-engine/index.ts";
+import { createEdgeHandler } from "../shared/handler.ts";
+import { err, ok } from "../shared/response.ts";
 
-const CORS_HEADERS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const RequestSchema = z.object({
+  metric_results: z.array(z.record(z.unknown())),
+});
 
-function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      ...CORS_HEADERS,
-      "Content-Type": "application/json",
-    },
-  });
-}
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: CORS_HEADERS });
-  }
-
-  if (req.method !== "POST") {
-    return jsonResponse(405, { error: "Method not allowed. Use POST." });
-  }
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return jsonResponse(400, { error: "Invalid JSON body" });
-  }
-
-  const parsed = parseScoreEngineRequest(body);
+createEdgeHandler("score-engine", RequestSchema, (_req, ctx) => {
+  const parsed = parseScoreEngineRequest(ctx.body);
   if (!parsed.ok) {
-    return jsonResponse(400, { error: parsed.error });
+    return Promise.resolve(err("VALIDATION_ERROR", parsed.error, 400));
   }
 
-  const output = scoreEngine(parsed.metric_results);
-  return jsonResponse(200, output);
+  return Promise.resolve(ok(scoreEngine(parsed.metric_results)));
 });
