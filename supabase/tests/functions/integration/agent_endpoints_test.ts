@@ -66,11 +66,12 @@ async function createReviewFixture() {
   const requestId = crypto.randomUUID();
   const batchId = crypto.randomUUID();
   const email = `agent-integration-${requestId}@example.com`;
+  const password = "integration-password";
   const userResponse = await serviceRequest("/auth/v1/admin/users", {
     method: "POST",
     body: JSON.stringify({
       email,
-      password: "integration-password",
+      password,
       email_confirm: true,
     }),
   });
@@ -98,12 +99,36 @@ async function createReviewFixture() {
     );
   `);
 
-  return { requestId, userId: user.id };
+  return { requestId, batchId, userId: user.id, email, password };
+}
+
+async function createUserToken(email: string, password: string) {
+  const response = await fetch(
+    `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+    {
+      method: "POST",
+      headers: {
+        apikey: SERVICE_ROLE_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    },
+  );
+  assertEquals(response.status, 200);
+  const session = await response.json();
+  return session.access_token as string;
 }
 
 async function deleteReviewFixture(requestId: string, userId: string) {
   await executeFixtureSql(
     `delete from public.requests where request_id = '${requestId}';`,
+  );
+  await serviceRequest(`/auth/v1/admin/users/${userId}`, { method: "DELETE" });
+}
+
+async function deleteBatchFixture(batchId: string, userId: string) {
+  await executeFixtureSql(
+    `delete from public.requests where batch_id = '${batchId}';`,
   );
   await serviceRequest(`/auth/v1/admin/users/${userId}`, { method: "DELETE" });
 }
@@ -205,6 +230,137 @@ Deno.test("trusted agent requests reach body validation", async () => {
     );
 
     assertEquals(response.status, 400, `${agentName} validation status`);
+  }
+});
+
+Deno.test("process-issues cannot read another user's Review Request", async () => {
+  const callerFixture = await createReviewFixture();
+  const otherFixture = await createReviewFixture();
+
+  try {
+    const callerToken = await createUserToken(
+      callerFixture.email,
+      callerFixture.password,
+    );
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/process-issues`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${callerToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ request_id: otherFixture.requestId }),
+      },
+    );
+
+    assertEquals(response.status, 404);
+  } finally {
+    await deleteReviewFixture(callerFixture.requestId, callerFixture.userId);
+    await deleteReviewFixture(otherFixture.requestId, otherFixture.userId);
+  }
+});
+
+Deno.test("process-issues removes issues resolved by a passing rerun", async () => {
+  const fixture = await createReviewFixture();
+
+  try {
+    // Seed a passing current result plus its stale issue to model a metric that
+    // failed in an earlier evaluation and has since been corrected.
+    await executeFixtureSql(`
+      insert into public.agent_results (
+        request_id, agent, metric_id, metric_name, result, severity
+      ) values (
+        '${fixture.requestId}', 'integration-agent', 'resolved-metric',
+        'Resolved Metric', 'true', 'none'
+      );
+      insert into public.issues (
+        request_id, batch_id, metric_id, title, severity, confidence
+      )
+      select request_id, batch_id, 'resolved-metric', 'Resolved Metric',
+        'high', 'high'
+      from public.requests
+      where request_id = '${fixture.requestId}';
+    `);
+    const userToken = await createUserToken(fixture.email, fixture.password);
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/process-issues`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ request_id: fixture.requestId }),
+      },
+    );
+    assertEquals(response.status, 200);
+
+    const issuesResponse = await serviceRequest(
+      `/rest/v1/issues?request_id=eq.${fixture.requestId}&select=metric_id`,
+      { method: "GET" },
+    );
+    assertEquals(await issuesResponse.json(), []);
+  } finally {
+    await deleteReviewFixture(fixture.requestId, fixture.userId);
+  }
+});
+
+Deno.test("process-issues persists current failures for an owned batch", async () => {
+  const fixture = await createReviewFixture();
+  const secondRequestId = crypto.randomUUID();
+
+  try {
+    // A batch represents multiple Ad Creatives owned by one user. Seed failures
+    // on both requests and reverse the timestamp values so evidence_order—not
+    // timestamp truthiness—determines the user-facing timestamp.
+    await executeFixtureSql(`
+      insert into public.requests (
+        request_id, batch_id, user_id, video_storage_paths, campaign_goal
+      ) values (
+        '${secondRequestId}', '${fixture.batchId}', '${fixture.userId}',
+        array['integration/second-ad-creative.mp4'], 'Drive conversions'
+      );
+      insert into public.agent_results (
+        request_id, agent, metric_id, metric_name, result, severity, confidence
+      ) values
+        ('${fixture.requestId}', 'integration-agent', 'metric-one',
+          'Metric One', 'false', 'high', 'high'),
+        ('${secondRequestId}', 'integration-agent', 'metric-two',
+          'Metric Two', 'false', 'medium', 'medium');
+      insert into public.agent_result_evidence (
+        request_id, agent, metric_id, evidence_order, evidence_type,
+        evidence_text, evidence_timestamp
+      ) values
+        ('${fixture.requestId}', 'integration-agent', 'metric-one', 2,
+          'frame', 'Later evidence', '00:20'),
+        ('${fixture.requestId}', 'integration-agent', 'metric-one', 1,
+          'frame', 'First evidence', '00:05');
+    `);
+    const userToken = await createUserToken(fixture.email, fixture.password);
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/process-issues`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ batch_id: fixture.batchId }),
+      },
+    );
+    assertEquals(response.status, 200);
+
+    const issuesResponse = await serviceRequest(
+      `/rest/v1/issues?batch_id=eq.${fixture.batchId}&select=metric_id,video_timestamp&order=metric_id`,
+      { method: "GET" },
+    );
+    assertEquals(await issuesResponse.json(), [
+      { metric_id: "metric-one", video_timestamp: "00:05" },
+      { metric_id: "metric-two", video_timestamp: null },
+    ]);
+  } finally {
+    await deleteBatchFixture(fixture.batchId, fixture.userId);
   }
 });
 

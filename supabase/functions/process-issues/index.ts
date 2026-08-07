@@ -29,14 +29,14 @@ import {
 createEdgeHandler<ProcessIssuesInput>(
   "process-issues",
   ProcessIssuesSchema,
-  async (_req, { body }) => {
+  async (_req, { body, user }) => {
     const { request_id, batch_id } = body;
 
     const supabase = createSupabaseServiceClient();
 
     let queryRequests = supabase.from("requests").select(
       "request_id, batch_id",
-    );
+    ).eq("user_id", user.id);
 
     if (request_id) {
       queryRequests = queryRequests.eq("request_id", request_id);
@@ -74,7 +74,8 @@ createEdgeHandler<ProcessIssuesInput>(
       supabase
         .from("agent_result_evidence")
         .select("*")
-        .in("request_id", targetRequestIds),
+        .in("request_id", targetRequestIds)
+        .order("evidence_order", { ascending: true }),
     ]);
 
     if (resultsErr) return err("DB_ERROR", "Error fetching agent_results", 500);
@@ -93,11 +94,57 @@ createEdgeHandler<ProcessIssuesInput>(
     );
 
     if (issuesToInsert.length === 0) {
+      // The issues table is a current projection of failures, so a successful
+      // re-evaluation must remove issues that no longer fail.
+      const { error: deleteErr } = await supabase
+        .from("issues")
+        .delete()
+        .in("request_id", targetRequestIds);
+
+      if (deleteErr) {
+        return err("DB_ERROR", "Error removing resolved issues", 500);
+      }
+
       return ok({
         status: "success",
         message: "No failed metrics found.",
         inserted_count: 0,
       });
+    }
+
+    // Synchronize each Review Request independently because metric IDs are
+    // unique only within a request. This prevents resolved failures from
+    // lingering while preserving failures that remain current.
+    for (const targetRequestId of targetRequestIds) {
+      const currentMetricIds = new Set(
+        issuesToInsert
+          .filter((issue) => issue.request_id === targetRequestId)
+          .map((issue) => issue.metric_id),
+      );
+      const { data: existingIssues, error: existingIssuesErr } = await supabase
+        .from("issues")
+        .select("metric_id")
+        .eq("request_id", targetRequestId);
+
+      if (existingIssuesErr) {
+        return err("DB_ERROR", "Error fetching existing issues", 500);
+      }
+
+      const resolvedMetricIds = (existingIssues || [])
+        .map((issue) => issue.metric_id)
+        .filter((metricId) => !currentMetricIds.has(metricId));
+
+      if (resolvedMetricIds.length > 0) {
+        const { error: deleteErr } = await supabase
+          .from("issues")
+          .delete()
+          .eq("request_id", targetRequestId)
+          .in("metric_id", resolvedMetricIds);
+
+        if (deleteErr) {
+          return err("DB_ERROR", "Error removing resolved issues", 500);
+        }
+      }
     }
 
     const { data: insertedIssues, error: insertErr } = await supabase

@@ -74,6 +74,7 @@ Deno.test("buildIssuesSummary extracts timestamp from evidence", () => {
       request_id: "req-1",
       metric_id: "m-1",
       agent: "agent-1",
+      evidence_order: 1,
       evidence_timestamp: "00:15",
     },
   ];
@@ -82,6 +83,38 @@ Deno.test("buildIssuesSummary extracts timestamp from evidence", () => {
 
   assertEquals(issues.length, 1);
   assertEquals(issues[0].video_timestamp, "00:15");
+});
+
+Deno.test("buildIssuesSummary keeps the first evidence timestamp empty", () => {
+  const requestBatchMap = new Map([["req-1", "batch-1"]]);
+  const results: AgentResultRow[] = [
+    {
+      request_id: "req-1",
+      metric_id: "m-1",
+      agent: "agent-1",
+      result: "false",
+    },
+  ];
+  const evidences: EvidenceRow[] = [
+    {
+      request_id: "req-1",
+      metric_id: "m-1",
+      agent: "agent-1",
+      evidence_order: 1,
+      evidence_timestamp: "",
+    },
+    {
+      request_id: "req-1",
+      metric_id: "m-1",
+      agent: "agent-1",
+      evidence_order: 2,
+      evidence_timestamp: "00:15",
+    },
+  ];
+
+  const issues = buildIssuesSummary(results, [], evidences, requestBatchMap);
+
+  assertEquals(issues[0].video_timestamp, "");
 });
 
 Deno.test("buildIssuesSummary triggers if result is true but has failed subchecks", () => {

@@ -26,6 +26,7 @@ export interface EvidenceRow {
   request_id: string;
   metric_id: string;
   agent: string;
+  evidence_order: number;
   evidence_timestamp?: string | number | null;
 }
 
@@ -41,6 +42,14 @@ export interface IssueRecord {
   video_timestamp: string | number | null;
 }
 
+/**
+ * Project persisted evaluation results into the current issues shown by the
+ * Launch-Readiness Scorecard.
+ *
+ * Evidence rows must be supplied in ascending `evidence_order`. The first row
+ * for an evaluation result is used even when its timestamp is empty, matching
+ * the persisted evidence order rather than whichever timestamp is truthy.
+ */
 export function buildIssuesSummary(
   allResults: AgentResultRow[],
   failedSubChecks: SubCheckRow[],
@@ -49,6 +58,8 @@ export function buildIssuesSummary(
 ): IssueRecord[] {
   const issuesMap = new Map<string, IssueRecord>();
 
+  // Each result is the parent of its sub-checks and evidence. Iterating the
+  // parents ensures at most one user-facing issue is produced per metric.
   for (const result of allResults) {
     const resultFailedSubChecks = failedSubChecks.filter(
       (sc) =>
@@ -70,9 +81,7 @@ export function buildIssuesSummary(
         ev.metric_id === result.metric_id,
     );
 
-    const timestampEvidence = matchingEvidences.find((ev) =>
-      ev.evidence_timestamp
-    );
+    const timestampEvidence = matchingEvidences[0];
 
     const detailText = (result.explanation || "").trim();
 
