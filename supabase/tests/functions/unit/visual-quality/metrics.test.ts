@@ -6,7 +6,7 @@
  * deno test --config supabase/deno.json supabase/tests/functions/unit/visual-quality/metrics.test.ts
  */
 
-import { assert, assertEquals } from "@std/assert";
+import { assertEquals } from "@std/assert";
 
 import { evaluateProductionReadiness } from "../../../../functions/visual-quality-agent/metrics.ts";
 
@@ -83,16 +83,19 @@ Deno.test("aggregate: confidence excludes cannot_assess sub-checks from the aver
 
 Deno.test("aggregate: confidence is medium in the 0.5-0.8 band", () => {
   const findings = buildPassingFindings({
-    ai_artifacts: { severity: 1, confidence_score: 0.6 },
+    ai_artifacts: { severity: 1, confidence_score: 0.5 },
+    poor_framing_lighting: { confidence_score: 0.5 },
+    jarring_transitions: { confidence_score: 0.5 },
   });
-  // illegible_text defaults to confidence_score 0.7 with no ocr segments? No: ocr empty -> cannot_assess (excluded).
-  // Use an ocr segment so illegible_text participates with confidence 0.7.
+  // The two deterministic metadata checks contribute 1.0 each, the three
+  // visual findings contribute 0.5 each, and legibility contributes 0.7.
+  // Their average is 0.7, squarely inside the medium-confidence band.
   const contextWithOcr = buildContext({
     ocr_segments: [buildOcrSegment({ font_size_px: 20 })],
   });
   const result = evaluateProductionReadiness(contextWithOcr, findings);
 
-  assert(result.confidence === "high");
+  assertEquals(result.confidence, "medium");
 });
 
 Deno.test("aggregate: confidence is low when average confidence is below 0.5", () => {

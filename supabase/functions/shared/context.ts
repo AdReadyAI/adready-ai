@@ -46,7 +46,7 @@ export async function loadAgentContext(
   const { data: request, error: requestError } = await requestQuery
     .maybeSingle();
   if (requestError) throw requestError;
-  const requestRecord = required(request, "Request");
+  const loadedRequest = required(request, "Request");
 
   const { data: processing, error: processingError } = await supabase
     .from("video_processing")
@@ -75,10 +75,10 @@ export async function loadAgentContext(
     logoFramesResponse,
     qualityFramesResponse,
   ] = await Promise.all([
-    requestRecord.batch_id
+    loadedRequest.batch_id
       ? supabase.from("parsed_creative_briefs").select("*").eq(
         "batch_id",
-        requestRecord.batch_id,
+        loadedRequest.batch_id,
       ).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
     supabase.from("video_metadata").select("*").eq("request_id", requestId)
@@ -133,7 +133,7 @@ export async function loadAgentContext(
 
   return AgentContextSchema.parse({
     request_id: requestId,
-    campaign_goal: requestRecord.campaign_goal ?? "unknown",
+    campaign_goal: loadedRequest.campaign_goal ?? "unknown",
     destination_platform: brief.destination_platform,
     parsed_creative_brief: brief,
     video_metadata: required(metadataResponse.data, "Video metadata"),

@@ -18,6 +18,13 @@ export type UploadedImage = UploadedVideo & {
   kind: "logo" | "product_image";
 };
 
+// Client-side policy cap. Storage enforces its own limits server-side (the
+// `uploads` bucket's file_size_limit, and the stack-wide one in
+// supabase/config.toml — smallest wins), so raising this alone does nothing.
+// Checking here just fails an oversized file instantly instead of after a long
+// upload that ends in a 413.
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
+
 // Supabase Storage rejects non-ASCII characters in object keys (400
 // InvalidKey), and an unencoded "#" truncates the URL at the fragment
 // delimiter before the request is even sent. Strip diacritics down to their
@@ -46,11 +53,13 @@ export default function UploadPage() {
       file,
       filename: file.name,
       storagePath: null,
-      status: "uploading",
+      // Oversized files are parked as errors and never uploaded — Storage would
+      // reject them anyway.
+      status: file.size > MAX_UPLOAD_BYTES ? "error" : "uploading",
     }));
 
     setVideos((prev) => [...prev, ...newVideos]);
-    newVideos.forEach(uploadVideo);
+    newVideos.filter((v) => v.status === "uploading").forEach(uploadVideo);
   }
 
   async function uploadVideo(video: UploadedVideo) {
@@ -93,13 +102,13 @@ export default function UploadPage() {
         file,
         filename: file.name,
         storagePath: null,
-        status: "uploading",
+        status: file.size > MAX_UPLOAD_BYTES ? "error" : "uploading",
         kind: stem === "logo" ? "logo" : "product_image",
       };
     });
 
     setProductImages((prev) => [...prev, ...newImages]);
-    newImages.forEach(uploadProductImage);
+    newImages.filter((img) => img.status === "uploading").forEach(uploadProductImage);
   }
 
   async function uploadProductImage(image: UploadedImage) {
