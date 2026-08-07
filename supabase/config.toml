@@ -115,7 +115,9 @@ openai_api_key = "env(OPENAI_API_KEY)"
 [storage]
 enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
-file_size_limit = "500MiB"
+# Only read at `supabase start` — a running stack keeps whatever it booted with,
+# so restart after changing this.
+file_size_limit = "100MiB"
 
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]
@@ -126,7 +128,7 @@ file_size_limit = "500MiB"
 
 [storage.buckets.uploads]
 public = false
-file_size_limit = "500MiB"
+file_size_limit = "100MiB"
 allowed_mime_types = ["video/mp4", "video/quicktime", "video/webm", "image/png", "image/jpeg", "image/webp"]
 
 # Allow connections via S3 compatible clients
@@ -405,39 +407,43 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# All agent functions share the root Deno dependency configuration.
+# Evaluation agents are called only by the DB trigger with a shared secret, not a signed Supabase
+# JWT. Gateway JWT verification would reject the trigger before index.ts runs its own auth check.
 [functions.brand-alignment-agent]
-import_map = "./deno.json"
+verify_jwt = false
 
 [functions.brief-alignment-agent]
-import_map = "./deno.json"
+verify_jwt = false
 
 [functions.claims-agent]
-import_map = "./deno.json"
+verify_jwt = false
 
 [functions.cta-effectiveness-agent]
-import_map = "./deno.json"
-
-[functions.parse-creative-brief]
-import_map = "./deno.json"
+verify_jwt = false
 
 [functions.product-representation-agent]
-import_map = "./deno.json"
+verify_jwt = false
 
 [functions.storyline-clarity-agent]
-import_map = "./deno.json"
+verify_jwt = false
 
 [functions.visual-quality-agent]
-import_map = "./deno.json"
+verify_jwt = false
 
 [functions.score-engine]
 import_map = "./deno.json"
 
 [functions.score-result]
 import_map = "./deno.json"
+verify_jwt = false
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+[edge_runtime.secrets]
+# Evaluation-agent endpoints compare this value with the database trigger's
+# bearer token. Local and CI environments provide a non-production test value.
+INTERNAL_TRIGGER_SECRET = "env(INTERNAL_TRIGGER_SECRET)"
+OPENROUTER_API_KEY = "env(OPENROUTER_API_KEY)"
+OPENROUTER_MODEL = "env(OPENROUTER_MODEL)"
+OPENROUTER_BASE_URL = "env(OPENROUTER_BASE_URL)"
 [functions.shared]
 enabled = false
 

@@ -105,6 +105,7 @@ export const VisualFrameSchema = z.object({
       "poor_framing_lighting",
       "jarring_transitions",
       "illegible_text",
+      "intentional_film_grain",
     ]),
   ).default([]),
   shot_index: optionalDatabaseField(z.number().int().nonnegative()),

@@ -1,16 +1,16 @@
 /**
  * Shared, request-scoped input loader for every evaluation agent.
  *
- * This is the authorization boundary for service-role reads: callers must pass
- * the authenticated user's ID, and the requested record must belong to them
- * before any related context is loaded.
+ * Evaluation agents are invoked through the internal-authenticated handler, so
+ * they do not have an end-user identity to scope service-role reads with. A
+ * user ID remains optional for a future user-facing rerun path.
  */
 import { createSupabaseServiceClient } from "./clients.ts";
 import { AgentContextSchema } from "./schemas.ts";
 import type { AgentContext } from "./schemas.ts";
 
 export type LoadAgentContextOptions = {
-  userId: string;
+  userId?: string;
 };
 
 function required<T>(value: T | null | undefined, name: string): T {
@@ -23,27 +23,30 @@ function required<T>(value: T | null | undefined, name: string): T {
 /**
  * Loads and validates the common DB-backed input for one agent invocation.
  *
- * Agent-specific logic belongs in the calling agent. This function only
- * authorizes the request owner, reads common source tables, and returns the
- * canonical `AgentContext` after runtime validation.
+ * Agent-specific logic belongs in the calling agent. This function reads the
+ * common source tables after the caller has passed internal authentication, or
+ * optionally scopes the request to a user for a future user-facing rerun path.
+ * It returns the canonical `AgentContext` after runtime validation.
  */
 export async function loadAgentContext(
   requestId: string,
-  { userId }: LoadAgentContextOptions,
+  { userId }: LoadAgentContextOptions = {},
 ): Promise<AgentContext> {
-  if (!userId) {
-    throw new Error("Authenticated user is required to load agent context.");
+  const supabase = createSupabaseServiceClient();
+  let requestQuery = supabase
+    .from("requests")
+    .select("request_id, batch_id, campaign_goal")
+    .eq("request_id", requestId);
+
+  // User-facing reruns must still prove ownership before service-role reads.
+  if (userId) {
+    requestQuery = requestQuery.eq("user_id", userId);
   }
 
-  const supabase = createSupabaseServiceClient();
-  const { data: request, error: requestError } = await supabase
-    .from("requests")
-    .select("request_id, campaign_goal")
-    .eq("request_id", requestId)
-    .eq("user_id", userId)
+  const { data: request, error: requestError } = await requestQuery
     .maybeSingle();
   if (requestError) throw requestError;
-  required(request, "Request");
+  const loadedRequest = required(request, "Request");
 
   const { data: processing, error: processingError } = await supabase
     .from("video_processing")
@@ -53,14 +56,13 @@ export async function loadAgentContext(
   const transcriptionId = processing?.find((row) =>
     row.task_name === "transcription"
   )?.id;
+  const contextId = processing?.find((row) => row.task_name === "context")?.id;
   const productDetectionId = processing?.find((row) =>
     row.task_name === "product_detection"
   )?.id;
   const logoDetectionId = processing?.find((row) =>
     row.task_name === "logo_detection"
   )?.id;
-  const contextId = processing?.find((row) => row.task_name === "context")?.id;
-
   const [
     briefResponse,
     metadataResponse,
@@ -72,10 +74,12 @@ export async function loadAgentContext(
     logoFramesResponse,
     qualityFramesResponse,
   ] = await Promise.all([
-    supabase.from("parsed_creative_briefs").select("*").eq(
-      "request_id",
-      requestId,
-    ).maybeSingle(),
+    loadedRequest.batch_id
+      ? supabase.from("parsed_creative_briefs").select("*").eq(
+        "batch_id",
+        loadedRequest.batch_id,
+      ).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
     supabase.from("video_metadata").select("*").eq("request_id", requestId)
       .maybeSingle(),
     supabase.from("product_context").select("*").eq("request_id", requestId)
@@ -128,7 +132,7 @@ export async function loadAgentContext(
 
   return AgentContextSchema.parse({
     request_id: requestId,
-    campaign_goal: required(request, "Request").campaign_goal ?? "unknown",
+    campaign_goal: loadedRequest.campaign_goal ?? "unknown",
     destination_platform: brief.destination_platform,
     parsed_creative_brief: brief,
     video_metadata: required(metadataResponse.data, "Video metadata"),

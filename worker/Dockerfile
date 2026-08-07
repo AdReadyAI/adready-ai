@@ -40,4 +40,6 @@ CMD ["uv", "run", "python", "-m", "app.main"]
 
 FROM base AS runtime
 RUN uv sync --no-dev --frozen
-CMD ["uv", "run", "python", "-m", "app.main"]
+# Run the immutable environment built above so production startup never
+# resolves or installs development dependencies.
+CMD ["/app/.venv/bin/python", "-m", "app.main"]

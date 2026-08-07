@@ -9,7 +9,7 @@
  *
  * POST /functions/v1/score-result
  * Body: { "request_id": uuid, "batch_id": uuid }
- * Requires user Bearer JWT (see functions/shared createEdgeHandler).
+ * Requires the internal trigger secret used by pipeline orchestration.
  */
 import { z } from "zod";
 import {
@@ -18,7 +18,7 @@ import {
   scoreEngine,
 } from "../shared/score-engine/index.ts";
 import { createSupabaseServiceClient } from "../shared/clients.ts";
-import { createEdgeHandler } from "../shared/handler.ts";
+import { createInternalEdgeHandler } from "../shared/handler.ts";
 import { err, ok } from "../shared/response.ts";
 
 const RequestSchema = z.object({
@@ -26,7 +26,7 @@ const RequestSchema = z.object({
   batch_id: z.string().uuid(),
 });
 
-createEdgeHandler("score-result", RequestSchema, async (_req, ctx) => {
+createInternalEdgeHandler("score-result", RequestSchema, async (_req, ctx) => {
   const { request_id, batch_id } = ctx.body;
   const supabase = createSupabaseServiceClient();
 
@@ -56,7 +56,7 @@ createEdgeHandler("score-result", RequestSchema, async (_req, ctx) => {
 
   const { data: agentRows, error: agentError } = await supabase
     .from("agent_results")
-    .select("metric_id, result, severity")
+    .select("agent, metric_id, result, severity")
     .eq("request_id", request_id);
 
   if (agentError) {
@@ -79,39 +79,22 @@ createEdgeHandler("score-result", RequestSchema, async (_req, ctx) => {
     output.result_table,
   );
 
-  const { error: upsertOverallError } = await supabase
-    .from("result_score_table")
-    .upsert(overall, { onConflict: "request_id" });
+  const { error: persistError } = await supabase.rpc(
+    "replace_launch_readiness_scorecard",
+    {
+      p_request_id: request_id,
+      p_batch_id: batch_id,
+      p_config_version: overall.config_version,
+      p_ad_readiness_pct: overall.ad_readiness_pct,
+      p_readiness_status: overall.readiness_status,
+      p_dimensions: dimensions,
+    },
+  );
 
-  if (upsertOverallError) {
+  if (persistError) {
     return err(
-      "RESULT_UPSERT_FAILED",
-      `Failed to upsert result_score_table: ${upsertOverallError.message}`,
-      500,
-    );
-  }
-
-  const { error: deleteDimsError } = await supabase
-    .from("result_score_dimensions")
-    .delete()
-    .eq("request_id", request_id);
-
-  if (deleteDimsError) {
-    return err(
-      "RESULT_DIMENSIONS_CLEAR_FAILED",
-      `Failed to clear result_score_dimensions: ${deleteDimsError.message}`,
-      500,
-    );
-  }
-
-  const { error: insertDimsError } = await supabase
-    .from("result_score_dimensions")
-    .insert(dimensions);
-
-  if (insertDimsError) {
-    return err(
-      "RESULT_DIMENSIONS_INSERT_FAILED",
-      `Failed to insert result_score_dimensions: ${insertDimsError.message}`,
+      "SCORECARD_REPLACEMENT_FAILED",
+      `Failed to replace Launch-Readiness Scorecard: ${persistError.message}`,
       500,
     );
   }

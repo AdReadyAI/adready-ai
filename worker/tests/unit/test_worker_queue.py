@@ -1,5 +1,6 @@
 """Unit tests for the worker's durable-message lifecycle."""
 
+from contextlib import nullcontext
 from unittest.mock import Mock
 
 import pytest
@@ -20,7 +21,12 @@ def test_successful_message_is_processed_and_deleted(monkeypatch: pytest.MonkeyP
     worker_queue.set_running(True)
 
     # drain_queue loops until PGMQ reports no more messages, so the second row ends the drain.
-    processed = worker_queue.drain_queue(cursor)
+    # Heartbeat owns a separate database connection; this unit test supplies
+    # an inert boundary so it exercises only queue processing and deletion.
+    processed = worker_queue.drain_queue(
+        cursor,
+        heartbeat_factory=lambda **_kwargs: nullcontext(),
+    )
 
     assert processed == 1
     process_message.assert_called_once_with(
