@@ -162,8 +162,10 @@ def _run_analysis(
     tasks = {n: fn for n, fn in analyzer.analysis_tasks().items() if n not in done}
     logger.info("[job %s] Analysis tasks scheduled: %s", msg_id, list(tasks))
 
+    mark_processing = getattr(db, "mark_processing", None)
     for name in tasks:
-        db.mark_processing(name)
+        if mark_processing is not None:
+            mark_processing(name)
 
     results, errors = {}, {}
     with ThreadPoolExecutor(max_workers=max(len(tasks), 1)) as executor:
