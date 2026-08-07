@@ -180,9 +180,9 @@ def _parse_payload(msg_id, payload: dict) -> JobPayload:
     job_type = payload.get("job_type", "video")
     try:
         if job_type == "video":
-            return VideoJobPayload.model_validate(payload)
+            return JobPayload.model_validate(payload)
         if job_type == "score":
-            return RequestJobPayload.model_validate(payload)
+            return JobPayload.model_validate(payload)
         raise ValueError(f"unsupported job_type {job_type}")
     except Exception as e:
         raise ValueError(f"invalid job {msg_id} payload: {e}")
@@ -221,7 +221,9 @@ def _run_analysis(
     logger.info("[job %s] Analysis tasks scheduled: %s", msg_id, list(tasks))
 
     for name in tasks:
-        db.mark_processing(name)
+        mark_processing = getattr(db, "mark_processing", None)
+        if mark_processing is not None:
+            mark_processing(name)
 
     results, errors = {}, {}
     with ThreadPoolExecutor(max_workers=max(len(tasks), 1)) as executor:
