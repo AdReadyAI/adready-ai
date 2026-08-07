@@ -433,6 +433,9 @@ verify_jwt = false
 [functions.score-result]
 verify_jwt = false
 
+[functions.complete-evaluation]
+verify_jwt = false
+
 [edge_runtime.secrets]
 # Evaluation-agent endpoints compare this value with the database trigger's
 # bearer token. Local and CI environments provide a non-production test value.
@@ -470,6 +473,3 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
-
-[functions.process-issues-internal]
-verify_jwt = false

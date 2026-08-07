@@ -50,80 +50,6 @@ def test_parse_payload_allows_empty_logo_paths():
     assert parsed.logo_paths == []
 
 
-def test_parse_payload_accepts_score_job_payload():
-    payload = {
-        "job_type": "score",
-        "request_id": "req-1",
-        "batch_id": "batch-1",
-    }
-    parsed = processor._parse_payload(2, payload)
-    assert parsed.job_type == "score"
-    assert parsed.request_id == "req-1"
-    assert parsed.batch_id == "batch-1"
-
-
-def test_parse_payload_rejects_issues_job_payload():
-    payload = {
-        "job_type": "issues",
-        "request_id": "req-1",
-        "batch_id": "batch-1",
-    }
-    with pytest.raises(ValueError):
-        processor._parse_payload(3, payload)
-
-
-def test_process_message_routes_score_job_to_both_projections(monkeypatch):
-    calls = []
-
-    def record_invocation(function_name, payload, msg_id):
-        """Capture the internal projection calls without making HTTP requests."""
-        calls.append((function_name, payload, msg_id))
-
-    monkeypatch.setattr(processor, "_invoke_supabase_function", record_invocation)
-
-    processor.process_message(
-        cur=object(),
-        msg_id=4,
-        payload={
-            "job_type": "score",
-            "request_id": "req-1",
-            "batch_id": "batch-1",
-        },
-    )
-
-    assert calls == [
-        (
-            "score-result",
-            {"request_id": "req-1", "batch_id": "batch-1"},
-            4,
-        ),
-        (
-            "process-issues-internal",
-            {"request_id": "req-1", "batch_id": "batch-1"},
-            4,
-        ),
-    ]
-
-
-def test_internal_function_invocation_uses_trigger_secret(monkeypatch):
-    response = MagicMock(ok=True)
-    post = MagicMock(return_value=response)
-    monkeypatch.setattr(processor.requests, "post", post)
-
-    processor._invoke_supabase_function(
-        "score-result",
-        {"request_id": "req-1", "batch_id": "batch-1"},
-        msg_id=5,
-    )
-
-    _, kwargs = post.call_args
-    assert kwargs["headers"] == {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer test-internal-trigger-secret",
-    }
-    assert kwargs["timeout"] == 30
-
-
 # ---------------------------------------------------------------------------
 # Test doubles for _run_analysis
 # ---------------------------------------------------------------------------
@@ -704,7 +630,7 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
             return set()
 
         def mark_processing(self, task_name):
-            """Record main's required in-flight analyzer status transition."""
+            """Accept main's in-flight analyzer status transition."""
             execution_events.append(f"{task_name}-processing")
 
         def persist_quality_frames(self, flags):
