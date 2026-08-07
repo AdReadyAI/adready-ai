@@ -110,17 +110,27 @@
  *   Stage 4: Synthesis & Scoring - Map findings to production_readiness result.
  */
 
-// import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { AgentRunRequestSchema } from "../shared/schemas.ts";
-// import type { MetricResult } from "../shared/schemas.ts";
-// // import { chat } from "../shared/llm.ts";
+import { createInternalEdgeHandler, err, ok } from "../shared/index.ts";
+import { AgentRunRequestSchema } from "../shared/schemas.ts";
 
-// createEdgeHandler("visual-quality-agent", AgentRunRequestSchema, async (req, ctx) => {
-//   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by request_id.
+import { runVisualQualityAgent } from "./agent.ts";
 
-//   // TODO: Evaluate production readiness from DB-loaded metadata/OCR/frame context.
+createInternalEdgeHandler(
+  "visual-quality-agent",
+  AgentRunRequestSchema,
+  async (_req, ctx) => {
+    try {
+      return ok([
+        await runVisualQualityAgent(ctx.body),
+      ]);
+    } catch (error) {
+      console.error("VISUAL_QUALITY_FAILED:", error);
 
-//   const results: MetricResult[] = [];
-//   return ok(results);
-// });
+      return err(
+        "VISUAL_QUALITY_FAILED",
+        "Unexpected visual quality failure",
+        500,
+      );
+    }
+  },
+);
