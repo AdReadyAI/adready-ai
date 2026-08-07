@@ -98,7 +98,7 @@ def test_process_message_routes_score_job_to_both_projections(monkeypatch):
             4,
         ),
         (
-            "process-issues",
+            "process-issues-internal",
             {"request_id": "req-1", "batch_id": "batch-1"},
             4,
         ),

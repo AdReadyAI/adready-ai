@@ -133,7 +133,7 @@ def _process_score_job(msg_id, request_id, batch_id):
         msg_id,
     )
     _invoke_supabase_function(
-        "process-issues",
+        "process-issues-internal",
         {"request_id": request_id, "batch_id": batch_id},
         msg_id,
     )

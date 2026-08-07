@@ -267,6 +267,25 @@ Deno.test("score-result rejects callers without the internal secret", async () =
   assertEquals(response.status, 401);
 });
 
+Deno.test("internal issue projection rejects external callers", async () => {
+  const response = await fetch(
+    `${SUPABASE_URL}/functions/v1/process-issues-internal`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer invalid-secret",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        request_id: crypto.randomUUID(),
+        batch_id: crypto.randomUUID(),
+      }),
+    },
+  );
+
+  assertEquals(response.status, 401);
+});
+
 Deno.test("score-result atomically persists a complete scorecard", async () => {
   const fixture = await createReviewFixture();
 
@@ -377,6 +396,46 @@ Deno.test("process-issues cannot read another user's Review Request", async () =
   } finally {
     await deleteReviewFixture(callerFixture.requestId, callerFixture.userId);
     await deleteReviewFixture(otherFixture.requestId, otherFixture.userId);
+  }
+});
+
+Deno.test("internal orchestration projects issues for one Ad Creative", async () => {
+  const fixture = await createReviewFixture();
+
+  try {
+    await executeFixtureSql(`
+      insert into public.agent_results (
+        request_id, agent, metric_id, metric_name, result, severity, confidence
+      ) values (
+        '${fixture.requestId}', 'integration-agent', 'internal-metric',
+        'Internal Metric', 'false', 'high', 'high'
+      );
+    `);
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/process-issues-internal`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${INTERNAL_TRIGGER_SECRET}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          request_id: fixture.requestId,
+          batch_id: fixture.batchId,
+        }),
+      },
+    );
+    assertEquals(response.status, 200);
+
+    const issuesResponse = await serviceRequest(
+      `/rest/v1/issues?request_id=eq.${fixture.requestId}&select=metric_id`,
+      { method: "GET" },
+    );
+    assertEquals(await issuesResponse.json(), [{
+      metric_id: "internal-metric",
+    }]);
+  } finally {
+    await deleteReviewFixture(fixture.requestId, fixture.userId);
   }
 });
 
