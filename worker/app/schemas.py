@@ -3,7 +3,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, StrictStr, model_validator
 
 
-class JobPayloadBase(BaseModel):
+class JobPayload(BaseModel):
+    """Validated queue contract for either video processing or score projection."""
+
     model_config = ConfigDict(
         extra="forbid",
         strict=True,
@@ -11,23 +13,6 @@ class JobPayloadBase(BaseModel):
     )
 
     job_type: Literal["video", "score"] = "video"
-
-
-class VideoJobPayload(JobPayloadBase):
-    request_id: StrictStr
-    bucket: StrictStr
-    video_path: StrictStr
-    product_image_paths: list[str]
-    logo_paths: list[str]
-
-
-class RequestJobPayload(JobPayloadBase):
-    job_type: Literal["score"]
-    request_id: StrictStr
-    batch_id: StrictStr
-
-
-class JobPayload(JobPayloadBase):
     request_id: StrictStr
     bucket: StrictStr | None = None
     video_path: StrictStr | None = None

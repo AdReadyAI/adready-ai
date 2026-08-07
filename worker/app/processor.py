@@ -8,7 +8,7 @@ import requests
 from config.connection import get_storage_session
 from config.settings import (
     ANALYSIS_TASK_MAX_ATTEMPTS,
-    SUPABASE_SERVICE_ROLE_KEY,
+    INTERNAL_TRIGGER_SECRET,
     SUPABASE_URL,
     logger,
 )
@@ -19,7 +19,7 @@ from analyzer.ocr.configuration import OcrRuntimeConfig
 from analyzer.ocr.frame_artifacts import SupabaseOcrFrameArtifactStore
 from analyzer.ocr.roboflow import build_roboflow_easyocr_adapter_from_env
 from app.log_utils import phase
-from app.schemas import JobPayload, RequestJobPayload, VideoJobPayload
+from app.schemas import JobPayload
 from app.errors import TransientError
 from analyzer.output_models import TaskResult
 from app.product_context import ProductPageExtractor
@@ -121,7 +121,12 @@ def _process_video_job(cur, msg_id, payload):
 
 
 def _process_score_job(msg_id, request_id, batch_id):
-    logger.info("[job %s] Triggering score-result and process-issues for %s", msg_id, request_id)
+    """Run the two idempotent projections owned by the score job."""
+    logger.info(
+        "[job %s] Triggering score-result and process-issues for %s",
+        msg_id,
+        request_id,
+    )
     _invoke_supabase_function(
         "score-result",
         {"request_id": request_id, "batch_id": batch_id},
@@ -135,11 +140,11 @@ def _process_score_job(msg_id, request_id, batch_id):
 
 
 def _invoke_supabase_function(function_name, payload, msg_id):
+    """Invoke one internal Edge Function with the narrow trigger secret."""
     url = f"{SUPABASE_URL}/functions/v1/{function_name}"
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {INTERNAL_TRIGGER_SECRET}",
     }
     response = requests.post(url, json=payload, headers=headers, timeout=30)
     if not response.ok:
@@ -177,14 +182,9 @@ def _parse_payload(msg_id, payload: dict) -> JobPayload:
     if not isinstance(payload, dict):
         raise ValueError(f"invalid job {msg_id} payload: expected object")
 
-    job_type = payload.get("job_type", "video")
     try:
-        if job_type == "video":
-            return JobPayload.model_validate(payload)
-        if job_type == "score":
-            return JobPayload.model_validate(payload)
-        raise ValueError(f"unsupported job_type {job_type}")
-    except Exception as e:
+        return JobPayload.model_validate(payload)
+    except (TypeError, ValueError) as e:
         raise ValueError(f"invalid job {msg_id} payload: {e}")
 
 
@@ -221,9 +221,9 @@ def _run_analysis(
     logger.info("[job %s] Analysis tasks scheduled: %s", msg_id, list(tasks))
 
     for name in tasks:
-        mark_processing = getattr(db, "mark_processing", None)
-        if mark_processing is not None:
-            mark_processing(name)
+        # Persist every transition before dispatch so concurrent readers can
+        # distinguish active analysis from work that has not started.
+        db.mark_processing(name)
 
     results, errors = {}, {}
     with ThreadPoolExecutor(max_workers=max(len(tasks), 1)) as executor:

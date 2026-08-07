@@ -264,6 +264,14 @@ supabase start
 deno task --config supabase/deno.json test:integration
 ```
 
+Each deployable function keeps its dependency mappings in
+`supabase/functions/<function-name>/deno.json`. Supabase discovers that file automatically, so do
+not add `import_map` entries to `supabase/config.toml` or pass `--import-map` when serving or
+deploying functions. When adding a function, copy the dependency mappings from
+`supabase/deno.json` into its local `deno.json`; keep both files synchronized when dependencies are
+added or upgraded. The root configuration remains the source for repository-wide Deno tasks,
+formatting, linting, and tests.
+
 The files under `supabase/tests/functions/` are ignored templates until the first Edge Functions
 are implemented. Unit tests should exercise pure validation and workflow logic without services.
 Integration tests should invoke locally served functions and verify Auth, RLS, database, Storage,

@@ -1,12 +1,12 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { SCORE_CONFIG_V0_3 } from "../../../functions/_shared/score-engine/config.ts";
+import { SCORE_CONFIG_V0_3 } from "../../../functions/shared/score-engine/config.ts";
 import {
   clampSeverity,
   metricScore,
   normalizeConfidence,
   scoreEngine,
-} from "../../../functions/_shared/score-engine/scoreEngine.ts";
-import type { MetricInput } from "../../../functions/_shared/score-engine/types.ts";
+} from "../../../functions/shared/score-engine/scoreEngine.ts";
+import type { MetricInput } from "../../../functions/shared/score-engine/types.ts";
 
 /** Proposal v0.3 §8 mini-example (Plan A). */
 const MINI_EXAMPLE: MetricInput[] = [

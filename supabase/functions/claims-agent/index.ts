@@ -118,17 +118,25 @@
  *   ]
  */
 
-// import { createEdgeHandler, ok } from "../shared/index.ts";
-// import { AgentRunRequestSchema } from "../shared/schemas.ts";
-// import type { MetricResult } from "../shared/schemas.ts";
-// // import { chat } from "../shared/llm.ts";
+import { createInternalEdgeHandler, err, ok } from "../shared/index.ts";
+import { AgentRunRequestSchema } from "../shared/schemas.ts";
 
-// createEdgeHandler("claims-agent", AgentRunRequestSchema, async (req, ctx) => {
-//   const _run = ctx.body;
-//   // TODO: Load DB-backed agent context by request_id.
+import { runClaimsAgent } from "./agent.ts";
 
-//   // TODO: Extract claims from transcript/OCR and evaluate against product context.
+createInternalEdgeHandler(
+  "claims-agent",
+  AgentRunRequestSchema,
+  async (_req, ctx) => {
+    try {
+      return ok(await runClaimsAgent(ctx.body));
+    } catch (error) {
+      console.error("CLAIMS_ACCURACY_FAILED:", error);
 
-//   const results: MetricResult[] = [];
-//   return ok(results);
-// });
+      return err(
+        "CLAIMS_ACCURACY_FAILED",
+        "Unexpected claims accuracy failure",
+        500,
+      );
+    }
+  },
+);

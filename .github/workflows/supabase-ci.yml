@@ -64,6 +64,21 @@ jobs:
         with:
           deno-version-file: .dvmrc
 
+      - name: Validate Edge Function dependency configs
+        run: |
+          for entrypoint in supabase/functions/*/index.ts; do
+            function_dir="$(dirname "$entrypoint")"
+            if [[ "$(basename "$function_dir")" == _* || "$(basename "$function_dir")" == "shared" ]]; then
+              # Shared modules are bundled through a function entry point and are not deployed independently.
+              continue
+            fi
+            # Each deployable function must carry the dependency map Supabase discovers at deploy time.
+            function_config="$function_dir/deno.json"
+            test -f "$function_config"
+            jq --exit-status --slurpfile root supabase/deno.json \
+              '.imports == $root[0].imports' "$function_config"
+          done
+
       - name: Check Edge Function formatting
         run: deno fmt --config supabase/deno.json --check
 
@@ -76,6 +91,11 @@ jobs:
   edge-integration-tests:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      INTERNAL_TRIGGER_SECRET: integration-trigger-secret
+      OPENROUTER_API_KEY: integration-key
+      OPENROUTER_MODEL: integration-model
+      OPENROUTER_BASE_URL: http://host.docker.internal:54329
 
     steps:
       - name: Check out repository
@@ -94,6 +114,12 @@ jobs:
       # The full stack serves Edge Functions and exposes Auth, Storage, and Postgres locally.
       - name: Start local Supabase stack
         run: supabase start
+
+      - name: Export local integration credentials
+        run: |
+          supabase status --output json \
+            | jq -r '"DB_URL=\(.DB_URL)\nSERVICE_ROLE_KEY=\(.SERVICE_ROLE_KEY)"' \
+            >> "$GITHUB_ENV"
 
       - name: Run Edge Function integration tests
         run: deno task --config supabase/deno.json test:integration

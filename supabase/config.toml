@@ -407,43 +407,43 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# All agent functions share the root Deno dependency configuration.
-# Called only by the DB trigger with a shared secret, not a signed Supabase
-# JWT — gateway JWT verification would reject it before our own auth check
-# in index.ts ever runs.
+# Evaluation agents are called only by the DB trigger with a shared secret, not a signed Supabase
+# JWT. Gateway JWT verification would reject the trigger before index.ts runs its own auth check.
 [functions.brand-alignment-agent]
-import_map = "./deno.json"
 verify_jwt = false
 
 [functions.brief-alignment-agent]
-import_map = "./deno.json"
 verify_jwt = false
 
 [functions.claims-agent]
-import_map = "./deno.json"
 verify_jwt = false
 
 [functions.cta-effectiveness-agent]
-import_map = "./deno.json"
 verify_jwt = false
 
-[functions.parse-creative-brief]
-import_map = "./deno.json"
-
 [functions.product-representation-agent]
-import_map = "./deno.json"
 verify_jwt = false
 
 [functions.storyline-clarity-agent]
-import_map = "./deno.json"
 verify_jwt = false
 
 [functions.visual-quality-agent]
+verify_jwt = false
+
+[functions.score-engine]
+import_map = "./deno.json"
+
+[functions.score-result]
 import_map = "./deno.json"
 verify_jwt = false
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+[edge_runtime.secrets]
+# Evaluation-agent endpoints compare this value with the database trigger's
+# bearer token. Local and CI environments provide a non-production test value.
+INTERNAL_TRIGGER_SECRET = "env(INTERNAL_TRIGGER_SECRET)"
+OPENROUTER_API_KEY = "env(OPENROUTER_API_KEY)"
+OPENROUTER_MODEL = "env(OPENROUTER_MODEL)"
+OPENROUTER_BASE_URL = "env(OPENROUTER_BASE_URL)"
 [functions.shared]
 enabled = false
 
