@@ -10,7 +10,12 @@ def set_running(value):
     running = value
 
 
-def drain_queue(cur):
+def drain_queue(cur, heartbeat_factory=HeartBeat):
+    """Process available messages while keeping each delivery lease alive.
+
+    ``heartbeat_factory`` is the database-boundary seam used by unit tests;
+    production callers use :class:`HeartBeat` by default.
+    """
     processed = 0
     while running:
         cur.execute(
@@ -30,7 +35,7 @@ def drain_queue(cur):
             continue
 
         try:
-            with HeartBeat(msg_id=msg_id):
+            with heartbeat_factory(msg_id=msg_id):
                 process_message(cur, msg_id, payload)
             cur.execute("SELECT pgmq.delete(%s, %s);", (QUEUE_NAME, msg_id))
             processed += 1

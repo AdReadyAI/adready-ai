@@ -1,10 +1,9 @@
 /**
  * Shared, request-scoped input loader for every evaluation agent.
  *
- * Agents are only ever invoked internally (see shared/internalAuth.ts), so
- * there is no end user to scope reads to. userId is accepted only for the
- * (currently unused) case of a future user-facing re-run path, in which case
- * it re-adds the request-ownership check below.
+ * Evaluation agents are invoked through the internal-authenticated handler, so
+ * they do not have an end-user identity to scope service-role reads with. A
+ * user ID remains optional for a future user-facing rerun path.
  */
 import { createSupabaseServiceClient } from "./clients.ts";
 import { AgentContextSchema } from "./schemas.ts";
@@ -24,9 +23,10 @@ function required<T>(value: T | null | undefined, name: string): T {
 /**
  * Loads and validates the common DB-backed input for one agent invocation.
  *
- * Agent-specific logic belongs in the calling agent. This function only
- * authorizes the request owner, reads common source tables, and returns the
- * canonical `AgentContext` after runtime validation.
+ * Agent-specific logic belongs in the calling agent. This function reads the
+ * common source tables after the caller has passed internal authentication, or
+ * optionally scopes the request to a user for a future user-facing rerun path.
+ * It returns the canonical `AgentContext` after runtime validation.
  */
 export async function loadAgentContext(
   requestId: string,
@@ -37,9 +37,12 @@ export async function loadAgentContext(
     .from("requests")
     .select("request_id, batch_id, campaign_goal")
     .eq("request_id", requestId);
+
+  // User-facing reruns must still prove ownership before service-role reads.
   if (userId) {
     requestQuery = requestQuery.eq("user_id", userId);
   }
+
   const { data: request, error: requestError } = await requestQuery
     .maybeSingle();
   if (requestError) throw requestError;
