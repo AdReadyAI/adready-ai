@@ -282,9 +282,7 @@ Deno.test("illegible_text: font_size_px takes precedence over region_size when b
   assertEquals(findSubCheck(result, "illegible_text")?.result, "passed");
 });
 
-Deno.test("illegible_text: segment with neither font_size_px nor region_size is treated as legible", () => {
-  // Documents current behavior: a segment with no measurable size data does not
-  // trigger a failure and is not distinguished from a genuinely legible segment.
+Deno.test("illegible_text: missing OCR size measurements -> cannot_assess", () => {
   const context = buildContext({
     ocr_segments: [
       buildOcrSegment({ font_size_px: undefined, region_size: undefined }),
@@ -292,7 +290,32 @@ Deno.test("illegible_text: segment with neither font_size_px nor region_size is 
   });
   const result = evaluateProductionReadiness(context, buildPassingFindings());
 
-  assertEquals(findSubCheck(result, "illegible_text")?.result, "passed");
+  assertEquals(
+    findSubCheck(result, "illegible_text")?.result,
+    "cannot_assess",
+  );
+});
+
+Deno.test("illegible_text: visual technical flag fails with frame evidence", () => {
+  const context = buildContext({
+    ocr_segments: [buildOcrSegment({ font_size_px: 20 })],
+    visual_frames: [{
+      frame_id: "frame-1",
+      timestamp_ms: 3_000,
+      action: "Caption is blurred and unreadable",
+      technical_flags: ["illegible_text"],
+      is_shot_start: false,
+      is_fade: false,
+    }],
+  });
+  const result = evaluateProductionReadiness(context, buildPassingFindings());
+
+  assertEquals(findSubCheck(result, "illegible_text")?.result, "failed");
+  assertEquals(result.evidence?.[0], {
+    type: "visual",
+    text: "Caption is blurred and unreadable",
+    timestamp: "00:03",
+  });
 });
 
 Deno.test("illegible_text: any single failing segment among many fails the whole check", () => {

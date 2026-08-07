@@ -18,9 +18,8 @@ import { evaluateProductionReadiness } from "./metrics.ts";
  */
 export async function runVisualQualityAgent(
   request: AgentRunRequest,
-  { userId }: { userId: string },
 ): Promise<MetricResult> {
-  const context = await loadAgentContext(request.request_id, { userId });
+  const context = await loadAgentContext(request.request_id);
 
   const visualFindings = await auditVisualQuality(context);
 

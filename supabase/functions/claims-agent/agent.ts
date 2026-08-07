@@ -2,7 +2,11 @@
  * agent.ts — Claims Accuracy Agent orchestration.
  */
 
-import { loadAgentContext, validateMetricResults } from "../shared/index.ts";
+import {
+  loadAgentContext,
+  persistMetricResults,
+  validateMetricResults,
+} from "../shared/index.ts";
 import type { AgentRunRequest, MetricResult } from "../shared/index.ts";
 import { extractClaims, substantiateClaims, triageClaims } from "./checks.ts";
 import type { VerifiableClaim } from "./checks.ts";
@@ -11,9 +15,8 @@ import { evaluatePolicyCompliance, evaluateProductTruth } from "./metrics.ts";
 
 export async function runClaimsAgent(
   request: AgentRunRequest,
-  { userId }: { userId: string },
 ): Promise<MetricResult[]> {
-  const context = await loadAgentContext(request.request_id, { userId });
+  const context = await loadAgentContext(request.request_id);
 
   const candidates = await extractClaims(
     context.transcript_segments,
@@ -53,5 +56,11 @@ export async function runClaimsAgent(
     ),
   ];
 
-  return validateMetricResults(results);
+  const validated = validateMetricResults(results);
+
+  // Persist only schema-valid metrics so downstream scorecard reads never see
+  // a partial or structurally invalid Claims Agent evaluation.
+  await persistMetricResults(context.request_id, validated);
+
+  return validated;
 }

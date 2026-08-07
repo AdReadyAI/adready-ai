@@ -197,6 +197,30 @@ function findingToOutcome(
 }
 
 function evaluateTextLegibility(context: AgentContext): CheckOutcome {
+  const flaggedFrame = context.visual_frames.find((frame) =>
+    // The media processor records visual unreadability independently of OCR's
+    // geometric measurements, so either signal can fail launch readiness.
+    frame.technical_flags.includes("illegible_text")
+  );
+
+  if (flaggedFrame) {
+    return {
+      check: failed(
+        "illegible_text",
+        "Illegible text",
+        "medium",
+        "Frame-level visual analysis detected blurry or unreadable on-screen text.",
+      ),
+      confidenceScore: 0.7,
+      evidenceRef: evidence(
+        "visual",
+        flaggedFrame.action?.trim() ||
+          "Frame-level analysis detected illegible on-screen text.",
+        flaggedFrame.timestamp_ms,
+      ),
+    };
+  }
+
   if (context.ocr_segments.length === 0) {
     return {
       check: cannotAssess(
@@ -209,6 +233,8 @@ function evaluateTextLegibility(context: AgentContext): CheckOutcome {
   }
 
   const potentiallyIllegible = context.ocr_segments.some((segment) => {
+    // Prefer the processor's direct font estimate and fall back to relative
+    // screen area only when the direct measurement is unavailable.
     if (segment.font_size_px !== undefined) return segment.font_size_px < 12;
     if (segment.region_size !== undefined) return segment.region_size < 0.01;
     return false;
@@ -223,6 +249,21 @@ function evaluateTextLegibility(context: AgentContext): CheckOutcome {
         "Some on-screen text may be too small or occupy too little screen area to be reliably legible.",
       ),
       confidenceScore: 0.7,
+    };
+  }
+
+  const hasUnmeasuredText = context.ocr_segments.some((segment) =>
+    segment.font_size_px === undefined && segment.region_size === undefined
+  );
+
+  if (hasUnmeasuredText) {
+    return {
+      check: cannotAssess(
+        "illegible_text",
+        "Illegible text",
+        "Text legibility cannot be fully determined because an OCR segment has no font-size or screen-area measurement.",
+      ),
+      confidenceScore: 0,
     };
   }
 
