@@ -63,7 +63,6 @@ export async function loadAgentContext(
   const logoDetectionId = processing?.find((row) =>
     row.task_name === "logo_detection"
   )?.id;
-
   const [
     briefResponse,
     metadataResponse,

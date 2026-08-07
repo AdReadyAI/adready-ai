@@ -64,6 +64,21 @@ jobs:
         with:
           deno-version-file: .dvmrc
 
+      - name: Validate Edge Function dependency configs
+        run: |
+          for entrypoint in supabase/functions/*/index.ts; do
+            function_dir="$(dirname "$entrypoint")"
+            if [[ "$(basename "$function_dir")" == _* || "$(basename "$function_dir")" == "shared" ]]; then
+              # Shared modules are bundled through a function entry point and are not deployed independently.
+              continue
+            fi
+            # Each deployable function must carry the dependency map Supabase discovers at deploy time.
+            function_config="$function_dir/deno.json"
+            test -f "$function_config"
+            jq --exit-status --slurpfile root supabase/deno.json \
+              '.imports == $root[0].imports' "$function_config"
+          done
+
       - name: Check Edge Function formatting
         run: deno fmt --config supabase/deno.json --check
 
