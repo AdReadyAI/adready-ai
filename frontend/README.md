@@ -100,6 +100,11 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-07** — Uploads are capped at 100 MB per file (`MAX_UPLOAD_BYTES` in
+  `pages/UploadPage.tsx`); oversized files land on the grid as errors and are
+  never sent. Client-side only — the enforcing limits are in
+  `supabase/config.toml` and the `uploads` bucket, smallest wins. Note the card
+  shows a bare `!` with no reason; surfacing *why* an upload failed is still open.
 - **2026-08-06** — **Export Report** on ResultPage now downloads a PDF of the
   whole batch instead of a JSON dump; the JSON export is gone. The document
   (`components/results/ReportDocument.tsx`, built with `@react-pdf/renderer`) is a

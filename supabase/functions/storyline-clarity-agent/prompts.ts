@@ -24,10 +24,8 @@ function compactVisualFrames(ctx: AgentContext) {
   return (ctx.visual_frames ?? []).map((f) => ({
     frame_id: f.frame_id,
     timestamp_ms: f.timestamp_ms,
-    action: ((f as any).action ?? (f as any).visual_description ?? "").slice(
-      0,
-      120,
-    ),
+
+    action: (f.action ?? "").slice(0, 120),
   }));
 }
 

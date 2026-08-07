@@ -115,7 +115,9 @@ openai_api_key = "env(OPENAI_API_KEY)"
 [storage]
 enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
-file_size_limit = "500MiB"
+# Only read at `supabase start` — a running stack keeps whatever it booted with,
+# so restart after changing this.
+file_size_limit = "100MiB"
 
 # Uncomment to configure local storage buckets
 # [storage.buckets.images]
@@ -126,7 +128,7 @@ file_size_limit = "500MiB"
 
 [storage.buckets.uploads]
 public = false
-file_size_limit = "500MiB"
+file_size_limit = "100MiB"
 allowed_mime_types = ["video/mp4", "video/quicktime", "video/webm", "image/png", "image/jpeg", "image/webp"]
 
 # Allow connections via S3 compatible clients
