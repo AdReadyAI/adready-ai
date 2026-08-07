@@ -3,8 +3,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import random
 import time
 
+import requests
+
 from config.connection import get_storage_session
-from config.settings import logger
+from config.settings import (
+    ANALYSIS_TASK_MAX_ATTEMPTS,
+    INTERNAL_TRIGGER_SECRET,
+    SUPABASE_URL,
+    logger,
+)
 from analyzer.video_preprocessor import VideoPreprocessor
 from analyzer.video_analyzer import VideoAnalyzer
 from analyzer.ocr.completion import OcrCompletionCoordinator
@@ -14,7 +21,6 @@ from analyzer.ocr.roboflow import build_roboflow_easyocr_adapter_from_env
 from app.log_utils import phase
 from app.schemas import JobPayload
 from app.errors import TransientError
-from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS, SUPABASE_URL
 from analyzer.output_models import TaskResult
 from app.product_context import ProductPageExtractor
 from app.ocr_runs import OcrRunLifecycle
@@ -45,12 +51,22 @@ def _build_ocr_completion_coordinator(
 
 def process_message(cur, msg_id, payload):
     payload = _parse_payload(msg_id, payload)
+
+    if payload.job_type == "video":
+        _process_video_job(cur, msg_id, payload)
+    elif payload.job_type == "score":
+        _process_score_job(msg_id, payload.request_id, payload.batch_id)
+    else:
+        raise ValueError(f"invalid job {msg_id} payload: unsupported job_type {payload.job_type}")
+
+
+def _process_video_job(cur, msg_id, payload):
     ocr_configuration = OcrRuntimeConfig.from_env()
     request_id = payload.request_id
     db = Supabase(cur=cur, request_id=request_id)
 
     job_start = time.perf_counter()
-    logger.info("[job %s] Processing: %s", msg_id, request_id)
+    logger.info("[job %s] Processing video: %s", msg_id, request_id)
     _populate_product_context(db)
     with tempfile.TemporaryDirectory(prefix=f"job_{msg_id}_") as work_dir:
         preprocessor = VideoPreprocessor(payload, work_dir)
@@ -104,6 +120,45 @@ def process_message(cur, msg_id, payload):
     logger.info("[job %s] Done in %.2fs", msg_id, time.perf_counter() - job_start)
 
 
+def _process_score_job(msg_id, request_id, batch_id):
+    """Run the two idempotent projections owned by the score job."""
+    logger.info(
+        "[job %s] Triggering score-result and process-issues for %s",
+        msg_id,
+        request_id,
+    )
+    _invoke_supabase_function(
+        "score-result",
+        {"request_id": request_id, "batch_id": batch_id},
+        msg_id,
+    )
+    _invoke_supabase_function(
+        "process-issues-internal",
+        {"request_id": request_id, "batch_id": batch_id},
+        msg_id,
+    )
+
+
+def _invoke_supabase_function(function_name, payload, msg_id):
+    """Invoke one internal Edge Function with the narrow trigger secret."""
+    url = f"{SUPABASE_URL}/functions/v1/{function_name}"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {INTERNAL_TRIGGER_SECRET}",
+    }
+    response = requests.post(url, json=payload, headers=headers, timeout=30)
+    if not response.ok:
+        logger.error(
+            "[job %s] %s failed: %s %s",
+            msg_id,
+            function_name,
+            response.status_code,
+            response.text,
+        )
+        response.raise_for_status()
+    logger.info("[job %s] %s completed", msg_id, function_name)
+
+
 def _populate_product_context(
     db: Supabase,
     extractor: ProductPageExtractor | None = None,
@@ -124,9 +179,12 @@ def _populate_product_context(
 
 
 def _parse_payload(msg_id, payload: dict) -> JobPayload:
+    if not isinstance(payload, dict):
+        raise ValueError(f"invalid job {msg_id} payload: expected object")
+
     try:
-        return JobPayload.model_validate(payload) 
-    except (KeyError, TypeError) as e:
+        return JobPayload.model_validate(payload)
+    except (TypeError, ValueError) as e:
         raise ValueError(f"invalid job {msg_id} payload: {e}")
 
 
@@ -163,6 +221,8 @@ def _run_analysis(
     logger.info("[job %s] Analysis tasks scheduled: %s", msg_id, list(tasks))
 
     for name in tasks:
+        # Persist every transition before dispatch so concurrent readers can
+        # distinguish active analysis from work that has not started.
         db.mark_processing(name)
 
     results, errors = {}, {}

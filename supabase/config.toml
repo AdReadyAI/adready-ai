@@ -430,11 +430,7 @@ verify_jwt = false
 [functions.visual-quality-agent]
 verify_jwt = false
 
-[functions.score-engine]
-import_map = "./deno.json"
-
 [functions.score-result]
-import_map = "./deno.json"
 verify_jwt = false
 
 [edge_runtime.secrets]
@@ -475,5 +471,5 @@ enabled = true
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
 
-[functions.process-issues]
-import_map = "./deno.json"
+[functions.process-issues-internal]
+verify_jwt = false
