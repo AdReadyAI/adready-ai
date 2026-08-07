@@ -102,21 +102,33 @@ async function createReviewFixture() {
   return { requestId, batchId, userId: user.id, email, password };
 }
 
-async function insertPassingAtomicMetrics(requestId: string): Promise<void> {
+const ATOMIC_METRICS = [
+  ["brief_alignment", "brief_adherence"],
+  ["brief_alignment", "audience_fit"],
+  ["claims_accuracy", "product_truth"],
+  ["claims_accuracy", "policy_compliance"],
+  ["product_representation", "product_clarity"],
+  ["storyline_clarity", "channel_readiness"],
+  ["storyline_clarity", "creative_effectiveness"],
+  ["brand_alignment", "brand_fit"],
+  ["cta_effectiveness", "cta_clarity"],
+  ["visual_quality", "production_readiness"],
+] as const;
+
+async function insertPassingAtomicMetrics(
+  requestId: string,
+  metrics: readonly (readonly [string, string])[] = ATOMIC_METRICS,
+): Promise<void> {
+  // Each tuple represents one independently persisted evaluator result. Build
+  // one SQL statement so the fixture matches evaluator transaction behavior.
+  const values = metrics.map(([agent, metricId]) =>
+    `('${requestId}', '${agent}', '${metricId}', '${metricId}', 'true', 'none')`
+  ).join(",\n      ");
   await executeFixtureSql(`
     insert into public.agent_results (
       request_id, agent, metric_id, metric_name, result, severity
     ) values
-      ('${requestId}', 'brief_alignment', 'brief_adherence', 'Brief Adherence', 'true', 'none'),
-      ('${requestId}', 'brief_alignment', 'audience_fit', 'Audience Fit', 'true', 'none'),
-      ('${requestId}', 'claims_accuracy', 'product_truth', 'Product Truth', 'true', 'none'),
-      ('${requestId}', 'claims_accuracy', 'policy_compliance', 'Policy Compliance', 'true', 'none'),
-      ('${requestId}', 'product_representation', 'product_clarity', 'Product Clarity', 'true', 'none'),
-      ('${requestId}', 'storyline_clarity', 'channel_readiness', 'Channel Readiness', 'true', 'none'),
-      ('${requestId}', 'storyline_clarity', 'creative_effectiveness', 'Creative Effectiveness', 'true', 'none'),
-      ('${requestId}', 'brand_alignment', 'brand_fit', 'Brand Fit', 'true', 'none'),
-      ('${requestId}', 'cta_effectiveness', 'cta_clarity', 'CTA Clarity', 'true', 'none'),
-      ('${requestId}', 'visual_quality', 'production_readiness', 'Production Readiness', 'true', 'none');
+      ${values};
   `);
 }
 
@@ -267,9 +279,9 @@ Deno.test("score-result rejects callers without the internal secret", async () =
   assertEquals(response.status, 401);
 });
 
-Deno.test("internal issue projection rejects external callers", async () => {
+Deno.test("evaluation completion rejects callers without the internal secret", async () => {
   const response = await fetch(
-    `${SUPABASE_URL}/functions/v1/process-issues-internal`,
+    `${SUPABASE_URL}/functions/v1/complete-evaluation`,
     {
       method: "POST",
       headers: {
@@ -371,6 +383,215 @@ Deno.test("score-result atomically persists a complete scorecard", async () => {
   }
 });
 
+Deno.test("metric completion schedules a Supabase projection", async () => {
+  const fixture = await createReviewFixture();
+
+  try {
+    // Disposable Vault values let the trigger enqueue pg_net work without
+    // depending on production credentials or an externally reachable URL.
+    await executeFixtureSql(`
+      do $$
+      begin
+        if exists (
+          select 1 from vault.secrets
+          where name in ('edge_functions_base_url', 'internal_trigger_secret')
+        ) then
+          raise exception 'completion integration requires a clean local Vault';
+        end if;
+      end;
+      $$;
+      select vault.create_secret(
+        'http://127.0.0.1:1/functions/v1',
+        'edge_functions_base_url',
+        'completion integration fixture'
+      );
+      select vault.create_secret(
+        'integration-trigger-secret',
+        'internal_trigger_secret',
+        'completion integration fixture'
+      );
+    `);
+    await insertPassingAtomicMetrics(
+      fixture.requestId,
+      ATOMIC_METRICS.slice(0, 9),
+    );
+
+    const incompleteResponse = await serviceRequest(
+      `/rest/v1/requests?request_id=eq.${fixture.requestId}` +
+        "&select=evaluation_completion_status,evaluation_completion_attempts",
+      { method: "GET" },
+    );
+    assertEquals(await incompleteResponse.json(), [{
+      evaluation_completion_status: null,
+      evaluation_completion_attempts: 0,
+    }]);
+
+    await insertPassingAtomicMetrics(
+      fixture.requestId,
+      ATOMIC_METRICS.slice(9),
+    );
+
+    const pendingResponse = await serviceRequest(
+      `/rest/v1/requests?request_id=eq.${fixture.requestId}` +
+        "&select=evaluation_completion_status,evaluation_completion_attempts",
+      { method: "GET" },
+    );
+    assertEquals(await pendingResponse.json(), [{
+      evaluation_completion_status: "pending",
+      evaluation_completion_attempts: 0,
+    }]);
+
+    // A canonical metric update while the request is already pending must not
+    // create another completion transition in the same projection window.
+    await executeFixtureSql(`
+      update public.agent_results
+      set explanation = 'Updated after completion was scheduled.'
+      where request_id = '${fixture.requestId}'
+        and agent = 'claims_accuracy'
+        and metric_id = 'product_truth';
+    `);
+    const stillPendingResponse = await serviceRequest(
+      `/rest/v1/requests?request_id=eq.${fixture.requestId}` +
+        "&select=evaluation_completion_status,evaluation_completion_attempts",
+      { method: "GET" },
+    );
+    assertEquals(await stillPendingResponse.json(), [{
+      evaluation_completion_status: "pending",
+      evaluation_completion_attempts: 0,
+    }]);
+  } finally {
+    await executeFixtureSql(`
+      delete from vault.secrets
+      where description = 'completion integration fixture';
+    `);
+    await deleteReviewFixture(fixture.requestId, fixture.userId);
+  }
+});
+
+Deno.test("Supabase completion publishes scorecard and issues", async () => {
+  const fixture = await createReviewFixture();
+
+  try {
+    await insertPassingAtomicMetrics(fixture.requestId);
+    await executeFixtureSql(`
+      update public.agent_results
+      set result = 'false', severity = 'high',
+          explanation = 'The product claim is unsupported.'
+      where request_id = '${fixture.requestId}'
+        and agent = 'claims_accuracy'
+        and metric_id = 'product_truth';
+    `);
+
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/complete-evaluation`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${INTERNAL_TRIGGER_SECRET}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          request_id: fixture.requestId,
+          batch_id: fixture.batchId,
+        }),
+      },
+    );
+    assertEquals(response.status, 200);
+
+    const scoreResponse = await serviceRequest(
+      `/rest/v1/result_score_table?request_id=eq.${fixture.requestId}` +
+        "&select=config_version",
+      { method: "GET" },
+    );
+    assertEquals(await scoreResponse.json(), [{
+      config_version: "0.3",
+    }]);
+
+    const issuesResponse = await serviceRequest(
+      `/rest/v1/issues?request_id=eq.${fixture.requestId}` +
+        "&select=metric_id,severity",
+      { method: "GET" },
+    );
+    assertEquals(await issuesResponse.json(), [{
+      metric_id: "product_truth",
+      severity: "high",
+    }]);
+
+    const completionResponse = await serviceRequest(
+      `/rest/v1/requests?request_id=eq.${fixture.requestId}` +
+        "&select=evaluation_completion_status,evaluation_completion_attempts",
+      { method: "GET" },
+    );
+    assertEquals(await completionResponse.json(), [{
+      evaluation_completion_status: "completed",
+      evaluation_completion_attempts: 1,
+    }]);
+  } finally {
+    await deleteReviewFixture(fixture.requestId, fixture.userId);
+  }
+});
+
+Deno.test("Supabase completion records a retryable projection failure", async () => {
+  const fixture = await createReviewFixture();
+
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/complete-evaluation`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${INTERNAL_TRIGGER_SECRET}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          request_id: fixture.requestId,
+          batch_id: fixture.batchId,
+        }),
+      },
+    );
+    assertEquals(response.status, 400);
+
+    const completionResponse = await serviceRequest(
+      `/rest/v1/requests?request_id=eq.${fixture.requestId}` +
+        "&select=evaluation_completion_status,evaluation_completion_attempts",
+      { method: "GET" },
+    );
+    assertEquals(await completionResponse.json(), [{
+      evaluation_completion_status: "failed",
+      evaluation_completion_attempts: 1,
+    }]);
+
+    await insertPassingAtomicMetrics(fixture.requestId);
+    const retryResponse = await fetch(
+      `${SUPABASE_URL}/functions/v1/complete-evaluation`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${INTERNAL_TRIGGER_SECRET}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          request_id: fixture.requestId,
+          batch_id: fixture.batchId,
+        }),
+      },
+    );
+    assertEquals(retryResponse.status, 200);
+
+    const retriedCompletionResponse = await serviceRequest(
+      `/rest/v1/requests?request_id=eq.${fixture.requestId}` +
+        "&select=evaluation_completion_status,evaluation_completion_attempts",
+      { method: "GET" },
+    );
+    assertEquals(await retriedCompletionResponse.json(), [{
+      evaluation_completion_status: "completed",
+      evaluation_completion_attempts: 2,
+    }]);
+  } finally {
+    await deleteReviewFixture(fixture.requestId, fixture.userId);
+  }
+});
+
 Deno.test("process-issues cannot read another user's Review Request", async () => {
   const callerFixture = await createReviewFixture();
   const otherFixture = await createReviewFixture();
@@ -396,46 +617,6 @@ Deno.test("process-issues cannot read another user's Review Request", async () =
   } finally {
     await deleteReviewFixture(callerFixture.requestId, callerFixture.userId);
     await deleteReviewFixture(otherFixture.requestId, otherFixture.userId);
-  }
-});
-
-Deno.test("internal orchestration projects issues for one Ad Creative", async () => {
-  const fixture = await createReviewFixture();
-
-  try {
-    await executeFixtureSql(`
-      insert into public.agent_results (
-        request_id, agent, metric_id, metric_name, result, severity, confidence
-      ) values (
-        '${fixture.requestId}', 'integration-agent', 'internal-metric',
-        'Internal Metric', 'false', 'high', 'high'
-      );
-    `);
-    const response = await fetch(
-      `${SUPABASE_URL}/functions/v1/process-issues-internal`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${INTERNAL_TRIGGER_SECRET}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          request_id: fixture.requestId,
-          batch_id: fixture.batchId,
-        }),
-      },
-    );
-    assertEquals(response.status, 200);
-
-    const issuesResponse = await serviceRequest(
-      `/rest/v1/issues?request_id=eq.${fixture.requestId}&select=metric_id`,
-      { method: "GET" },
-    );
-    assertEquals(await issuesResponse.json(), [{
-      metric_id: "internal-metric",
-    }]);
-  } finally {
-    await deleteReviewFixture(fixture.requestId, fixture.userId);
   }
 });
 

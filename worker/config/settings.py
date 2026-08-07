@@ -36,9 +36,6 @@ ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
-# Narrow credential for invoking internal Edge Functions. Keep it separate from
-# the service-role key so function access does not grant direct database access.
-INTERNAL_TRIGGER_SECRET = os.environ["INTERNAL_TRIGGER_SECRET"]
 DOWNLOAD_TIMEOUT = 60
 DOWNLOAD_CHUNK_SIZE = 1 << 20  # 1 MB
 FFPROBE_TIMEOUT = 30
