@@ -50,6 +50,28 @@ def test_parse_payload_allows_empty_logo_paths():
     assert parsed.logo_paths == []
 
 
+def test_parse_payload_accepts_score_job_payload():
+    payload = {
+        "job_type": "score",
+        "request_id": "req-1",
+        "batch_id": "batch-1",
+    }
+    parsed = processor._parse_payload(2, payload)
+    assert parsed.job_type == "score"
+    assert parsed.request_id == "req-1"
+    assert parsed.batch_id == "batch-1"
+
+
+def test_parse_payload_rejects_issues_job_payload():
+    payload = {
+        "job_type": "issues",
+        "request_id": "req-1",
+        "batch_id": "batch-1",
+    }
+    with pytest.raises(ValueError):
+        processor._parse_payload(3, payload)
+
+
 # ---------------------------------------------------------------------------
 # Test doubles for _run_analysis
 # ---------------------------------------------------------------------------
@@ -629,10 +651,6 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
         def completed_analyzers(self):
             return set()
 
-        def mark_processing(self, task_name):
-            """Accept main's in-flight analyzer status transition."""
-            execution_events.append(f"{task_name}-processing")
-
         def persist_quality_frames(self, flags):
             """Accept main's optional quality persistence."""
 
@@ -685,7 +703,5 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
         "ocr-lifecycle-created",
         "ocr-lifecycle",
         "ocr-analysis",
-        "ocr-processing",
         "transcription",
-        "transcription-processing",
     }
