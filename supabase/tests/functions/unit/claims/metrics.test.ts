@@ -131,11 +131,24 @@ Deno.test("evaluateProductTruth: confidence buckets from the worst finding's con
   assertEquals(low.confidence, "low");
 });
 
-Deno.test("evaluateProductTruth: no findings at all defaults to true/high-confidence", () => {
-  const result = evaluateProductTruth([], [], []);
+Deno.test("evaluateProductTruth: no claims found in available evidence passes", () => {
+  const result = evaluateProductTruth([], [], [], {
+    sourceEvidenceAvailable: true,
+  });
 
   assertEquals(result.result, "true");
   assertEquals(result.confidence, "high");
+});
+
+Deno.test("evaluateProductTruth: no source evidence cannot be assessed", () => {
+  const result = evaluateProductTruth([], [], [], {
+    sourceEvidenceAvailable: false,
+  });
+
+  assertEquals(result.result, "cannot_assess");
+  assertEquals(result.severity, "cannot_assess");
+  assertEquals(result.confidence, "low");
+  assert(result.sub_checks?.every((check) => check.result === "cannot_assess"));
 });
 
 Deno.test("evaluateProductTruth: explanation counts skipped puffery when nothing failed", () => {

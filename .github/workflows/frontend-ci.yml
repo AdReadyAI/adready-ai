@@ -75,6 +75,11 @@ jobs:
   integration-tests:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      # Browser smoke tests exercise signed-out routing without contacting the
+      # backend, but the Supabase client still requires explicit startup values.
+      VITE_SUPABASE_URL: http://127.0.0.1:54321
+      VITE_SUPABASE_ANON_KEY: integration-test-anon-key
     defaults:
       run:
         working-directory: frontend

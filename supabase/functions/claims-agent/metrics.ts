@@ -107,10 +107,24 @@ export function evaluateProductTruth(
   claims: DerivedClaim[],
   triage: TriageResult[],
   findings: SubstantiationFinding[],
+  options: { sourceEvidenceAvailable: boolean } = {
+    sourceEvidenceAvailable: claims.length > 0,
+  },
 ): MetricResult {
   const claimById = new Map(claims.map((c) => [c.claim_id, c]));
 
   const subChecks: SubCheckResult[] = PRODUCT_TRUTH_CHECKS.map((def) => {
+    // An empty finding bucket is a pass only after the agent had transcript or
+    // OCR evidence in which it could look for claims. With no source evidence,
+    // each owned check must abstain instead of treating absence as proof.
+    if (!options.sourceEvidenceAvailable) {
+      return cannotAssess(
+        def.checkId,
+        def.name,
+        "No transcript or OCR evidence was available for claim assessment.",
+      );
+    }
+
     const bucket = findings.filter((f) =>
       f.classification === def.classification
     );
@@ -152,6 +166,7 @@ export function evaluateProductTruth(
   );
   const severity = highestFailedSeverity(subChecks);
   const failedOverall = severity !== "none";
+  const cannotAssessOverall = !options.sourceEvidenceAvailable;
   const skippedCount = triage.filter((t) => !t.is_verifiable_claim).length;
 
   return {
@@ -160,13 +175,21 @@ export function evaluateProductTruth(
     metric_name: "Product Truth / Claim Support",
     question:
       "Are all explicit product claims supported by product page or source materials?",
-    result: failedOverall ? "false" : "true",
-    severity,
-    confidence: worstFinding
+    result: cannotAssessOverall
+      ? "cannot_assess"
+      : failedOverall
+      ? "false"
+      : "true",
+    severity: cannotAssessOverall ? "cannot_assess" : severity,
+    confidence: cannotAssessOverall
+      ? "low"
+      : worstFinding
       ? bucketConfidence(worstFinding.confidence_score)
       : "high",
     evidence: evidenceRefs,
-    explanation: failedOverall && worstFinding
+    explanation: cannotAssessOverall
+      ? "Product truth could not be assessed because no transcript or OCR evidence was available."
+      : failedOverall && worstFinding
       ? worstFinding.issue_description
       : `${findings.length} claim(s) examined${
         skippedCount

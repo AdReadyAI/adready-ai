@@ -50,12 +50,7 @@ export function evaluateProductionReadiness(
   );
 
   const rolledUp = rollupChecks(subChecks);
-  const result = rolledUp.result === "true" && cannotAssessChecks.length > 0
-    ? "cannot_assess"
-    : rolledUp.result;
-  const severity = rolledUp.result === "true" && cannotAssessChecks.length > 0
-    ? "cannot_assess"
-    : rolledUp.severity;
+  const { result, severity } = rolledUp;
 
   const confidenceValues = outcomes
     .filter((o) => o.check.result !== "cannot_assess")
@@ -78,8 +73,9 @@ export function evaluateProductionReadiness(
   return {
     metric_id: "production_readiness",
     agent: "visual_quality",
-    metric_name: "Production Readiness",
-    question: "Is the video technically and visually ready for production?",
+    metric_name: "Production / Asset Readiness",
+    question:
+      "Is the video technically complete enough to be reviewed or launched?",
     result,
     severity,
     confidence,
@@ -279,6 +275,14 @@ function buildExplanation(
   cannotAssessChecks: SubCheckResult[],
 ): string {
   if (result === "true") {
+    if (cannotAssessChecks.length === 1) {
+      return `All assessable production-readiness checks passed; "${
+        cannotAssessChecks[0].name
+      }" could not be assessed.`;
+    }
+    if (cannotAssessChecks.length > 1) {
+      return `All assessable production-readiness checks passed; ${cannotAssessChecks.length} check(s) could not be assessed.`;
+    }
     return "All production-readiness checks passed.";
   }
 

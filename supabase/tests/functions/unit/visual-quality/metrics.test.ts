@@ -38,6 +38,11 @@ Deno.test("evaluateProductionReadiness: all checks passing yields true/none/no e
   assertEquals(result.explanation, "All production-readiness checks passed.");
   assertEquals(result.metric_id, "production_readiness");
   assertEquals(result.agent, "visual_quality");
+  assertEquals(result.metric_name, "Production / Asset Readiness");
+  assertEquals(
+    result.question,
+    "Is the video technically complete enough to be reviewed or launched?",
+  );
   assertEquals(result.sub_checks?.length, 6);
 });
 
@@ -122,9 +127,11 @@ Deno.test("aggregate: explanation names the single cannot_assess check", () => {
   const context = buildContext({ ocr_segments: [] });
   const result = evaluateProductionReadiness(context, buildPassingFindings());
 
+  assertEquals(result.result, "true");
+  assertEquals(result.severity, "none");
   assertEquals(
     result.explanation,
-    `Production readiness could not be fully assessed because "Illegible text" could not be assessed.`,
+    `All assessable production-readiness checks passed; "Illegible text" could not be assessed.`,
   );
 });
 
@@ -137,7 +144,7 @@ Deno.test("aggregate: explanation counts multiple cannot_assess checks", () => {
 
   assertEquals(
     result.explanation,
-    "Production readiness could not be fully assessed because 2 check(s) could not be assessed.",
+    "All assessable production-readiness checks passed; 2 check(s) could not be assessed.",
   );
 });
 

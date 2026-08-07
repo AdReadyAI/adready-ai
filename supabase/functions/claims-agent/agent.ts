@@ -48,7 +48,12 @@ export async function runClaimsAgent(
   ]);
 
   const results: MetricResult[] = [
-    evaluateProductTruth(candidates, triage, substantiationFindings),
+    evaluateProductTruth(candidates, triage, substantiationFindings, {
+      // Empty extraction is a valid pass only when transcript or OCR evidence
+      // existed for the Claims Agent to inspect.
+      sourceEvidenceAvailable: context.transcript_segments.length > 0 ||
+        context.ocr_segments.length > 0,
+    }),
     evaluatePolicyCompliance(
       adWidePolicy,
       context.transcript_segments,

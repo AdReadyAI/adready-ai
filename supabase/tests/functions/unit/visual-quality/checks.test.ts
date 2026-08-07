@@ -59,9 +59,10 @@ Deno.test("video_corruption: undefined yields cannot_assess for that sub-check",
     findSubCheck(result, "video_corruption")?.result,
     "cannot_assess",
   );
-  // No failures anywhere else, so overall result should be cannot_assess.
-  assertEquals(result.result, "cannot_assess");
-  assertEquals(result.severity, "cannot_assess");
+  // The remaining owned checks are assessable and pass, so the shared roll-up
+  // keeps the metric passing while this individual check abstains.
+  assertEquals(result.result, "true");
+  assertEquals(result.severity, "none");
 });
 
 // ---------------------------------------------------------------------------
