@@ -442,8 +442,13 @@ verify_jwt = false
 import_map = "./deno.json"
 verify_jwt = false
 
-# [edge_runtime.secrets]
-# secret_key = "env(SECRET_VALUE)"
+[edge_runtime.secrets]
+# Evaluation-agent endpoints compare this value with the database trigger's
+# bearer token. Local and CI environments provide a non-production test value.
+INTERNAL_TRIGGER_SECRET = "env(INTERNAL_TRIGGER_SECRET)"
+OPENROUTER_API_KEY = "env(OPENROUTER_API_KEY)"
+OPENROUTER_MODEL = "env(OPENROUTER_MODEL)"
+OPENROUTER_BASE_URL = "env(OPENROUTER_BASE_URL)"
 [functions.shared]
 enabled = false
 
