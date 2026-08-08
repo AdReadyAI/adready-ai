@@ -26,6 +26,8 @@ _stderr_handler.setFormatter(_formatter)
 logging.basicConfig(level=_level, handlers=[_stdout_handler, _stderr_handler])
 logger = logging.getLogger("worker")
 
+logging.getLogger("httpx").setLevel(logging.DEBUG if DEBUG else logging.WARNING)
+
 DATABASE_URL = os.environ["DATABASE_URL"]
 QUEUE_NAME = os.environ.get("QUEUE_NAME", "jobs")
 CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "new_job")
@@ -41,6 +43,8 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # Vision model for captioning — unvalidated starting point, tune once real outputs can be reviewed.
 OPENROUTER_VISION_MODEL = os.getenv("OPENROUTER_VISION_MODEL", "google/gemini-2.5-flash")
 OPENROUTER_VISION_TIMEOUT = 30
+
+VISUAL_CAPTION_MAX_TOKENS = 1024
 # matches FrameSampler's analysis long-side cap
 VISUAL_CAPTION_LONG_SIDE = 384
 # unvalidated starting point — tune once real OpenRouter rate limits are known
