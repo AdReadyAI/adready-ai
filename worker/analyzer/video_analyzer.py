@@ -88,7 +88,7 @@ class VideoAnalyzer:
                     end_ms=int(utterance.end),
                     text=utterance.text,
                     speaker=f"Speaker {utterance.speaker}"
-                ) for idx, utterance in enumerate(transcript.utterances)
+                ) for idx, utterance in enumerate(transcript.utterances or [])
             ]
 
            
