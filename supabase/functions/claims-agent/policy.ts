@@ -85,7 +85,7 @@ function extractJsonSubstring(raw: string): string {
 
 function parseLLMJson<T>(
   raw: string,
-  schema: z.ZodType<T>,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   context: string,
 ): T {
   const stripped = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(
