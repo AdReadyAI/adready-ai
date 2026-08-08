@@ -1,16 +1,32 @@
 import os
+import sys
 import logging
 
 MODE = os.environ.get("MODE", "prod").lower()
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 DEBUG = LOG_LEVEL == "DEBUG"
 
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(message)s",
+_level = getattr(logging, LOG_LEVEL, logging.INFO)
+_formatter = logging.Formatter(
+    fmt="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+
+# Split by stream so Railway (which infers severity from stdout/stderr) doesn't
+# flag INFO/DEBUG logs as errors.
+_stdout_handler = logging.StreamHandler(sys.stdout)
+_stdout_handler.setLevel(_level)
+_stdout_handler.addFilter(lambda record: record.levelno < logging.WARNING)
+_stdout_handler.setFormatter(_formatter)
+
+_stderr_handler = logging.StreamHandler(sys.stderr)
+_stderr_handler.setLevel(logging.WARNING)
+_stderr_handler.setFormatter(_formatter)
+
+logging.basicConfig(level=_level, handlers=[_stdout_handler, _stderr_handler])
 logger = logging.getLogger("worker")
+
+logging.getLogger("httpx").setLevel(logging.DEBUG if DEBUG else logging.WARNING)
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 QUEUE_NAME = os.environ.get("QUEUE_NAME", "jobs")
@@ -18,8 +34,8 @@ CHANNEL_NAME = os.environ.get("CHANNEL_NAME", "new_job")
 VISIBILITY_TIMEOUT = 60
 HEARTBEAT_INTERVAL = 20
 POLL_TIMEOUT = 5
-MAX_RETRIES = 3
-ANALYSIS_TASK_MAX_ATTEMPTS = 3
+MAX_RETRIES = 1
+ANALYSIS_TASK_MAX_ATTEMPTS = 1
 RETRY_BASE_DELAY = 5
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -27,6 +43,8 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 # Vision model for captioning — unvalidated starting point, tune once real outputs can be reviewed.
 OPENROUTER_VISION_MODEL = os.getenv("OPENROUTER_VISION_MODEL", "google/gemini-2.5-flash")
 OPENROUTER_VISION_TIMEOUT = 30
+
+VISUAL_CAPTION_MAX_TOKENS = 1024
 # matches FrameSampler's analysis long-side cap
 VISUAL_CAPTION_LONG_SIDE = 384
 # unvalidated starting point — tune once real OpenRouter rate limits are known

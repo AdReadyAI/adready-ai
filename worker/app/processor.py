@@ -125,7 +125,7 @@ def _populate_product_context(
 
 def _parse_payload(msg_id, payload: dict) -> JobPayload:
     try:
-        return JobPayload.model_validate(payload) 
+        return JobPayload.model_validate(payload)
     except (KeyError, TypeError) as e:
         raise ValueError(f"invalid job {msg_id} payload: {e}")
 

@@ -1,10 +1,10 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { ALL_METRIC_IDS } from "../../../functions/_shared/score-engine/config.ts";
-import { parseScoreEngineRequest } from "../../../functions/_shared/score-engine/parseRequest.ts";
+import { ALL_METRIC_IDS } from "../../../functions/shared/score-engine/config.ts";
+import { parseScoreEngineRequest } from "../../../functions/shared/score-engine/parseRequest.ts";
 import type {
   MetricId,
   MetricInput,
-} from "../../../functions/_shared/score-engine/types.ts";
+} from "../../../functions/shared/score-engine/types.ts";
 
 /** Full v0.3 set; override individual rows via `patch`. */
 function fullMetricResults(

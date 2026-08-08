@@ -25,7 +25,7 @@
  */
 
 import {
-  createEdgeHandler,
+  createInternalEdgeHandler,
   loadAgentContext,
   ok,
   persistMetricResults,
@@ -36,12 +36,12 @@ import { AgentRunRequestSchema } from "../shared/schemas.ts";
 
 import { runCtaAgent } from "./agent.ts";
 
-createEdgeHandler(
+createInternalEdgeHandler(
   "cta-effectiveness-agent",
   AgentRunRequestSchema,
   async (_req, ctx) => {
     const requestId = ctx.body.request_id;
-    const context = await loadAgentContext(requestId, { userId: ctx.user.id });
+    const context = await loadAgentContext(requestId);
     const results = await runCtaAgent(context);
     const validated = validateMetricResults(results);
 

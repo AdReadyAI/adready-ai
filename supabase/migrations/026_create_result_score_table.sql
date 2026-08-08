@@ -1,7 +1,8 @@
 -- Persist Score Engine Result UI scores as relational columns.
 -- File: 026_create_result_score_table.sql
--- Issue rows live in public.issues (migration 025+).
--- Edge Function remains read-only; orchestrator writes after scoring.
+-- Issue rows live in public.issues (migration 025+; written elsewhere).
+-- Written by Edge Function score-result after scoring agent_results.
+-- Stateless score-engine Edge does not write Postgres.
 --
 -- Prerequisite (must already exist on requests before this migration runs):
 --   UNIQUE (request_id, batch_id)
@@ -9,7 +10,7 @@
 --
 -- Write path: one row in result_score_table + six rows in result_score_dimensions.
 -- Dimension score NULL means Cannot Assess (API may use the string "Cannot Assess").
--- Orchestrator must insert the same (request_id, batch_id) pair as on public.requests.
+-- Caller must pass the same (request_id, batch_id) pair as on public.requests.
 
 CREATE TABLE IF NOT EXISTS public.result_score_table (
   request_id uuid NOT NULL,

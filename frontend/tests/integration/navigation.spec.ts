@@ -1,15 +1,15 @@
 import { expect, test } from '@playwright/test'
 
-test('a user can move through the review workflow shell', async ({ page }) => {
+test('a signed-out user is redirected to authentication and can switch modes', async ({ page }) => {
   await page.goto('/')
 
-  // The SPA should route a fresh session into the first stage of the review journey.
-  await expect(page).toHaveURL(/\/upload$/)
-  await expect(page.getByRole('heading', { name: 'Upload' })).toBeVisible()
+  // Protected review routes must send a fresh browser session to sign-in.
+  await expect(page).toHaveURL(/\/auth\/signin$/)
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible()
 
-  await page.getByRole('link', { name: 'Result' }).click()
+  await page.getByRole('button', { name: 'Sign up' }).click()
 
-  // This remains a useful smoke test as real evaluation data replaces the result placeholder.
-  await expect(page).toHaveURL(/\/result$/)
-  await expect(page.getByRole('heading', { name: 'Result' })).toBeVisible()
+  // Switching auth modes updates both the URL and visible form state.
+  await expect(page).toHaveURL(/\/auth\/signup$/)
+  await expect(page.getByRole('heading', { name: 'Create your account' })).toBeVisible()
 })

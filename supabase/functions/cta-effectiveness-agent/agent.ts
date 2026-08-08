@@ -146,7 +146,7 @@ function capToBriefLow(check: SubCheckResult): SubCheckResult {
     "low",
     `${check.explanation ?? ""} (Severity capped to low: the CTA matches the ` +
       `brief's required CTA, so this phrasing is the advertiser's deliberate choice.)`
-      .trim(),
+        .trim(),
   );
 }
 
@@ -229,8 +229,12 @@ export function buildCtaClarity(
     matchesRequiredCta(c.text, ctx.parsed_creative_brief.required_ctas)
   );
 
-  const languageWeakFinal = briefMatched ? capToBriefLow(languageWeak) : languageWeak;
-  const goalMismatchFinal = briefMatched ? capToBriefLow(goalMismatch) : goalMismatch;
+  const languageWeakFinal = briefMatched
+    ? capToBriefLow(languageWeak)
+    : languageWeak;
+  const goalMismatchFinal = briefMatched
+    ? capToBriefLow(goalMismatch)
+    : goalMismatch;
 
   const subChecks: SubCheckResult[] = [
     absent,

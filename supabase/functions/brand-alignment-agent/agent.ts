@@ -15,10 +15,6 @@ export const BrandAgentRequestSchema = AgentRunRequestSchema;
 
 export type BrandAgentRequest = AgentRunRequest;
 
-export type BrandAgentRunOptions = {
-  userId: string;
-};
-
 /**
  * Runs the Brand Alignment evaluation pipeline.
  *
@@ -29,10 +25,8 @@ export type BrandAgentRunOptions = {
  */
 export async function runBrandAlignment(
   request: BrandAgentRequest,
-  options: BrandAgentRunOptions,
 ): Promise<MetricResult> {
-  const { userId } = options;
-  const context = await loadAgentContext(request.request_id, { userId });
+  const context = await loadAgentContext(request.request_id);
 
   const logo = evaluateLogoChecks(context);
   const qualitative = await evaluateQualitativeChecks(context);

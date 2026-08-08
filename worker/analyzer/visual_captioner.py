@@ -8,7 +8,12 @@ from pydantic import BaseModel
 from analyzer.output_models import ColorPalette, PeopleInfo, SceneBackground, TechnicalFlag
 from app.errors import PermanentError, TransientError
 from config.connection import get_openrouter_client
-from config.settings import OPENROUTER_VISION_MODEL, OPENROUTER_VISION_TIMEOUT, VISUAL_CAPTION_LONG_SIDE
+from config.settings import (
+    OPENROUTER_VISION_MODEL,
+    OPENROUTER_VISION_TIMEOUT,
+    VISUAL_CAPTION_LONG_SIDE,
+    VISUAL_CAPTION_MAX_TOKENS,
+)
 
 
 class VisualCaptionOutput(BaseModel):
@@ -125,6 +130,7 @@ class VisualCaptioner:
                 messages=messages,
                 response_format=VisualCaptionOutput,
                 timeout=OPENROUTER_VISION_TIMEOUT,
+                max_tokens=VISUAL_CAPTION_MAX_TOKENS,
             )
         except openai.APITimeoutError as e:
             raise TransientError(f"OpenRouter vision request timed out: {e}")

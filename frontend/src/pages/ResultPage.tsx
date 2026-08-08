@@ -22,8 +22,10 @@ import IssueRow from '../components/results/IssueRow'
 import MetricBar from '../components/results/MetricBar'
 import RankCard from '../components/results/RankCard'
 import { STATUS } from '../components/results/status'
+import { downloadReport } from '../lib/downloadReport'
 import { fetchBatchResults } from '../lib/results'
 import type { BatchResults } from '../lib/results'
+import { emptyIssuesCopy, scoreText } from '../lib/reportModel'
 import { getErrorMessage } from '../lib/errorMessage'
 
 // Matches task-pipeline-progress-view.md D1 (5000ms) and D9 (10 minutes) so the
@@ -128,6 +130,8 @@ export default function ResultPage() {
   const [timedOut, setTimedOut] = useState(false)
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
   const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!batchId) return null
@@ -197,34 +201,21 @@ export default function ResultPage() {
     setExpandedIssueId(next?.issues[0]?.id ?? null)
   }
 
-  function exportReport() {
-    if (!data) return
+  async function exportReport() {
+    if (!data || !batchId) return
 
-    const report = {
-      generatedAt: new Date().toISOString(),
-      batchId,
-      videos: data.videos.map((video) => ({
-        rank: video.rank,
-        name: video.name,
-        score: video.score,
-        status: STATUS[video.status].label,
-        metrics: video.metrics,
-        issues: video.issues.map((issue) => ({
-          metricId: issue.metricId,
-          severity: issue.severity,
-          timestamp: issue.timestamp,
-          detail: issue.detail,
-        })),
-      })),
+    setExporting(true)
+    setExportError(null)
+    try {
+      await downloadReport(data, batchId)
+    } catch (err) {
+      // Surfaced next to the button rather than through the page-level `error`
+      // state: a failed export is no reason to replace results the user can
+      // still read.
+      setExportError(getErrorMessage(err, 'Could not build the PDF'))
+    } finally {
+      setExporting(false)
     }
-
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'adready-results.json'
-    anchor.click()
-    URL.revokeObjectURL(url)
   }
 
   // ---- the five states --------------------------------------------------
@@ -277,6 +268,7 @@ export default function ResultPage() {
 
   const resultStatus = STATUS[selected.status]
   const activeIssueId = expandedIssueId ?? selected.issues[0]?.id ?? null
+  const emptyIssues = emptyIssuesCopy(selected.status)
 
   return (
     <Shell>
@@ -288,14 +280,23 @@ export default function ResultPage() {
             how they ranked and what to fix.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={exportReport}
-          className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"
-        >
-          <DownloadIcon className="h-4 w-4" />
-          Export Report
-        </button>
+        <div className="flex flex-col items-end">
+          <button
+            type="button"
+            onClick={() => void exportReport()}
+            disabled={exporting}
+            aria-busy={exporting}
+            className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:bg-violet-400"
+          >
+            <DownloadIcon className="h-4 w-4" />
+            {/* The first click pays for the lazy PDF chunk on top of the render,
+                so without this the button looks dead for a beat. */}
+            {exporting ? 'Preparing PDF…' : 'Export Report'}
+          </button>
+          {exportError !== null && (
+            <p className="mt-2 max-w-xs text-right text-sm text-red-600">{exportError}</p>
+          )}
+        </div>
       </div>
 
       <p className="mb-3 mt-8 text-sm font-semibold text-slate-800">Creative Ranking</p>
@@ -326,7 +327,7 @@ export default function ResultPage() {
             <div
               className={`flex h-44 w-44 items-center justify-center rounded-full border-2 text-6xl font-bold ${resultStatus.bigCircle}`}
             >
-              {selected.score ?? '—'}
+              {scoreText(selected.score)}
             </div>
           </div>
 
@@ -349,32 +350,11 @@ export default function ResultPage() {
           <div className="mt-6 space-y-4">
             {selected.issues.length === 0 ? (
               <div className="rounded-xl border border-slate-200 bg-white px-5 py-10 text-center">
-                {/* Gated on status, not on issue count. Issues with severity
-                    `none` or `cannot_assess` are filtered out, so an empty list
-                    does not prove the creative is clean — claiming "ready to
-                    ship" on a High Risk video would be flatly wrong. */}
-                {selected.status === 'ready' ? (
-                  <>
-                    <p className="text-sm font-medium text-slate-600">No issues found.</p>
-                    <p className="mt-1 text-sm text-slate-400">This creative is ready to ship.</p>
-                  </>
-                ) : selected.status === 'unassessed' ? (
-                  <>
-                    <p className="text-sm font-medium text-slate-600">Nothing to show.</p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      This creative could not be assessed, so no issues were recorded.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium text-slate-600">
-                      No specific issues were listed.
-                    </p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      This creative still scored below the ready-to-ship threshold.
-                    </p>
-                  </>
-                )}
+                {/* Copy is gated on status, not on issue count, and lives in
+                    lib/reportModel.ts so the PDF export says exactly the same
+                    thing. See that function for why the distinction matters. */}
+                <p className="text-sm font-medium text-slate-600">{emptyIssues.title}</p>
+                <p className="mt-1 text-sm text-slate-400">{emptyIssues.body}</p>
               </div>
             ) : (
               selected.issues.map((issue) => (

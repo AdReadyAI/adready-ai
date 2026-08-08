@@ -63,8 +63,7 @@ function evaluationInput(
   });
 }
 
-const CTA_CLARITY_RUBRIC =
-  "Severity rubric for cta_clarity: " +
+const CTA_CLARITY_RUBRIC = "Severity rubric for cta_clarity: " +
   "cta_language_weak (range none→medium). cta_goal_mismatch (range none→high). cta_no_urgency (range none→low; " +
   "applies ONLY when campaign_goal is conversion). cta_destination_unclear (range none→medium). " +
   "cta_absent (range none→critical, goal-conditional: awareness none, consideration medium, repurchase high, conversion critical).";

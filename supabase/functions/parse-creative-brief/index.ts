@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createEdgeHandler } from "../shared/handler.ts";
 import { chat, stripCodeFences } from "../shared/llm.ts";
-import { ok, err } from "../shared/response.ts";
+import { err, ok } from "../shared/response.ts";
 import { ParsedCreativeBriefSchema } from "../shared/schemas.ts";
 
 const RequestSchema = z.object({
@@ -10,7 +10,8 @@ const RequestSchema = z.object({
 
 type RequestBody = z.infer<typeof RequestSchema>;
 
-const SYSTEM_PROMPT = `You are a creative-brief parser. Extract the following fields from the unstructured brief below and return ONLY valid JSON matching this exact shape (no markdown, no explanation):
+const SYSTEM_PROMPT =
+  `You are a creative-brief parser. Extract the following fields from the unstructured brief below and return ONLY valid JSON matching this exact shape (no markdown, no explanation):
 
 {
   "brand_voice": "<string or empty string>",

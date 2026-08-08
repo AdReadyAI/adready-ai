@@ -26,6 +26,11 @@ export type LLMResponse = {
   choices: { message: { content: string } }[];
 };
 
+/** Measure the exact encoded message payload for prompt-size telemetry. */
+export function chatPayloadBytes(messages: ChatMessage[]): number {
+  return new TextEncoder().encode(JSON.stringify(messages)).byteLength;
+}
+
 /**
  * Strips markdown code fences from a model reply.
  *

@@ -49,6 +49,47 @@ def test_jobs_queue_and_enqueue_function_exist() -> None:
 
 
 @pytest.mark.integration
+def test_evaluation_completion_does_not_use_the_media_queue() -> None:
+    """Scorecard completion must not leave jobs the media worker cannot parse."""
+    database_url = os.environ.get(
+        "TEST_DATABASE_URL",
+        "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
+    )
+
+    with psycopg2.connect(database_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                  EXISTS (
+                    SELECT 1
+                    FROM pg_trigger
+                    WHERE tgname = 'trg_enqueue_score_job_on_agent_results'
+                      AND NOT tgisinternal
+                  ),
+                  to_regprocedure(
+                    'public.enqueue_score_job_for_request()'
+                  ),
+                  EXISTS (
+                    SELECT 1
+                    FROM pg_trigger
+                    WHERE tgname = 'trg_trigger_evaluation_completion'
+                      AND NOT tgisinternal
+                  );
+                """
+            )
+            legacy_trigger_exists, legacy_function, completion_trigger_exists = (
+                cursor.fetchone()
+            )
+
+    # The Railway worker consumes only media-processing payloads. Evaluation
+    # completion therefore stays inside Supabase and never writes score jobs.
+    assert not legacy_trigger_exists
+    assert legacy_function is None
+    assert completion_trigger_exists
+
+
+@pytest.mark.integration
 def test_video_processing_status_check_allows_processing() -> None:
     """The 'processing' status must be a valid in-flight state, not just success/error."""
     database_url = os.environ.get(
