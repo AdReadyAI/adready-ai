@@ -27,6 +27,7 @@ import { fetchBatchResults } from '../lib/results'
 import type { BatchResults } from '../lib/results'
 import { emptyIssuesCopy, scoreText } from '../lib/reportModel'
 import { getErrorMessage } from '../lib/errorMessage'
+import { useSignedVideoUrl } from '../lib/useSignedVideoUrl'
 
 // Matches task-pipeline-progress-view.md D1 (5000ms) and D9 (10 minutes) so the
 // real progress view is a drop-in swap rather than a behaviour change.
@@ -195,6 +196,11 @@ export default function ResultPage() {
     return data.videos.find((video) => video.requestId === selectedRequestId) ?? data.videos[0]
   }, [data, selectedRequestId])
 
+  // One signature per selected video, shared by all its issue rows. Called here
+  // rather than inside IssueRow so switching videos costs one round trip instead
+  // of one per issue — and it must sit above the early returns below.
+  const videoUrl = useSignedVideoUrl(selected?.videoPath ?? null)
+
   function selectVideo(requestId: string) {
     setSelectedRequestId(requestId)
     const next = data?.videos.find((video) => video.requestId === requestId)
@@ -361,6 +367,7 @@ export default function ResultPage() {
                 <IssueRow
                   key={issue.id}
                   issue={issue}
+                  videoUrl={videoUrl}
                   expanded={activeIssueId === issue.id}
                   onToggle={() =>
                     setExpandedIssueId(activeIssueId === issue.id ? null : issue.id)
