@@ -1,15 +1,29 @@
 import os
+import sys
 import logging
 
 MODE = os.environ.get("MODE", "prod").lower()
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 DEBUG = LOG_LEVEL == "DEBUG"
 
-logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
-    format="%(asctime)s [%(levelname)s] %(message)s",
+_level = getattr(logging, LOG_LEVEL, logging.INFO)
+_formatter = logging.Formatter(
+    fmt="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+
+# Split by stream so Railway (which infers severity from stdout/stderr) doesn't
+# flag INFO/DEBUG logs as errors.
+_stdout_handler = logging.StreamHandler(sys.stdout)
+_stdout_handler.setLevel(_level)
+_stdout_handler.addFilter(lambda record: record.levelno < logging.WARNING)
+_stdout_handler.setFormatter(_formatter)
+
+_stderr_handler = logging.StreamHandler(sys.stderr)
+_stderr_handler.setLevel(logging.WARNING)
+_stderr_handler.setFormatter(_formatter)
+
+logging.basicConfig(level=_level, handlers=[_stdout_handler, _stderr_handler])
 logger = logging.getLogger("worker")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
