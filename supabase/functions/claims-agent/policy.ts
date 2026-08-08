@@ -47,19 +47,21 @@ const SEVERITY_SCORE = z.union([
   z.literal(4),
 ]);
 
+const nullableString = z.string().nullable().transform((v) => v ?? "");
+
 const AdWidePolicyResponseSchema = z.object({
   disclaimer: z.object({
     required: z.boolean(),
     present: z.boolean(),
     matched_segment_id: z.string().nullable(),
     matched_source: z.enum(["transcript", "ocr"]).nullable(),
-    explanation: z.string(),
+    explanation: nullableString,
     confidence_score: z.number().min(0).max(1),
   }),
   policy_depiction: z.object({
     detected: z.boolean(),
     severity: SEVERITY_SCORE,
-    description: z.string(),
+    description: nullableString,
     matched_segment_id: z.string().nullable(),
     matched_source: z.enum(["transcript", "ocr"]).nullable(),
     confidence_score: z.number().min(0).max(1),

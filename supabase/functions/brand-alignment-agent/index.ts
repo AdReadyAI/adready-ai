@@ -9,19 +9,17 @@
  *      [ ] brand_voice_drift: Audio transcript or on-screen copy drifts from specified brand voice.
  */
 
-import { createEdgeHandler, err, ok } from "../shared/index.ts";
+import { createInternalEdgeHandler, err, ok } from "../shared/index.ts";
 
 import { BrandAgentRequestSchema, runBrandAlignment } from "./agent.ts";
 
-createEdgeHandler(
+createInternalEdgeHandler(
   "brand-alignment-agent",
   BrandAgentRequestSchema,
   async (_req, ctx) => {
     try {
       return ok([
-        await runBrandAlignment(ctx.body, {
-          userId: ctx.user.id,
-        }),
+        await runBrandAlignment(ctx.body),
       ]);
     } catch (error) {
       const message = error instanceof Error
