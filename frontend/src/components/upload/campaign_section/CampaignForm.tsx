@@ -4,7 +4,7 @@ import { getErrorMessage } from "../../../lib/errorMessage";
 import { supabase } from "../../../lib/supabaseClient";
 import type { UploadedVideo, UploadedImage } from "../../../pages/UploadPage";
 import type { ParsedCreativeBrief } from "../../../types/brief";
-import AdvancedFieldsSection from "./AdvancedFieldsSection";
+import AdvancedFieldsSection, { missingRequiredAdvanced } from "./AdvancedFieldsSection";
 
 type CampaignMode = "create" | "existing";
 
@@ -72,7 +72,20 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
   const hasCompletedVideo = videos.some((v) => v.status === "done");
   const noneUploading = videos.every((v) => v.status !== "uploading");
 
-  const isCreateValid = productUrl.trim() && campaignGoal && destinationPlatform && creativeBrief.trim();
+  // The required advanced fields aren't cosmetic gating: each one guards a
+  // sub-check in brief-alignment-agent / brand-alignment-agent that degrades to
+  // `cannot_assess` when its input is blank. Submitting without them buys a
+  // review with holes in it, so block here rather than let the user pay for a
+  // partial result. The optional fields are prompt context only — no check is
+  // dropped when they're empty.
+  const missingAdvanced = missingRequiredAdvanced(advancedFields);
+
+  const isCreateValid =
+    productUrl.trim() &&
+    campaignGoal &&
+    destinationPlatform &&
+    creativeBrief.trim() &&
+    missingAdvanced.length === 0;
   const isExistingValid = selectedCampaign;
   const isFormValid =
     (mode === "create" ? isCreateValid : isExistingValid) && hasCompletedVideo && noneUploading;
@@ -403,6 +416,13 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
       )}
 
       {submitError && <p className="text-sm text-red-600">{submitError}</p>}
+
+      {mode === "create" && !parsing && missingAdvanced.length > 0 && (
+        <p className="text-sm text-[#8A6216]">
+          Fill in {missingAdvanced.join(", ")} under Advanced brief details — the review skips
+          those checks otherwise.
+        </p>
+      )}
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-[#9B9A97]">🔒  Your videos are secure and never shared.</p>
