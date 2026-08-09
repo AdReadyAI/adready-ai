@@ -106,6 +106,12 @@ not a full diff.
   brief/brand alignment agents force to `cannot_assess` when the input is blank;
   submit is now blocked on them via the exported `missingRequiredAdvanced`. The
   other four are prompt context only, so they stay optional.
+- **2026-08-09** — Fixed the red `main` build. Adding required `videoPath` /
+  `timestampSeconds` to `VideoResult` / `Issue` broke three older test fixtures
+  that still built those objects the old way. Only the CI `quality` job caught
+  it: vitest transpiles through esbuild, which strips types without checking
+  them, so `npm run test:unit` stayed green while `tsc -b` failed. Widening a
+  shared type means every fixture that constructs it, tests included.
 - **2026-08-09** — Expanded issue rows play the real video instead of a fake
   black box. `components/results/IssueClip.tsx` is an ordinary player (native
   `controls` — play/pause, scrub, volume, fullscreen) that opens parked on the
