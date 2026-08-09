@@ -27,6 +27,13 @@ vi.mock('../lib/downloadReport', () => ({
   downloadReport: downloadReportMock,
 }))
 
+// Signs a playback URL against the real Supabase client — mocked out entirely
+// so importing ResultPage doesn't crash on missing env vars, and so the video
+// clip preview isn't exercised here (it's covered by its own test file).
+vi.mock('../lib/useSignedVideoUrl', () => ({
+  useSignedVideoUrl: () => null,
+}))
+
 vi.mock('react-router-dom', () => ({
   useParams: () => paramsRef.current,
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
@@ -39,6 +46,7 @@ function makeVideo(overrides: Partial<VideoResult> = {}): VideoResult {
     requestId: 'req-1',
     rank: 1,
     name: 'ad.mp4',
+    videoPath: 'user-123/batch-1/video/req-1/ad.mp4',
     score: 82,
     status: 'ready',
     thumb: 'bg-violet-100 text-violet-500',
@@ -205,6 +213,7 @@ describe('ResultPage — ready state', () => {
       severity: 'high',
       repairText: 'Add a clear CTA.',
       timestamp: '0:22',
+      timestampSeconds: 22,
     }
     const videoA = makeVideo({ requestId: 'req-1', name: 'ad1.mp4', rank: 1, score: 90 })
     const videoB = makeVideo({
