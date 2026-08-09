@@ -60,6 +60,8 @@ export interface BatchResults {
   totalCount: number
   /** True when every request in the batch has a score row. */
   complete: boolean
+  /** Terminally failed creatives, supplied by the review-lifecycle projection. */
+  failedCount?: number
 }
 
 // ---- status --------------------------------------------------------------
@@ -325,6 +327,7 @@ export function assembleVideoResults(input: {
     pending,
     totalCount: requests.length,
     complete: requests.length > 0 && pending.length === 0,
+    failedCount: 0,
   }
 }
 

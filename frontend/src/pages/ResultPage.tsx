@@ -16,7 +16,7 @@
 // task's D1/D9 values for the same reason.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import DownloadIcon from '../components/icons/DownloadIcon'
 import IssueRow from '../components/results/IssueRow'
 import MetricBar from '../components/results/MetricBar'
@@ -27,6 +27,7 @@ import { fetchBatchResults } from '../lib/results'
 import type { BatchResults } from '../lib/results'
 import { emptyIssuesCopy, scoreText } from '../lib/reportModel'
 import { getErrorMessage } from '../lib/errorMessage'
+import { deleteReview, retryReview } from '../lib/reviews'
 
 // Matches task-pipeline-progress-view.md D1 (5000ms) and D9 (10 minutes) so the
 // real progress view is a drop-in swap rather than a behaviour change.
@@ -122,8 +123,79 @@ function ProcessingPlaceholder({
   )
 }
 
+function InterruptedReview({
+  data,
+  actionError,
+  actionPending,
+  onRetry,
+  onDelete,
+}: {
+  data: BatchResults
+  actionError: string | null
+  actionPending: boolean
+  onRetry: () => void
+  onDelete: () => void
+}) {
+  return (
+    <Shell>
+      <div className="max-w-3xl">
+        <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+          Review interrupted
+        </span>
+        <h1 className="mt-4 text-3xl font-bold text-slate-950">
+          Some analysis could not be completed.
+        </h1>
+        <p className="mt-2 max-w-2xl leading-7 text-slate-600">
+          {data.videos.length} of {data.totalCount} creatives produced a scorecard.{' '}
+          {data.failedCount} {data.failedCount === 1 ? 'creative needs' : 'creatives need'} a
+          complete retry.
+        </p>
+
+        {data.pending.length > 0 && (
+          <div className="mt-8 rounded-xl bg-white px-6 py-5 shadow-[0_6px_24px_rgba(15,23,42,0.06)]">
+            <h2 className="font-bold text-slate-900">Creatives without a scorecard</h2>
+            <ul className="mt-3 space-y-2 text-sm text-slate-600">
+              {data.pending.map((creative) => (
+                <li key={creative.requestId}>{creative.name}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {actionError && <p className="mt-5 text-sm font-medium text-red-700">{actionError}</p>}
+
+        <div className="mt-8 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={actionPending}
+            className="min-h-11 rounded-lg bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {actionPending ? 'Starting retry…' : 'Retry complete review'}
+          </button>
+          <Link
+            to="/reviews"
+            className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-5 text-sm font-semibold text-slate-800 hover:bg-white"
+          >
+            Back to reviews
+          </Link>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={actionPending}
+            className="min-h-11 rounded-lg px-4 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Delete review
+          </button>
+        </div>
+      </div>
+    </Shell>
+  )
+}
+
 export default function ResultPage() {
   const { batchId } = useParams<{ batchId: string }>()
+  const navigate = useNavigate()
 
   const [data, setData] = useState<BatchResults | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -132,6 +204,8 @@ export default function ResultPage() {
   const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [actionPending, setActionPending] = useState(false)
 
   const load = useCallback(async () => {
     if (!batchId) return null
@@ -166,7 +240,7 @@ export default function ResultPage() {
       const next = await load()
       if (cancelled) return
 
-      if (next?.complete) {
+      if (next?.complete || (next?.failedCount ?? 0) > 0) {
         stop()
         return
       }
@@ -180,7 +254,7 @@ export default function ResultPage() {
       const first = await load()
       // Only start an interval if the batch is actually still running — a
       // finished batch should cost exactly one query.
-      if (cancelled || first === null || first.complete) return
+      if (cancelled || first === null || first.complete || (first.failedCount ?? 0) > 0) return
       intervalId = setInterval(() => void tick(), POLL_MS)
     })()
 
@@ -218,6 +292,35 @@ export default function ResultPage() {
     }
   }
 
+  async function retryCompleteReview() {
+    if (!batchId) return
+    setActionError(null)
+    setActionPending(true)
+
+    try {
+      const retryId = await retryReview(batchId)
+      navigate(`/result/${retryId}`)
+    } catch (err) {
+      setActionError(getErrorMessage(err, 'Could not retry this review'))
+      setActionPending(false)
+    }
+  }
+
+  async function removeReview() {
+    if (!batchId) return
+    if (!window.confirm('Delete this review and its generated analysis?')) return
+
+    setActionError(null)
+    setActionPending(true)
+    try {
+      await deleteReview(batchId)
+      navigate('/reviews')
+    } catch (err) {
+      setActionError(getErrorMessage(err, 'Could not delete this review'))
+      setActionPending(false)
+    }
+  }
+
   // ---- the five states --------------------------------------------------
 
   if (!batchId) {
@@ -249,6 +352,18 @@ export default function ResultPage() {
       <Notice
         title="Batch not found"
         body="We couldn't find a review with this link, or it belongs to a different account."
+      />
+    )
+  }
+
+  if (!data.complete && (data.failedCount ?? 0) > 0) {
+    return (
+      <InterruptedReview
+        data={data}
+        actionError={actionError}
+        actionPending={actionPending}
+        onRetry={() => void retryCompleteReview()}
+        onDelete={() => void removeReview()}
       />
     )
   }
@@ -340,7 +455,7 @@ export default function ResultPage() {
           </div>
         </div>
 
-        <div className="border-l-4 border-red-500 pl-6">
+        <div className="lg:border-l lg:border-slate-200 lg:pl-8">
           <h3 className="text-2xl font-bold text-slate-900">Issue Deep Dive &amp; Repair Center</h3>
           <p className="mt-1 text-sm text-slate-500">
             {selected.name} · {selected.issues.length} issue
