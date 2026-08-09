@@ -1,4 +1,5 @@
 from config.settings import logger, QUEUE_NAME, VISIBILITY_TIMEOUT, MAX_RETRIES, DEBUG, RETRY_BASE_DELAY
+from app.errors import UnrecoverableError
 from .processor import process_message
 from .heartbeat import HeartBeat
 
@@ -39,6 +40,9 @@ def drain_queue(cur, heartbeat_factory=HeartBeat):
                 process_message(cur, msg_id, payload)
             cur.execute("SELECT pgmq.delete(%s, %s);", (QUEUE_NAME, msg_id))
             processed += 1
+        except UnrecoverableError as e:
+            logger.error("[job %s] Unrecoverable failure, archiving: %s", msg_id, e)
+            cur.execute("SELECT pgmq.archive(%s, %s);", (QUEUE_NAME, msg_id))
         except Exception as e:
             logger.error("[job %s] Failed (attempt %d): %s", msg_id, read_ct, e, exc_info=DEBUG)
             delay = RETRY_BASE_DELAY * (2 ** (read_ct - 1))

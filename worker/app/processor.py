@@ -13,10 +13,9 @@ from analyzer.ocr.frame_artifacts import SupabaseOcrFrameArtifactStore
 from analyzer.ocr.roboflow import build_roboflow_easyocr_adapter_from_env
 from app.log_utils import phase
 from app.schemas import JobPayload
-from app.errors import TransientError
+from app.errors import PermanentError, TransientError, UnrecoverableError
 from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS, SUPABASE_URL
-from analyzer.output_models import ProductContextResult, ProductContextRow, TaskResult
-from app.product_context import ProductPageExtractor
+from analyzer.output_models import TaskResult
 from app.ocr_runs import OcrRunLifecycle
 from app.supabase import Supabase
 
@@ -91,13 +90,14 @@ def process_message(cur, msg_id, payload):
             ocr_lifecycle,
             artifact.video_metadata,
         )
-        analyzer = _ProductContextAnalyzer(analyzer, payload.product_url)
 
         with phase(logger, f"[job {msg_id}] Analysis"):
-            results, errors = _run_analysis(db, analyzer, msg_id)
+            results, errors, unrecoverable = _run_analysis(db, analyzer, msg_id)
 
         db.persist_results(results, errors)
 
+        if unrecoverable:
+            raise UnrecoverableError(f"[job {msg_id}] analyzers failed permanently: {list(errors)}")
         if errors:
             raise RuntimeError(f"[job {msg_id}] analyzers failed: {list(errors)}")
 
@@ -136,47 +136,9 @@ class _OcrLifecycleAnalyzer:
         return {**tasks, "ocr": run_ocr}
 
 
-class _ProductContextAnalyzer:
-    """Add Product Context extraction to the shared task registry so it gets
-    the same concurrent retry/error handling and result persistence as the
-    other analyzer tasks, instead of blocking ahead of them.
-    """
-
-    def __init__(
-        self,
-        analyzer,
-        product_url: str | None,
-        extractor: ProductPageExtractor | None = None,
-    ):
-        self.analyzer = analyzer
-        self.product_url = product_url
-        self.extractor = extractor
-
-    def analysis_tasks(self):
-        """Return the registry with Product Context added when a URL was submitted."""
-        tasks = self.analyzer.analysis_tasks()
-        if self.product_url is None:
-            return tasks
-
-        def run_product_context() -> ProductContextResult:
-            page_extractor = self.extractor or ProductPageExtractor()
-            context = page_extractor.extract(self.product_url)
-            return ProductContextResult(
-                rows=[
-                    ProductContextRow(
-                        raw_text=context.raw_text,
-                        reference_asset_urls=list(context.reference_asset_urls),
-                    )
-                ]
-            )
-
-        run_product_context._analysis_task = "product_context"
-        return {**tasks, "product_context": run_product_context}
-
-
 def _run_analysis(
     db: Supabase, analyzer: VideoAnalyzer, msg_id=None
-) -> tuple[dict[str, TaskResult], dict[str, str]]:
+) -> tuple[dict[str, TaskResult], dict[str, str], bool]:
     done = db.completed_analyzers()
     tasks = {n: fn for n, fn in analyzer.analysis_tasks().items() if n not in done}
     logger.info("[job %s] Analysis tasks scheduled: %s", msg_id, list(tasks))
@@ -185,6 +147,7 @@ def _run_analysis(
         db.mark_processing(name)
 
     results, errors = {}, {}
+    unrecoverable = False
     with ThreadPoolExecutor(max_workers=max(len(tasks), 1)) as executor:
         futures = {
             executor.submit(_with_retry, fn, msg_id=msg_id): name
@@ -196,13 +159,16 @@ def _run_analysis(
                 result = future.result()
                 if result is not None:
                     results[name] = result
+            except PermanentError as e:
+                errors[name] = str(e)
+                unrecoverable = True
             except Exception as e:
                 errors[name] = str(e)
     logger.info(
         "[job %s] Analysis tasks complete: %d succeeded, %d failed (%s)",
         msg_id, len(results), len(errors), list(errors),
     )
-    return results, errors
+    return results, errors, unrecoverable
 
 def _with_retry(fn, attempts=ANALYSIS_TASK_MAX_ATTEMPTS, base=1.0, msg_id=None):
     name = getattr(fn, "_analysis_task", getattr(fn, "__name__", "task"))

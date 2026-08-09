@@ -13,7 +13,7 @@ docker compose up -d --build worker
 ```bash
 docker compose exec worker \
   uv run python -m tools.evaluate_frame_sampling \
-  --video /app/tools/data/<your-video> \
+  --video /app/tools/data/test.MP4 \
   --prods /app/tools/data/prod \
   --logos /app/tools/data/logo \
   --work-dir /app/tools/tmp

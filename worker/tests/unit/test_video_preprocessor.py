@@ -14,7 +14,7 @@ from analyzer.ocr.candidates import (  # noqa: E402
     OcrCandidateCapacityError,
 )
 from analyzer.types import VideoMetadata  # noqa: E402
-from app.errors import PermanentError, TransientError  # noqa: E402
+from app.errors import TransientError, UnrecoverableError  # noqa: E402
 from app.schemas import JobPayload  # noqa: E402
 
 
@@ -103,7 +103,7 @@ def test_parse_fps_skips_zero_and_falls_back():
 
 
 def test_parse_fps_all_invalid_raises():
-    with pytest.raises(PermanentError):
+    with pytest.raises(UnrecoverableError):
         vp.VideoPreprocessor._parse_fps({"avg_frame_rate": "0/0"})
 
 
@@ -150,7 +150,7 @@ def test_probe_metadata_no_ffprobe(tmp_path, monkeypatch):
         raise FileNotFoundError()
 
     monkeypatch.setattr(vp.subprocess, "run", boom)
-    with pytest.raises(PermanentError):
+    with pytest.raises(UnrecoverableError):
         _pre(tmp_path)._probe_metadata("v.mp4")
 
 
@@ -168,7 +168,7 @@ def test_probe_metadata_called_process_error(tmp_path, monkeypatch):
         raise subprocess.CalledProcessError(returncode=1, cmd="ffprobe", stderr="bad")
 
     monkeypatch.setattr(vp.subprocess, "run", boom)
-    with pytest.raises(PermanentError):
+    with pytest.raises(UnrecoverableError):
         _pre(tmp_path)._probe_metadata("v.mp4")
 
 
@@ -176,7 +176,7 @@ def test_probe_metadata_bad_json(tmp_path, monkeypatch):
     monkeypatch.setattr(
         vp.subprocess, "run", lambda *a, **k: MagicMock(stdout="not json")
     )
-    with pytest.raises(PermanentError):
+    with pytest.raises(UnrecoverableError):
         _pre(tmp_path)._probe_metadata("v.mp4")
 
 
@@ -185,7 +185,7 @@ def test_probe_metadata_no_video_stream(tmp_path, monkeypatch):
         {"format": {"duration": "1", "size": "1"}, "streams": [{"codec_type": "audio"}]}
     )
     monkeypatch.setattr(vp.subprocess, "run", lambda *a, **k: MagicMock(stdout=data))
-    with pytest.raises(PermanentError):
+    with pytest.raises(UnrecoverableError):
         _pre(tmp_path)._probe_metadata("v.mp4")
 
 
@@ -208,7 +208,7 @@ def test_extract_audio_no_ffmpeg(tmp_path, monkeypatch):
         raise FileNotFoundError()
 
     monkeypatch.setattr(vp.subprocess, "run", boom)
-    with pytest.raises(PermanentError):
+    with pytest.raises(UnrecoverableError):
         _pre(tmp_path)._extract_audio("v.mp4")
 
 
@@ -226,7 +226,7 @@ def test_extract_audio_called_process_error(tmp_path, monkeypatch):
         raise subprocess.CalledProcessError(returncode=1, cmd="ffmpeg", stderr="bad")
 
     monkeypatch.setattr(vp.subprocess, "run", boom)
-    with pytest.raises(PermanentError):
+    with pytest.raises(UnrecoverableError):
         _pre(tmp_path)._extract_audio("v.mp4")
 
 
@@ -258,16 +258,16 @@ def test_download_writes_chunks(tmp_path, monkeypatch):
 
 def test_download_missing_extension_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(vp, "get_storage_session", lambda: MagicMock())
-    with pytest.raises(PermanentError):
+    with pytest.raises(UnrecoverableError):
         _pre(tmp_path, video_path="novid")._download_video()
 
 
 @pytest.mark.parametrize("code", [400, 401, 403, 404])
-def test_download_client_errors_are_permanent(tmp_path, monkeypatch, code):
+def test_download_client_errors_are_unrecoverable(tmp_path, monkeypatch, code):
     session = MagicMock()
     session.get.return_value = _FakeResp(raise_exc=_http_error(code))
     monkeypatch.setattr(vp, "get_storage_session", lambda: session)
-    with pytest.raises(PermanentError):
+    with pytest.raises(UnrecoverableError):
         _pre(tmp_path)._download_video()
 
 

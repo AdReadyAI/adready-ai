@@ -36,4 +36,5 @@ class Artifacts:
 
     product_image_paths: tuple[str, ...] = ()
     logo_paths: tuple[str, ...] = ()
+    product_url: str | None = None
 

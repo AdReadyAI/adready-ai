@@ -32,11 +32,14 @@ from analyzer.output_models import (
     TranscriptionResult,
     LogoFrameResult,
     LogoFrameRow,
+    ProductContextResult,
+    ProductContextRow,
     ProductFrameResult,
     ProductFrameRow,
     VisualFrameResult,
     VisualFrameRow,
 )
+from app.product_context import ProductPageExtractor
 
 
 
@@ -117,8 +120,6 @@ class VideoAnalyzer:
     def ocr(self) -> FixedRateOcrAnalysis | None:
         """Run OCR through the configured fixed or cascade candidate mode."""
         if self.ocr_adapter is None:
-            # An unconfigured hosted provider leaves the durable OCR Run
-            # resumable instead of creating a misleading empty result.
             return None
 
         text_result = self.artifacts.probe_results.get("text")
@@ -165,6 +166,21 @@ class VideoAnalyzer:
             row_builder=self._logo_row,
         )
         return LogoFrameResult(rows=rows)
+
+    @analysis_task("product_context")
+    def extract_product_context(self) -> ProductContextResult:
+        if self.artifacts.product_url is None:
+            return PermanentError("Product URL is not available.")
+
+        context = ProductPageExtractor().extract(self.artifacts.product_url)
+        return ProductContextResult(
+            rows=[
+                ProductContextRow(
+                    raw_text=context.raw_text,
+                    reference_asset_urls=list(context.reference_asset_urls),
+                )
+            ]
+        )
 
     def _detect_reference_frames(self, tag, reference_paths, confidence, row_builder):
         """Run OWLv2 on every candidate frame tagged `tag`; skip unconfirmed ones."""
@@ -296,8 +312,13 @@ class VideoAnalyzer:
         return VisualFrameResult(rows=rows)
 
     def analysis_tasks(self):
-        return {
+        tasks = {
             method._analysis_task: method
             for _, method in inspect.getmembers(self, callable)
             if hasattr(method, "_analysis_task")
         }
+        # Unlike other tasks, Product Context has no artifact-derived input to
+        # act on without a submitted URL, so it must not even be scheduled.
+        if self.artifacts.product_url is None:
+            tasks.pop("product_context", None)
+        return tasks

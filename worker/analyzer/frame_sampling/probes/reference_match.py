@@ -11,6 +11,7 @@ from PIL import Image
 from analyzer.frame_sampling.base import ProbeResult, ProbeSetup
 from analyzer.frame_sampling.context import FrameContext
 from analyzer.frame_sampling.deferred import Candidate, DeferredModelProbe
+from app.errors import UnrecoverableError
 from config.models import get_mobileclip
 
 _PHASH_DISTANCE_THRESHOLD = 8
@@ -83,7 +84,10 @@ class ReferenceMatchProbe(DeferredModelProbe):
 
         embeds = []
         for path, label in references:
-            image = Image.open(path).convert("RGB")
+            try:
+                image = Image.open(path).convert("RGB")
+            except (OSError, ValueError) as e:
+                raise UnrecoverableError(f"Could not read reference image {path}: {e}")
 
             tensor = self._clip_preprocess(image).unsqueeze(0)
             with torch.no_grad():

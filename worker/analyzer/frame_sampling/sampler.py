@@ -18,7 +18,7 @@ from analyzer.frame_sampling.context import FrameContext
 from analyzer.text_detection.east import EastTextRegionDetector
 from analyzer.frame_sampling.probes.text import TextProbe
 from analyzer.frame_sampling.store import FrameStore
-from app.errors import PermanentError
+from app.errors import UnrecoverableError
 from app.log_utils import phase
 
 if TYPE_CHECKING:
@@ -147,7 +147,7 @@ class FrameSampler:
         """
         cap = cv2.VideoCapture(self.video_path)
         if not cap.isOpened():
-            raise PermanentError(f"OpenCV could not open video: {self.video_path}")
+            raise UnrecoverableError(f"OpenCV could not open video: {self.video_path}")
 
         index = 0
         try:

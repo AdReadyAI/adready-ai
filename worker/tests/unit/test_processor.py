@@ -1,6 +1,5 @@
 """Unit tests for the worker processor orchestration (app/processor.py)."""
 
-from unittest.mock import MagicMock
 from types import SimpleNamespace
 
 import pytest
@@ -11,7 +10,7 @@ import app.processor as processor  # noqa: E402
 from app.errors import PermanentError, TransientError  # noqa: E402
 from app.schemas import JobPayload  # noqa: E402
 from analyzer.frame_sampling.probes.quality import QualityFlag, QualityProbeResult  # noqa: E402
-from analyzer.output_models import ProductContextRow, TranscriptionResult, TranscriptSegment  # noqa: E402
+from analyzer.output_models import TranscriptionResult, TranscriptSegment  # noqa: E402
 from analyzer.ocr.completion import OcrCompletionCoordinator  # noqa: E402
 from analyzer.ocr.roboflow import RoboflowEasyOcrAdapter  # noqa: E402
 from analyzer.ocr.routing import OcrCandidateMode  # noqa: E402
@@ -73,64 +72,28 @@ class FakeDB:
         self.marked_processing.append(task_name)
 
 
-def test_product_context_wrapper_adds_task_when_url_present():
-    extractor = MagicMock()
-    extractor.extract.return_value = SimpleNamespace(
-        raw_text="Product facts",
-        reference_asset_urls=("https://example.com/product.jpg",),
-    )
-    wrapped = processor._ProductContextAnalyzer(
-        FakeAnalyzer({"transcription": lambda: "RESULT"}),
-        "https://example.com/product",
-        extractor=extractor,
-    )
-
-    tasks = wrapped.analysis_tasks()
-    result = tasks["product_context"]()
-
-    assert result.rows == [
-        ProductContextRow(
-            raw_text="Product facts",
-            reference_asset_urls=["https://example.com/product.jpg"],
-        )
-    ]
-    assert tasks["transcription"]() == "RESULT"
-
-
-def test_product_context_wrapper_skips_task_without_pending_url():
-    extractor = MagicMock()
-    wrapped = processor._ProductContextAnalyzer(
-        FakeAnalyzer({"transcription": lambda: "RESULT"}),
-        None,
-        extractor=extractor,
-    )
-
-    tasks = wrapped.analysis_tasks()
-
-    assert "product_context" not in tasks
-    extractor.extract.assert_not_called()
-
-
 # ---------------------------------------------------------------------------
 # _run_analysis()
 # ---------------------------------------------------------------------------
 def test_run_analysis_collects_successful_results():
     tasks = {"transcription": lambda: "RESULT", "context": lambda: "CTX"}
-    results, errors = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
+    results, errors, unrecoverable = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
 
     assert results == {"transcription": "RESULT", "context": "CTX"}
     assert errors == {}
+    assert unrecoverable is False
 
 
 def test_run_analysis_skips_completed_tasks():
     tasks = {"transcription": lambda: "RESULT", "context": lambda: "CTX"}
     db = FakeDB(done={"transcription"})
 
-    results, errors = processor._run_analysis(db, FakeAnalyzer(tasks))
+    results, errors, unrecoverable = processor._run_analysis(db, FakeAnalyzer(tasks))
 
     assert "transcription" not in results
     assert results == {"context": "CTX"}
     assert errors == {}
+    assert unrecoverable is False
 
 
 def test_run_analysis_marks_pending_tasks_as_processing():
@@ -177,21 +140,35 @@ def test_run_analysis_routes_exceptions_to_errors():
         raise RuntimeError("kaboom")
 
     tasks = {"transcription": lambda: "OK", "ocr": boom}
-    results, errors = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
+    results, errors, unrecoverable = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
 
     assert results == {"transcription": "OK"}
     assert set(errors) == {"ocr"}
     assert "kaboom" in errors["ocr"]
+    assert unrecoverable is False
+
+
+def test_run_analysis_flags_permanent_errors_as_unrecoverable():
+    def boom():
+        raise PermanentError("never gonna work")
+
+    tasks = {"transcription": lambda: "OK", "ocr": boom}
+    results, errors, unrecoverable = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
+
+    assert results == {"transcription": "OK"}
+    assert set(errors) == {"ocr"}
+    assert unrecoverable is True
 
 
 def test_run_analysis_skips_none_results():
     # Stub tasks return None; they must not be recorded as results (would break persist).
     tasks = {"transcription": lambda: None, "context": lambda: "CTX"}
-    results, errors = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
+    results, errors, unrecoverable = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
 
     assert "transcription" not in results
     assert results == {"context": "CTX"}
     assert errors == {}
+    assert unrecoverable is False
 
 
 # ---------------------------------------------------------------------------
@@ -389,6 +366,17 @@ def test_process_message_raises_when_a_task_fails(monkeypatch):
     _wire_process_message(monkeypatch, tasks)
 
     with pytest.raises(RuntimeError):
+        processor.process_message(cur=object(), msg_id=7, payload=VALID_PAYLOAD)
+
+
+def test_process_message_raises_unrecoverable_when_task_fails_permanently(monkeypatch):
+    def boom():
+        raise PermanentError("never gonna work")
+
+    tasks = {"ocr": boom}
+    _wire_process_message(monkeypatch, tasks)
+
+    with pytest.raises(processor.UnrecoverableError):
         processor.process_message(cur=object(), msg_id=7, payload=VALID_PAYLOAD)
 
 

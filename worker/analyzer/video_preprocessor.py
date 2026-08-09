@@ -8,7 +8,7 @@ import requests
 from analyzer.types import Artifacts, Frame, VideoMetadata
 from analyzer.frame_sampling import FrameSampler
 from analyzer.frame_sampling.base import ProbeResult
-from app.errors import PermanentError, TransientError
+from app.errors import TransientError, UnrecoverableError
 from app.log_utils import phase
 from app.schemas import JobPayload
 from config.connection import get_storage_session
@@ -63,6 +63,7 @@ class VideoPreprocessor:
             probe_results=self._probe_results,
             product_image_paths=tuple(product_image_paths),
             logo_paths=tuple(logo_paths),
+            product_url=self.job_payload.product_url,
         )
 
     def _download_object(self, storage_path: str, local_path: str, kind: str) -> None:
@@ -85,12 +86,12 @@ class VideoPreprocessor:
         except requests.HTTPError as e:
             code = e.response.status_code
             if code == 404:
-                raise PermanentError(f"{kind} not found: {bucket}/{storage_path}")
+                raise UnrecoverableError(f"{kind} not found: {bucket}/{storage_path}")
             if code in (401, 403):
-                raise PermanentError(f"Storage access denied ({code}): {e}")
+                raise UnrecoverableError(f"Storage access denied ({code}): {e}")
             if code in (408, 429) or code >= 500:
                 raise TransientError(f"Storage temporarily unavailable ({code}): {e}")
-            raise PermanentError(f"{kind} download failed ({code}): {e}")
+            raise UnrecoverableError(f"{kind} download failed ({code}): {e}")
         except requests.RequestException as e:
             raise TransientError(f"{kind} download connection error: {e}")
 
@@ -100,7 +101,7 @@ class VideoPreprocessor:
 
         ext = os.path.splitext(video_storage_path)[1]
         if not ext:
-            raise PermanentError("Video extension not available")
+            raise UnrecoverableError("Video extension not available")
         local_path = os.path.join(self.work_dir, f"video{ext}")
         logger.info(
             "Downloading video %s/%s", self.job_payload.bucket, video_storage_path
@@ -147,16 +148,16 @@ class VideoPreprocessor:
                 check=True,
             )
         except FileNotFoundError:
-            raise PermanentError("ffprobe executable not found")
+            raise UnrecoverableError("ffprobe executable not found")
         except subprocess.TimeoutExpired:
             raise TransientError("ffprobe timed out")
         except subprocess.CalledProcessError as e:
-            raise PermanentError(f"ffprobe failed to read video: {e.stderr.strip()}")
+            raise UnrecoverableError(f"ffprobe failed to read video: {e.stderr.strip()}")
 
         try:
             probe = json.loads(result.stdout)
         except json.JSONDecodeError as e:
-            raise PermanentError(f"ffprobe returned invalid JSON: {e}")
+            raise UnrecoverableError(f"ffprobe returned invalid JSON: {e}")
 
         fmt = probe.get("format", {})
         streams = probe.get("streams", [])
@@ -164,7 +165,7 @@ class VideoPreprocessor:
             (s for s in streams if s.get("codec_type") == "video"), None
         )
         if video_stream is None:
-            raise PermanentError("No video stream found in file")
+            raise UnrecoverableError("No video stream found in file")
 
         self._has_audio = any(s.get("codec_type") == "audio" for s in streams)
         return VideoMetadata(
@@ -186,7 +187,7 @@ class VideoPreprocessor:
             den_val = float(den) if den else 1.0
             if den_val:
                 return float(num) / den_val
-        raise PermanentError("Could not determine video frame rate")
+        raise UnrecoverableError("Could not determine video frame rate")
 
     def _extract_audio(self, video_path) -> str | None:
         if not self._has_audio:
@@ -216,11 +217,11 @@ class VideoPreprocessor:
                 check=True,
             )
         except FileNotFoundError:
-            raise PermanentError("ffmpeg executable not found")
+            raise UnrecoverableError("ffmpeg executable not found")
         except subprocess.TimeoutExpired:
             raise TransientError("ffmpeg audio extraction timed out")
         except subprocess.CalledProcessError as e:
-            raise PermanentError(f"ffmpeg failed to extract audio: {e.stderr.strip()}")
+            raise UnrecoverableError(f"ffmpeg failed to extract audio: {e.stderr.strip()}")
 
         return audio_path
 

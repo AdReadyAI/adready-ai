@@ -33,7 +33,7 @@ from analyzer.frame_sampling.probes.text import TextProbe
 from analyzer.frame_sampling.sampler import FrameSampler
 from analyzer.frame_sampling.store import FrameStore
 from analyzer.types import VideoMetadata
-from app.errors import PermanentError
+from app.errors import UnrecoverableError
 
 
 # ---- helpers ----
@@ -306,7 +306,7 @@ def test_decode_raises_when_open_fails(tmp_path, monkeypatch):
         "analyzer.frame_sampling.sampler.cv2.VideoCapture", lambda path: cap
     )
 
-    with pytest.raises(PermanentError):
+    with pytest.raises(UnrecoverableError):
         list(_sampler(tmp_path)._decode())
 
 
