@@ -1,15 +1,20 @@
 import type { Issue } from '../../types/results'
 import ChevronDownIcon from '../icons/ChevronDownIcon'
+import IssueClip from './IssueClip'
 import { SEVERITY_STYLE } from './status'
 
 export default function IssueRow({
   issue,
   expanded,
   onToggle,
+  videoUrl = null,
 }: {
   issue: Issue
   expanded: boolean
   onToggle: () => void
+  /** Signed URL for the parent video. Optional: it's signed asynchronously, so
+   *  the row renders a static frame until it arrives. */
+  videoUrl?: string | null
 }) {
   // Replaces the old `severity === 'high' ? red : amber` check, which rendered
   // `critical` identically to `medium`. Indexing is safe without a fallback
@@ -54,29 +59,11 @@ export default function IssueRow({
         <div className="grid grid-cols-1 gap-6 border-t border-slate-100 px-5 py-5 md:grid-cols-2">
           <div>
             <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500">Timestamp</p>
-            <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-slate-900">
-              <span className="absolute left-3 top-3 text-xs font-medium text-white/90">
-                {issue.timestamp ? `Ad creative frame · ${issue.timestamp}` : 'No frame captured'}
-              </span>
-              {issue.timestamp && (
-                <>
-                  <span className="absolute bottom-3 left-3 text-xs font-semibold text-white">
-                    {issue.timestamp}
-                  </span>
-                  <span className="absolute inset-x-0 bottom-0 h-1 bg-white/20">
-                    <span className="block h-full w-1/4 bg-red-500" />
-                  </span>
-                </>
-              )}
-            </div>
-            {issue.timestamp && (
-              <button
-                type="button"
-                className="mt-3 text-sm font-medium text-violet-600 hover:text-violet-700"
-              >
-                → View entire video clip
-              </button>
-            )}
+            <IssueClip
+              src={videoUrl}
+              startSeconds={issue.timestampSeconds}
+              label={issue.timestamp}
+            />
           </div>
 
           <div>

@@ -4,10 +4,12 @@ import {
   buildSummary,
   isDisplaySeverity,
   normalizeTimestamp,
+  parseTimestampSeconds,
   toIssues,
   toMetrics,
   toShipStatus,
   videoNameFromPaths,
+  videoPathFromPaths,
 } from './resultsTransform'
 import type { DimensionRow, IssueRow, RequestRow, ScoreRow } from './resultsTransform'
 
@@ -76,6 +78,59 @@ describe('normalizeTimestamp', () => {
   })
 })
 
+describe('parseTimestampSeconds', () => {
+  it('converts a clock time to seconds', () => {
+    expect(parseTimestampSeconds('0:22')).toBe(22)
+    expect(parseTimestampSeconds('00:15')).toBe(15)
+    expect(parseTimestampSeconds('1:35')).toBe(95)
+  })
+
+  it('accepts raw seconds, flooring fractions to match the displayed label', () => {
+    expect(parseTimestampSeconds('95')).toBe(95)
+    // The chip reads 0:14, so seeking to 14.5 would land past the moment the
+    // user was pointed at.
+    expect(parseTimestampSeconds('14.5')).toBe(14)
+  })
+
+  it('returns null for absent or blank values', () => {
+    expect(parseTimestampSeconds(null)).toBeNull()
+    expect(parseTimestampSeconds(undefined)).toBeNull()
+    expect(parseTimestampSeconds('   ')).toBeNull()
+  })
+
+  it('returns null for a format it cannot seek to', () => {
+    // normalizeTimestamp still shows this one. The two disagree on purpose:
+    // displayable is a weaker bar than seekable.
+    expect(parseTimestampSeconds('1:02:33')).toBeNull()
+    expect(normalizeTimestamp('1:02:33')).toBe('1:02:33')
+  })
+
+  it('agrees with the label normalizeTimestamp shows', () => {
+    // The regression this guards: a second parser drifting from the first, so
+    // the chip reads one time and the player seeks to another.
+    for (const raw of ['0:22', '00:15', '14.5', '95', '100:30']) {
+      const seconds = parseTimestampSeconds(raw) as number
+      const minutes = Math.floor(seconds / 60)
+      const remainder = seconds % 60
+      const expected = `${minutes}:${remainder < 10 ? `0${remainder}` : remainder}`
+      expect(normalizeTimestamp(raw)).toBe(expected)
+    }
+  })
+})
+
+describe('videoPathFromPaths', () => {
+  it('takes the same entry the display name comes from', () => {
+    const paths = ['user-1/batch-1/video/v1/Ad_Cut.mp4']
+    expect(videoPathFromPaths(paths)).toBe('user-1/batch-1/video/v1/Ad_Cut.mp4')
+    expect(videoNameFromPaths(paths)).toBe('Ad_Cut.mp4')
+  })
+
+  it('is null when no path was recorded', () => {
+    expect(videoPathFromPaths(null)).toBeNull()
+    expect(videoPathFromPaths([])).toBeNull()
+  })
+})
+
 describe('toIssues', () => {
   it('drops none and cannot_assess', () => {
     const issues = toIssues([
@@ -140,6 +195,21 @@ describe('toIssues', () => {
     expect(issue.detail).toBeNull()
     expect(issue.repairText).toBeNull()
     expect(issue.timestamp).toBeNull()
+    expect(issue.timestampSeconds).toBeNull()
+  })
+
+  it('exposes the timestamp as seconds for the clip player', () => {
+    const [issue] = toIssues([issueRow({ video_timestamp: '1:35' })])
+
+    expect(issue.timestamp).toBe('1:35')
+    expect(issue.timestampSeconds).toBe(95)
+  })
+
+  it('keeps an unseekable timestamp visible with no seconds to seek to', () => {
+    const [issue] = toIssues([issueRow({ video_timestamp: '1:02:33' })])
+
+    expect(issue.timestamp).toBe('1:02:33')
+    expect(issue.timestampSeconds).toBeNull()
   })
 })
 
@@ -232,6 +302,33 @@ describe('assembleVideoResults', () => {
       [3, 'Video_4.mp4'],
       [4, 'Video_3.mp4'],
     ])
+  })
+
+  it('carries the storage path of the video whose name it shows', () => {
+    // Ranking reorders the cards, so this guards against a video ending up
+    // paired with a different video's clip.
+    const { videos } = assembleVideoResults({
+      requests,
+      scores,
+      dimensions: [],
+      issues: [],
+    })
+
+    for (const video of videos) {
+      expect(video.videoPath).toBe(`u/b/${video.name}`)
+    }
+  })
+
+  it('leaves videoPath null when the request recorded no path', () => {
+    const { videos } = assembleVideoResults({
+      requests: [{ request_id: 'r1', video_storage_paths: null }],
+      scores: [scores[0]],
+      dimensions: [],
+      issues: [],
+    })
+
+    expect(videos[0].videoPath).toBeNull()
+    expect(videos[0].name).toBe('Untitled video')
   })
 
   it('produces the same order regardless of the order rows arrive in', () => {

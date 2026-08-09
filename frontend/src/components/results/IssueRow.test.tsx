@@ -12,6 +12,7 @@ function issue(overrides: Partial<Issue> = {}): Issue {
     severity: 'high',
     repairText: 'Hold the CTA card for 2s.',
     timestamp: '0:22',
+    timestampSeconds: 22,
     ...overrides,
   }
 }
@@ -44,18 +45,38 @@ describe('IssueRow severity', () => {
 describe('IssueRow nullable fields', () => {
   it('omits the timestamp chip and clip link when there is no timestamp', () => {
     render(
-      <IssueRow issue={issue({ timestamp: null })} expanded onToggle={vi.fn()} />,
+      <IssueRow
+        issue={issue({ timestamp: null, timestampSeconds: null })}
+        expanded
+        onToggle={vi.fn()}
+      />,
     )
 
     expect(screen.getByText('No frame captured')).toBeVisible()
     expect(screen.queryByText('→ View entire video clip')).toBeNull()
   })
 
-  it('shows the timestamp and clip link when there is one', () => {
+  it('renders a playable clip when there is a timestamp and a URL', () => {
+    const { container } = render(
+      <IssueRow
+        issue={issue({ timestamp: '1:05', timestampSeconds: 65 })}
+        expanded
+        onToggle={vi.fn()}
+        videoUrl="https://signed.example/clip.mp4"
+      />,
+    )
+
+    expect(container.querySelector('video')).toHaveAttribute('controls')
+    expect(screen.getByText('→ View entire video clip')).toBeVisible()
+  })
+
+  it('shows the frame but offers no clip until the video URL arrives', () => {
+    // The URL is signed asynchronously, so the row renders before it exists.
+    // Offering "view entire video clip" with nothing behind it would be a lie.
     render(<IssueRow issue={issue({ timestamp: '1:05' })} expanded onToggle={vi.fn()} />)
 
     expect(screen.getByText('Ad creative frame · 1:05')).toBeVisible()
-    expect(screen.getByText('→ View entire video clip')).toBeVisible()
+    expect(screen.queryByText('→ View entire video clip')).toBeNull()
   })
 
   it('hides the repair block entirely when no suggestion was stored', () => {
