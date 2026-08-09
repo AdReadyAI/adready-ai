@@ -100,26 +100,18 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
-- **2026-08-09** — Every input that gates **Run AdReady Review** now carries a
-  red `*` (`campaign_section/RequiredMark.tsx`): Product URL, Campaign Goal,
-  Destination Platform and Creative Brief in create mode, Select campaign in
-  existing mode, plus the video dropzone in `upload_section/UploadSection.tsx`.
-  Previously the submit button just sat disabled with nothing saying which
-  field was holding it. The marked set mirrors what `isCreateValid` /
-  `isExistingValid` / `hasCompletedVideo` actually test, so a new gate has to
-  be marked here too.
-  Deliberately unmarked: product images and logo (nothing blocks submit on
-  them — note this means `product_detection` and `logo_detection` return zero
-  rows when they're absent, see `worker/analyzer/video_analyzer.py`), and the
-  advanced brief fields, which this branch doesn't gate on either.
-  Visual only, no new validation. The asterisk is `aria-hidden`, with
-  `aria-required` on each control carrying the meaning; the video heading has
-  no such control, so it passes `announce` for an `sr-only` "(required)".
-- **2026-08-09** — Creative-brief parsing is now an explicit **Parse brief**
-  button under the textarea in `CampaignForm`, not an `onBlur` handler. Blur
-  spent an LLM call on every tab-out and gave no way to re-parse; the button
-  disables itself while parsing and while the text still matches the last
-  parsed version (`lastParsed` state, previously the `lastParsedRef` ref).
+- **2026-08-09** — Split the advanced brief fields into required and optional in
+  `AdvancedFieldsSection`. The four required ones (Brand Voice, Target Audience,
+  Required Messages, Brand Guidelines) each gate a sub-check that the
+  brief/brand alignment agents force to `cannot_assess` when the input is blank;
+  submit is now blocked on them via the exported `missingRequiredAdvanced`. The
+  other four are prompt context only, so they stay optional.
+- **2026-08-09** — Fixed the red `main` build. Adding required `videoPath` /
+  `timestampSeconds` to `VideoResult` / `Issue` broke three older test fixtures
+  that still built those objects the old way. Only the CI `quality` job caught
+  it: vitest transpiles through esbuild, which strips types without checking
+  them, so `npm run test:unit` stayed green while `tsc -b` failed. Widening a
+  shared type means every fixture that constructs it, tests included.
 - **2026-08-09** — Expanded issue rows play the real video instead of a fake
   black box. `components/results/IssueClip.tsx` is an ordinary player (native
   `controls` — play/pause, scrub, volume, fullscreen) that opens parked on the

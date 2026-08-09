@@ -8,6 +8,7 @@ function video(overrides: Partial<VideoResult> = {}): VideoResult {
     requestId: 'req-1',
     rank: 1,
     name: 'Video_1.mp4',
+    videoPath: null,
     score: 91,
     status: 'ready',
     thumb: 'bg-violet-100 text-violet-500',
