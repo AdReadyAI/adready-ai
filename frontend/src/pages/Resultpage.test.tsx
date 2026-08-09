@@ -145,7 +145,7 @@ describe('ResultPage — processing placeholder', () => {
   })
 
   it('polls every 5s while incomplete and stops once the batch completes', async () => {
-    vi.useFakeTimers()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] })
     const incomplete = makeBatch({
       totalCount: 1,
       complete: false,
@@ -173,7 +173,13 @@ describe('ResultPage — processing placeholder', () => {
   })
 
   it('shows the timeout notice and stops polling after 10 minutes of no completion', async () => {
-    vi.useFakeTimers()
+    // Explicit toFake: Date must be faked for this test specifically, since it
+    // asserts on Date-derived elapsed-time logic (POLL_TIMEOUT_MS), not just on
+    // whether setInterval fires. Without Date included, the interval ticks
+    // correctly (proven by the sibling test above) but Date.now() keeps
+    // returning real wall-clock time, so the elapsed-time check never trips —
+    // the timeout condition silently never becomes true.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] })
     const incomplete = makeBatch({
       totalCount: 1,
       complete: false,
@@ -192,10 +198,9 @@ describe('ResultPage — processing placeholder', () => {
       await vi.advanceTimersByTimeAsync(POLL_MS)
     }
 
-    // setTimedOut(true) happens inside an async interval callback — give
-    // React a chance to actually commit the re-render before querying the DOM,
-    // same as the other post-async assertions in this file.
-    await waitFor(() => expect(screen.getByText('This is taking longer than expected.')).toBeInTheDocument())
+    // setTimedOut(true) is set synchronously inside the tick that crosses the
+    // threshold, which the loop above has already awaited past.
+    expect(screen.getByText('This is taking longer than expected.')).toBeInTheDocument()
     const callsAtTimeout = fetchBatchResultsMock.mock.calls.length
 
     for (let i = 0; i < 4; i++) {
