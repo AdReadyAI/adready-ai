@@ -8,6 +8,7 @@ import httpx
 import openai
 import pytest
 from PIL import Image
+from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
 
@@ -148,6 +149,91 @@ def test_caption_connection_error_is_transient(tmp_path, monkeypatch):
     frame = _write_image(tmp_path / "frame.jpg")
     with pytest.raises(TransientError):
         captioner.caption(frame, is_shot_start=False)
+
+
+def test_caption_retries_incomplete_structured_output(tmp_path, monkeypatch):
+    """A temporary malformed provider response must not discard an otherwise captionable frame."""
+    captioner, client = _make_captioner(monkeypatch)
+    incomplete_output = ValidationError.from_exception_data(
+        "VisualCaptionOutput",
+        [
+            {
+                "type": "json_invalid",
+                "loc": (),
+                "input": '{\n  "action": "A child plays.",\n  "framing',
+                "ctx": {"error": "EOF while parsing a string at line 3 column 10"},
+            }
+        ],
+    )
+    expected = _sample_output()
+    client.chat.completions.parse.side_effect = [
+        incomplete_output,
+        _completion_with_parsed(expected),
+    ]
+
+    frame = _write_image(tmp_path / "frame.jpg")
+    result = captioner.caption(frame, is_shot_start=False)
+
+    assert result is expected
+
+
+def test_caption_schema_validation_error_is_permanent(tmp_path, monkeypatch):
+    """Valid provider JSON with an incompatible schema cannot recover on an identical retry."""
+    captioner, client = _make_captioner(monkeypatch)
+    schema_error = ValidationError.from_exception_data(
+        "VisualCaptionOutput",
+        [
+            {
+                "type": "missing",
+                "loc": ("action",),
+                "input": {},
+            }
+        ],
+    )
+    client.chat.completions.parse.side_effect = schema_error
+
+    frame = _write_image(tmp_path / "frame.jpg")
+    with pytest.raises(PermanentError, match="Unexpected error in caption"):
+        captioner.caption(frame, is_shot_start=False)
+
+
+def test_caption_exhausted_incomplete_output_retries_are_transient(tmp_path, monkeypatch):
+    """Repeated malformed provider JSON remains retryable for the analyzer fallback."""
+    captioner, client = _make_captioner(monkeypatch)
+    incomplete_output = ValidationError.from_exception_data(
+        "VisualCaptionOutput",
+        [
+            {
+                "type": "json_invalid",
+                "loc": (),
+                "input": '{\n  "action":',
+                "ctx": {"error": "EOF while parsing a value at line 2 column 11"},
+            }
+        ],
+    )
+    client.chat.completions.parse.side_effect = incomplete_output
+
+    frame = _write_image(tmp_path / "frame.jpg")
+    with pytest.raises(TransientError, match="incomplete structured output"):
+        captioner.caption(frame, is_shot_start=False)
+
+    assert client.chat.completions.parse.call_count == 2
+
+
+def test_caption_retries_length_limited_structured_output(tmp_path, monkeypatch):
+    """A length-limited provider response gets one fresh attempt before frame fallback."""
+    captioner, client = _make_captioner(monkeypatch)
+    incomplete_completion = MagicMock(usage=None)
+    expected = _sample_output()
+    client.chat.completions.parse.side_effect = [
+        openai.LengthFinishReasonError(completion=incomplete_completion),
+        _completion_with_parsed(expected),
+    ]
+
+    frame = _write_image(tmp_path / "frame.jpg")
+    result = captioner.caption(frame, is_shot_start=False)
+
+    assert result is expected
 
 
 def test_caption_server_error_is_transient(tmp_path, monkeypatch):

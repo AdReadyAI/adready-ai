@@ -3,7 +3,7 @@ import io
 
 import openai
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from analyzer.output_models import ColorPalette, PeopleInfo, SceneBackground, TechnicalFlag
 from app.errors import PermanentError, TransientError
@@ -78,6 +78,9 @@ Return a JSON object with these fields:
     this frame, do not include this flag."""
 
 
+STRUCTURED_OUTPUT_MAX_ATTEMPTS = 2
+
+
 def _b64(frame_path: str) -> str:
     """Downscale `frame_path` to a `VISUAL_CAPTION_LONG_SIDE` long-side cap (never upscale),
     re-encode as JPEG in memory, and return the base64-encoded bytes."""
@@ -124,27 +127,43 @@ class VisualCaptioner:
             },
         ]
 
-        try:
-            completion = self._client.chat.completions.parse(
-                model=self._model,
-                messages=messages,
-                response_format=VisualCaptionOutput,
-                timeout=OPENROUTER_VISION_TIMEOUT,
-                max_tokens=VISUAL_CAPTION_MAX_TOKENS,
-            )
-        except openai.APITimeoutError as e:
-            raise TransientError(f"OpenRouter vision request timed out: {e}")
-        except openai.APIConnectionError as e:
-            raise TransientError(f"OpenRouter vision connection error: {e}")
-        except openai.RateLimitError as e:
-            raise TransientError(f"OpenRouter vision rate limited: {e}")
-        except openai.APIStatusError as e:
-            code = e.status_code
-            if code >= 500 or code == 429:
-                raise TransientError(f"OpenRouter vision temporarily unavailable ({code}): {e}")
-            raise PermanentError(f"OpenRouter vision request failed ({code}): {e}")
-        except Exception as e:
-            raise PermanentError(f"Unexpected error in caption: {e}")
+        # Retry once at this per-frame boundary so a temporary malformed model response
+        # does not become a permanently empty row in the downstream evidence bundle.
+        for attempt in range(STRUCTURED_OUTPUT_MAX_ATTEMPTS):
+            try:
+                completion = self._client.chat.completions.parse(
+                    model=self._model,
+                    messages=messages,
+                    response_format=VisualCaptionOutput,
+                    timeout=OPENROUTER_VISION_TIMEOUT,
+                    max_tokens=VISUAL_CAPTION_MAX_TOKENS,
+                )
+                break
+            except ValidationError as e:
+                if not any(error["type"] == "json_invalid" for error in e.errors()):
+                    raise PermanentError(f"Unexpected error in caption: {e}") from e
+                if attempt + 1 == STRUCTURED_OUTPUT_MAX_ATTEMPTS:
+                    raise TransientError(
+                        f"OpenRouter vision returned incomplete structured output: {e}"
+                    ) from e
+            except openai.LengthFinishReasonError as e:
+                if attempt + 1 == STRUCTURED_OUTPUT_MAX_ATTEMPTS:
+                    raise TransientError(
+                        f"OpenRouter vision returned incomplete structured output: {e}"
+                    ) from e
+            except openai.APITimeoutError as e:
+                raise TransientError(f"OpenRouter vision request timed out: {e}")
+            except openai.APIConnectionError as e:
+                raise TransientError(f"OpenRouter vision connection error: {e}")
+            except openai.RateLimitError as e:
+                raise TransientError(f"OpenRouter vision rate limited: {e}")
+            except openai.APIStatusError as e:
+                code = e.status_code
+                if code >= 500 or code == 429:
+                    raise TransientError(f"OpenRouter vision temporarily unavailable ({code}): {e}")
+                raise PermanentError(f"OpenRouter vision request failed ({code}): {e}")
+            except Exception as e:
+                raise PermanentError(f"Unexpected error in caption: {e}")
 
         parsed = completion.choices[0].message.parsed
         if parsed is None:
