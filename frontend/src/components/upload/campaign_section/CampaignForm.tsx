@@ -1,7 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getErrorMessage } from "../../../lib/errorMessage";
 import { supabase } from "../../../lib/supabaseClient";
+import { fetchCampaignSummaries, fetchCampaignDetail } from "../../../lib/campaigns";
+import type { CampaignSummary } from "../../../lib/campaigns";
 import type { UploadedVideo, UploadedImage } from "../../../pages/UploadPage";
 import type { ParsedCreativeBrief } from "../../../types/brief";
 import AdvancedFieldsSection, { missingRequiredAdvanced } from "./AdvancedFieldsSection";
@@ -25,12 +27,26 @@ const PLATFORMS = [
   { value: "youtube_shorts", label: "YouTube Shorts" },
 ];
 
-const MOCK_CAMPAIGNS = [
-  "Summer Sale 2026",
-  "Product Launch - Widget Pro",
-  "Holiday Campaign",
-  "Brand Refresh",
-];
+function formatCampaignLabel(c: CampaignSummary): string {
+  const goal = c.campaignGoal?.trim();
+  const label = goal ? `"${goal}"` : "Untitled campaign";
+  const date = new Date(c.createdAt).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  return `${label} · ${c.videoCount} video${c.videoCount === 1 ? "" : "s"} · ${date}`;
+}
+
+const EMPTY_ADVANCED: ParsedCreativeBrief = {
+  brand_voice: "",
+  target_audience: "",
+  required_messages: [],
+  required_ctas: [],
+  approved_claims: [],
+  forbidden_claims: [],
+  brand_guidelines: [],
+  policy_requirements: [],
+};
 
 type CampaignFormProps = {
   videos: UploadedVideo[];
@@ -71,6 +87,72 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
   const [selectedCampaign, setSelectedCampaign] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignSummary[]>([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(false);
+  const [campaignsError, setCampaignsError] = useState<string | null>(null);
+  const [campaignLoading, setCampaignLoading] = useState(false);
+  const [campaignDetailLoaded, setCampaignDetailLoaded] = useState(false);
+
+  // Load the user's previous batches when the "existing campaign" tab is opened.
+  // RLS scopes the query to the current user, so no user id is passed.
+  useEffect(() => {
+    if (mode !== "existing") return;
+
+    let cancelled = false;
+    setCampaignsLoading(true);
+    setCampaignsError(null);
+
+    fetchCampaignSummaries()
+      .then((list) => {
+        if (cancelled) return;
+        setCampaigns(list);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setCampaignsError(getErrorMessage(e, "Failed to load your campaigns"));
+      })
+      .finally(() => {
+        if (!cancelled) setCampaignsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
+
+  // Selecting a campaign prefills the entire form from its saved brief + the
+  // batch's shared request fields, so the user can review/edit before submit.
+  // A NEW batch (the current upload session's batchId) is still created on
+  // submit — the prefilled values are reused, not the old batch's identity.
+  async function handleSelectCampaign(batchId: string) {
+    setSelectedCampaign(batchId);
+    if (!batchId) {
+      setCampaignDetailLoaded(false);
+      return;
+    }
+
+    setCampaignLoading(true);
+    setCampaignDetailLoaded(false);
+    setSubmitError(null);
+
+    try {
+      const detail = await fetchCampaignDetail(batchId);
+      setProductUrl(detail.productUrl ?? "");
+      setCampaignGoal(detail.campaignGoal ?? "");
+      setDestinationPlatform(detail.destinationPlatform ?? "");
+      const brief = detail.userBrief ?? detail.rawText ?? "";
+      setCreativeBrief(brief);
+      setLastParsed(brief);
+      setAdvancedFields(detail.advancedFields ?? EMPTY_ADVANCED);
+      setAdvancedFieldsEdited(new Set());
+      setAiFilled(new Set());
+      setCampaignDetailLoaded(true);
+    } catch (e) {
+      setSubmitError(getErrorMessage(e, "Failed to load the campaign"));
+    } finally {
+      setCampaignLoading(false);
+    }
+  }
 
   const hasCompletedVideo = videos.some((v) => v.status === "done");
   const noneUploading = videos.every((v) => v.status !== "uploading");
@@ -96,7 +178,11 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
     destinationPlatform &&
     creativeBrief.trim() &&
     missingAdvanced.length === 0;
-  const isExistingValid = selectedCampaign;
+  const isExistingValid =
+    Boolean(selectedCampaign) &&
+    campaignDetailLoaded &&
+    !campaignLoading &&
+    missingAdvanced.length === 0;
   const isFormValid =
     (mode === "create" ? isCreateValid : isExistingValid) && hasCompletedVideo && noneUploading;
 
@@ -176,7 +262,6 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
     e.preventDefault();
 
     const doneVideos = videos.filter((v) => v.status === "done" && v.storagePath);
-    const videoPaths = doneVideos.map((v) => v.storagePath as string);
 
     const doneImages = images.filter((img) => img.status === "done" && img.storagePath);
     const productImagePaths = doneImages
@@ -185,13 +270,6 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
     const logoPaths = doneImages
       .filter((img) => img.kind === "logo")
       .map((img) => img.storagePath as string);
-
-    if (mode === "existing") {
-      // No `requests` column corresponds to an existing-campaign selection yet —
-      // this path stays mock until that concept has a real place to land.
-      navigate("/result", { state: { videoPaths, selectedCampaign } });
-      return;
-    }
 
     setSubmitError(null);
     setSubmitting(true);
@@ -334,141 +412,156 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
         </button>
       </div>
 
-      {mode === "create" ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="productUrl" className="block text-sm font-medium text-slate-700 mb-1">
-                Product URL
-                <RequiredMark />
-              </label>
-              <input
-                id="productUrl"
-                type="url"
-                value={productUrl}
-                onChange={(e) => setProductUrl(e.target.value)}
-                aria-required="true"
-                placeholder="https://your-product-page.com"
-                className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 placeholder-[#9B9A97] focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="campaignGoal" className="block text-sm font-medium text-slate-700 mb-1">
-                Campaign Goal
-                <RequiredMark />
-              </label>
-              <select
-                id="campaignGoal"
-                value={campaignGoal}
-                onChange={(e) => setCampaignGoal(e.target.value)}
-                aria-required="true"
-                className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 placeholder-[#9B9A97] text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
-              >
-                <option value="" disabled>Select a goal</option>
-                {CAMPAIGN_GOALS.map((goal) => (
-                  <option key={goal} value={goal}>{goal}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="destinationPlatform" className="block text-sm font-medium text-slate-700 mb-1">
-                Destination Platform
-                <RequiredMark />
-              </label>
-              <select
-                id="destinationPlatform"
-                value={destinationPlatform}
-                onChange={(e) => setDestinationPlatform(e.target.value)}
-                aria-required="true"
-                className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
-              >
-                <option value="" disabled>Select a platform</option>
-                {PLATFORMS.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="creativeBrief" className="block text-sm font-medium text-slate-700 mb-1">
-              Creative Brief
-              <RequiredMark />
-            </label>
-            <textarea
-              id="creativeBrief"
-              value={creativeBrief}
-              onChange={(e) => setCreativeBrief(e.target.value)}
-              aria-required="true"
-              placeholder="Describe your ad’s goal, key message, and target audience…"
-              rows={4}
-              className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 placeholder-[#9B9A97] focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent resize-none"
-            />
-            <div className="mt-2 flex items-center gap-3">
-              {/* type="button" is load-bearing: the default inside a <form> is
-                  "submit", which would fire handleSubmit instead of parsing. */}
-              <button
-                type="button"
-                onClick={handleParseBrief}
-                disabled={!canParseBrief}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[#534AB7] px-3 py-1.5 text-sm font-medium text-[#534AB7] hover:bg-[#F0EFF9] transition-colors disabled:border-[#E2E1DC] disabled:text-[#9B9A97] disabled:hover:bg-transparent disabled:cursor-not-allowed"
-              >
-                {parsing ? (
-                  <>
-                    <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Parsing brief…
-                  </>
-                ) : (
-                  <>✨ {lastParsed ? "Re-parse brief" : "Parse brief"}</>
-                )}
-              </button>
-              <p className="text-xs text-[#9B9A97]">
-                {parsing
-                  ? "Reading your brief…"
-                  : briefAlreadyParsed
-                    ? "Brief parsed — edit the text to parse again."
-                    : "Fills the advanced fields below automatically. Optional."}
-              </p>
-            </div>
-          </div>
-
-          <AdvancedFieldsSection
-            values={advancedFields}
-            onChange={handleAdvancedChange}
-            onUndo={handleAdvancedUndo}
-            aiFilled={aiFilled}
-            loading={parsing}
-          />
-        </div>
-      ) : (
+      {mode === "existing" && (
         <div>
-          <label htmlFor="existingCampaign" className="block text-sm font-medium text-slate-700 mb-1">
+<label htmlFor="existingCampaign" className="block text-sm font-medium text-slate-700 mb-1">
             Select campaign
             <RequiredMark />
           </label>
-          <select
-            id="existingCampaign"
-            value={selectedCampaign}
-            onChange={(e) => setSelectedCampaign(e.target.value)}
-            aria-required="true"
-            className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
-          >
-            <option value="" disabled>Choose a campaign</option>
-            {MOCK_CAMPAIGNS.map((campaign) => (
-              <option key={campaign} value={campaign}>{campaign}</option>
-            ))}
-          </select>
+          {campaignsLoading ? (
+            <p className="text-sm text-[#9B9A97]">Loading your campaigns…</p>
+          ) : campaignsError ? (
+            <p className="text-sm text-red-600">{campaignsError}</p>
+          ) : campaigns.length === 0 ? (
+            <p className="text-sm text-[#9B9A97]">
+              No previous campaigns yet — create one on the other tab first.
+            </p>
+          ) : (
+            <select
+              id="existingCampaign"
+              value={selectedCampaign}
+              onChange={(e) => handleSelectCampaign(e.target.value)}
+              aria-required="true"
+              className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
+            >
+              <option value="" disabled>Choose a campaign</option>
+              {campaigns.map((c) => (
+                <option key={c.batchId} value={c.batchId}>
+                  {formatCampaignLabel(c)}
+                </option>
+              ))}
+            </select>
+          )}
+          {campaignLoading && (
+            <p className="text-xs text-[#9B9A97]">Loading campaign details…</p>
+          )}
         </div>
       )}
 
+      <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label htmlFor="productUrl" className="block text-sm font-medium text-slate-700 mb-1">
+              Product URL
+              <RequiredMark />
+            </label>
+            <input
+              id="productUrl"
+              type="url"
+              value={productUrl}
+              onChange={(e) => setProductUrl(e.target.value)}
+              aria-required="true"
+              placeholder="https://your-product-page.com"
+              className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 placeholder-[#9B9A97] focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="campaignGoal" className="block text-sm font-medium text-slate-700 mb-1">
+              Campaign Goal
+              <RequiredMark />
+            </label>
+            <select
+              id="campaignGoal"
+              value={campaignGoal}
+              onChange={(e) => setCampaignGoal(e.target.value)}
+              aria-required="true"
+              className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 placeholder-[#9B9A97] text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
+            >
+              <option value="" disabled>Select a goal</option>
+              {CAMPAIGN_GOALS.map((goal) => (
+                <option key={goal} value={goal}>{goal}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="destinationPlatform" className="block text-sm font-medium text-slate-700 mb-1">
+              Destination Platform
+              <RequiredMark />
+            </label>
+            <select
+              id="destinationPlatform"
+              value={destinationPlatform}
+              onChange={(e) => setDestinationPlatform(e.target.value)}
+              aria-required="true"
+              className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
+            >
+              <option value="" disabled>Select a platform</option>
+              {PLATFORMS.map((p) => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="creativeBrief" className="block text-sm font-medium text-slate-700 mb-1">
+            Creative Brief
+            <RequiredMark />
+          </label>
+          <textarea
+            id="creativeBrief"
+            value={creativeBrief}
+            onChange={(e) => setCreativeBrief(e.target.value)}
+            aria-required="true"
+            placeholder="Describe your ad’s goal, key message, and target audience…"
+            rows={4}
+            className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 placeholder-[#9B9A97] focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent resize-none"
+          />
+          <div className="mt-2 flex items-center gap-3">
+            {/* type="button" is load-bearing: the default inside a <form> is
+                "submit", which would fire handleSubmit instead of parsing. */}
+            <button
+              type="button"
+              onClick={handleParseBrief}
+              disabled={!canParseBrief}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#534AB7] px-3 py-1.5 text-sm font-medium text-[#534AB7] hover:bg-[#F0EFF9] transition-colors disabled:border-[#E2E1DC] disabled:text-[#9B9A97] disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            >
+              {parsing ? (
+                <>
+                  <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Parsing brief…
+                </>
+              ) : (
+                <>✨ {lastParsed ? "Re-parse brief" : "Parse brief"}</>
+              )}
+            </button>
+            <p className="text-xs text-[#9B9A97]">
+              {parsing
+                ? "Reading your brief…"
+                : briefAlreadyParsed
+                  ? "Brief parsed — edit the text to parse again."
+                  : "Fills the advanced fields below automatically. Optional."}
+            </p>
+          </div>
+        </div>
+
+        <AdvancedFieldsSection
+          values={advancedFields}
+          onChange={handleAdvancedChange}
+          onUndo={handleAdvancedUndo}
+          aiFilled={aiFilled}
+          loading={parsing}
+        />
+      </div>
+
       {submitError && <p className="text-sm text-red-600">{submitError}</p>}
 
-      {mode === "create" && !parsing && missingAdvanced.length > 0 && (
+      {!parsing && missingAdvanced.length > 0 && (
         <p className="text-sm text-[#8A6216]">
           Fill in {missingAdvanced.join(", ")} under Advanced brief details — the review skips
           those checks otherwise.
