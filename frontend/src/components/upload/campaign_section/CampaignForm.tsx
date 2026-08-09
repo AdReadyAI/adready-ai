@@ -5,6 +5,7 @@ import { supabase } from "../../../lib/supabaseClient";
 import type { UploadedVideo, UploadedImage } from "../../../pages/UploadPage";
 import type { ParsedCreativeBrief } from "../../../types/brief";
 import AdvancedFieldsSection from "./AdvancedFieldsSection";
+import RequiredMark from "./RequiredMark";
 
 type CampaignMode = "create" | "existing";
 
@@ -325,12 +326,14 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
             <div>
               <label htmlFor="productUrl" className="block text-sm font-medium text-slate-700 mb-1">
                 Product URL
+                <RequiredMark />
               </label>
               <input
                 id="productUrl"
                 type="url"
                 value={productUrl}
                 onChange={(e) => setProductUrl(e.target.value)}
+                aria-required="true"
                 placeholder="https://your-product-page.com"
                 className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 placeholder-[#9B9A97] focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
               />
@@ -339,11 +342,13 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
             <div>
               <label htmlFor="campaignGoal" className="block text-sm font-medium text-slate-700 mb-1">
                 Campaign Goal
+                <RequiredMark />
               </label>
               <select
                 id="campaignGoal"
                 value={campaignGoal}
                 onChange={(e) => setCampaignGoal(e.target.value)}
+                aria-required="true"
                 className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 placeholder-[#9B9A97] text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
               >
                 <option value="" disabled>Select a goal</option>
@@ -356,11 +361,13 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
             <div>
               <label htmlFor="destinationPlatform" className="block text-sm font-medium text-slate-700 mb-1">
                 Destination Platform
+                <RequiredMark />
               </label>
               <select
                 id="destinationPlatform"
                 value={destinationPlatform}
                 onChange={(e) => setDestinationPlatform(e.target.value)}
+                aria-required="true"
                 className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
               >
                 <option value="" disabled>Select a platform</option>
@@ -374,11 +381,13 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
           <div>
             <label htmlFor="creativeBrief" className="block text-sm font-medium text-slate-700 mb-1">
               Creative Brief
+              <RequiredMark />
             </label>
             <textarea
               id="creativeBrief"
               value={creativeBrief}
               onChange={(e) => setCreativeBrief(e.target.value)}
+              aria-required="true"
               placeholder="Describe your ad’s goal, key message, and target audience…"
               rows={4}
               className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 placeholder-[#9B9A97] focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent resize-none"
@@ -426,11 +435,13 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
         <div>
           <label htmlFor="existingCampaign" className="block text-sm font-medium text-slate-700 mb-1">
             Select campaign
+            <RequiredMark />
           </label>
           <select
             id="existingCampaign"
             value={selectedCampaign}
             onChange={(e) => setSelectedCampaign(e.target.value)}
+            aria-required="true"
             className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
           >
             <option value="" disabled>Choose a campaign</option>

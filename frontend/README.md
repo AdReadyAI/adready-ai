@@ -100,6 +100,21 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-09** — Every input that gates **Run AdReady Review** now carries a
+  red `*` (`campaign_section/RequiredMark.tsx`): Product URL, Campaign Goal,
+  Destination Platform and Creative Brief in create mode, Select campaign in
+  existing mode, plus the video dropzone in `upload_section/UploadSection.tsx`.
+  Previously the submit button just sat disabled with nothing saying which
+  field was holding it. The marked set mirrors what `isCreateValid` /
+  `isExistingValid` / `hasCompletedVideo` actually test, so a new gate has to
+  be marked here too.
+  Deliberately unmarked: product images and logo (nothing blocks submit on
+  them — note this means `product_detection` and `logo_detection` return zero
+  rows when they're absent, see `worker/analyzer/video_analyzer.py`), and the
+  advanced brief fields, which this branch doesn't gate on either.
+  Visual only, no new validation. The asterisk is `aria-hidden`, with
+  `aria-required` on each control carrying the meaning; the video heading has
+  no such control, so it passes `announce` for an `sr-only` "(required)".
 - **2026-08-09** — Creative-brief parsing is now an explicit **Parse brief**
   button under the textarea in `CampaignForm`, not an `onBlur` handler. Blur
   spent an LLM call on every tab-out and gave no way to re-parse; the button
