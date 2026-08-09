@@ -100,6 +100,12 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-09** — Split the advanced brief fields into required and optional in
+  `AdvancedFieldsSection`. The four required ones (Brand Voice, Target Audience,
+  Required Messages, Brand Guidelines) each gate a sub-check that the
+  brief/brand alignment agents force to `cannot_assess` when the input is blank;
+  submit is now blocked on them via the exported `missingRequiredAdvanced`. The
+  other four are prompt context only, so they stay optional.
 - **2026-08-09** — Fixed the red `main` build. Adding required `videoPath` /
   `timestampSeconds` to `VideoResult` / `Issue` broke three older test fixtures
   that still built those objects the old way. Only the CI `quality` job caught
