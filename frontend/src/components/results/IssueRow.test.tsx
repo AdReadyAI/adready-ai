@@ -56,8 +56,8 @@ describe('IssueRow nullable fields', () => {
     expect(screen.queryByText('→ View entire video clip')).toBeNull()
   })
 
-  it('shows the timestamp and clip link when there is one', () => {
-    render(
+  it('renders a playable clip when there is a timestamp and a URL', () => {
+    const { container } = render(
       <IssueRow
         issue={issue({ timestamp: '1:05', timestampSeconds: 65 })}
         expanded
@@ -66,7 +66,7 @@ describe('IssueRow nullable fields', () => {
       />,
     )
 
-    expect(screen.getByText('Ad creative frame · 1:05')).toBeVisible()
+    expect(container.querySelector('video')).toHaveAttribute('controls')
     expect(screen.getByText('→ View entire video clip')).toBeVisible()
   })
 
