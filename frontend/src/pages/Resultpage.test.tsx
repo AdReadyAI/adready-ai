@@ -184,12 +184,20 @@ describe('ResultPage — processing placeholder', () => {
     render(<ResultPage />)
     await vi.advanceTimersByTimeAsync(0)
 
-    await vi.advanceTimersByTimeAsync(TIMEOUT_MS + POLL_MS)
+    // Advance in individual POLL_MS steps rather than one giant jump — a
+    // single huge advance doesn't reliably flush ~120 sequential async
+    // interval ticks.
+    const ticksToTimeout = Math.ceil((TIMEOUT_MS + POLL_MS) / POLL_MS)
+    for (let i = 0; i < ticksToTimeout; i++) {
+      await vi.advanceTimersByTimeAsync(POLL_MS)
+    }
 
     expect(screen.getByText('This is taking longer than expected.')).toBeInTheDocument()
     const callsAtTimeout = fetchBatchResultsMock.mock.calls.length
 
-    await vi.advanceTimersByTimeAsync(POLL_MS * 4)
+    for (let i = 0; i < 4; i++) {
+      await vi.advanceTimersByTimeAsync(POLL_MS)
+    }
     expect(fetchBatchResultsMock).toHaveBeenCalledTimes(callsAtTimeout)
   })
 })
@@ -237,7 +245,9 @@ describe('ResultPage — ready state', () => {
 
     fireEvent.click(screen.getByText('ad2.mp4'))
 
-    expect(screen.getByText('Weak CTA')).toBeInTheDocument()
+    // The issue title shares its element with a leading "— " separator, so
+    // its exact text is "— Weak CTA", not "Weak CTA" alone — match substring.
+    expect(screen.getByText(/Weak CTA/)).toBeInTheDocument()
   })
 
   it('shows an "unassessed" video without treating it as a bad score', async () => {
@@ -250,8 +260,10 @@ describe('ResultPage — ready state', () => {
 
     render(<ResultPage />)
 
-    await waitFor(() => expect(screen.getByText('Could not assess')).toBeInTheDocument())
-    expect(screen.getByText('—')).toBeInTheDocument() // NO_VALUE, not "0"
+    // With one video, its status/score render twice each (rank card + detail
+    // panel), so both are genuinely present more than once.
+    await waitFor(() => expect(screen.getAllByText('Could not assess').length).toBeGreaterThan(0))
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0) // NO_VALUE, not "0"
   })
 })
 
