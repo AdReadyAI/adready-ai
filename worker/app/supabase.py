@@ -146,22 +146,6 @@ class Supabase:
         )
         return {row[0] for row in self.cur.fetchall()}
 
-    def product_url_requiring_context(self) -> str | None:
-        """Return the Product Reference URL only when extracted context is missing."""
-        self.cur.execute(
-            """
-            SELECT r.product_url
-            FROM requests AS r
-            LEFT JOIN product_context AS pc ON pc.request_id = r.request_id
-            WHERE r.request_id = %s
-              AND NULLIF(BTRIM(r.product_url), '') IS NOT NULL
-              AND NULLIF(BTRIM(pc.raw_text), '') IS NULL;
-            """,
-            (self.request_id,),
-        )
-        row = self.cur.fetchone()
-        return row[0] if row else None
-
     def upsert_product_context(
         self,
         raw_text: str,

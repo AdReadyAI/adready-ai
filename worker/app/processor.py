@@ -15,7 +15,7 @@ from app.log_utils import phase
 from app.schemas import JobPayload
 from app.errors import TransientError
 from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS, SUPABASE_URL
-from analyzer.output_models import TaskResult
+from analyzer.output_models import ProductContextResult, ProductContextRow, TaskResult
 from app.product_context import ProductPageExtractor
 from app.ocr_runs import OcrRunLifecycle
 from app.supabase import Supabase
@@ -51,7 +51,6 @@ def process_message(cur, msg_id, payload):
 
     job_start = time.perf_counter()
     logger.info("[job %s] Processing: %s", msg_id, request_id)
-    _populate_product_context(db)
     with tempfile.TemporaryDirectory(prefix=f"job_{msg_id}_") as work_dir:
         preprocessor = VideoPreprocessor(payload, work_dir)
         with phase(logger, f"[job {msg_id}] Preprocessing"):
@@ -92,6 +91,7 @@ def process_message(cur, msg_id, payload):
             ocr_lifecycle,
             artifact.video_metadata,
         )
+        analyzer = _ProductContextAnalyzer(analyzer, payload.product_url)
 
         with phase(logger, f"[job {msg_id}] Analysis"):
             results, errors = _run_analysis(db, analyzer, msg_id)
@@ -102,25 +102,6 @@ def process_message(cur, msg_id, payload):
             raise RuntimeError(f"[job {msg_id}] analyzers failed: {list(errors)}")
 
     logger.info("[job %s] Done in %.2fs", msg_id, time.perf_counter() - job_start)
-
-
-def _populate_product_context(
-    db: Supabase,
-    extractor: ProductPageExtractor | None = None,
-) -> None:
-    """Populate missing Product Context from the Review Request's product URL."""
-    product_url = db.product_url_requiring_context()
-    if product_url is None:
-        return
-
-    # Extraction stays outside the persistence layer so network behavior and
-    # database writes remain independently testable and retryable.
-    page_extractor = extractor or ProductPageExtractor()
-    context = page_extractor.extract(product_url)
-    db.upsert_product_context(
-        context.raw_text,
-        context.reference_asset_urls,
-    )
 
 
 def _parse_payload(msg_id, payload: dict) -> JobPayload:
@@ -153,6 +134,44 @@ class _OcrLifecycleAnalyzer:
         # Preserve the task identity used by main's retry and timing logs.
         run_ocr._analysis_task = "ocr"
         return {**tasks, "ocr": run_ocr}
+
+
+class _ProductContextAnalyzer:
+    """Add Product Context extraction to the shared task registry so it gets
+    the same concurrent retry/error handling and result persistence as the
+    other analyzer tasks, instead of blocking ahead of them.
+    """
+
+    def __init__(
+        self,
+        analyzer,
+        product_url: str | None,
+        extractor: ProductPageExtractor | None = None,
+    ):
+        self.analyzer = analyzer
+        self.product_url = product_url
+        self.extractor = extractor
+
+    def analysis_tasks(self):
+        """Return the registry with Product Context added when a URL was submitted."""
+        tasks = self.analyzer.analysis_tasks()
+        if self.product_url is None:
+            return tasks
+
+        def run_product_context() -> ProductContextResult:
+            page_extractor = self.extractor or ProductPageExtractor()
+            context = page_extractor.extract(self.product_url)
+            return ProductContextResult(
+                rows=[
+                    ProductContextRow(
+                        raw_text=context.raw_text,
+                        reference_asset_urls=list(context.reference_asset_urls),
+                    )
+                ]
+            )
+
+        run_product_context._analysis_task = "product_context"
+        return {**tasks, "product_context": run_product_context}
 
 
 def _run_analysis(
