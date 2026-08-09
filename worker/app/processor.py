@@ -47,6 +47,7 @@ def process_message(cur, msg_id, payload):
     ocr_configuration = OcrRuntimeConfig.from_env()
     request_id = payload.request_id
     db = Supabase(cur=cur, request_id=request_id)
+    db.mark_media_processing_started()
 
     job_start = time.perf_counter()
     logger.info("[job %s] Processing: %s", msg_id, request_id)
@@ -101,7 +102,9 @@ def process_message(cur, msg_id, payload):
         if errors:
             raise RuntimeError(f"[job {msg_id}] analyzers failed: {list(errors)}")
 
+    db.mark_media_processing_completed()
     logger.info("[job %s] Done in %.2fs", msg_id, time.perf_counter() - job_start)
+
 
 
 def _parse_payload(msg_id, payload: dict) -> JobPayload:

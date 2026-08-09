@@ -56,6 +56,37 @@ class Supabase:
 
     def mark_processing(self, task_name: str) -> None:
         self._upsert_processing(task_name, "processing", None)
+
+    def mark_media_processing_started(self) -> None:
+        self._set_media_processing_status("processing")
+
+    def mark_media_processing_completed(self) -> None:
+        self._set_media_processing_status("completed")
+
+    def mark_media_processing_failed(self, error: str) -> None:
+        self._set_media_processing_status("failed", error)
+
+    def record_media_processing_error(self, error: str) -> None:
+        """Persist the latest failure reason without ending the retry cycle."""
+        self.cur.execute(
+            "UPDATE requests SET media_processing_error = %s WHERE request_id = %s;",
+            (error, self.request_id),
+        )
+
+    def mark_media_processing_exhausted(self) -> None:
+        """Flip status to failed once retries end, keeping the last recorded error."""
+        self.cur.execute(
+            "UPDATE requests SET media_processing_status = 'failed' WHERE request_id = %s;",
+            (self.request_id,),
+        )
+
+    def _set_media_processing_status(self, status: str, error: str | None = None) -> None:
+        self.cur.execute(
+            "UPDATE requests SET media_processing_status = %s, media_processing_error = %s "
+            "WHERE request_id = %s;",
+            (status, error, self.request_id),
+        )
+
     def persist_quality_frames(self, flags: list[QualityFlag]) -> None:
         """Replace this request's flagged-frame evidence (delete + reinsert,
         same as _replace_rows) so a retried job doesn't duplicate rows —

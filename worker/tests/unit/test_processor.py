@@ -304,6 +304,16 @@ def _wire_process_message(
         def mark_processing(self, task_name):
             pass
 
+        def mark_media_processing_started(self):
+            pass
+
+        def mark_media_processing_completed(self):
+            pass
+
+        def mark_media_processing_failed(self, error):
+            if recorder is not None:
+                recorder["media_processing_error"] = error
+
         def persist_results(self, results, errors):
             if recorder is not None:
                 recorder["persisted"] = (results, errors)
@@ -611,6 +621,15 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
         def mark_processing(self, task_name):
             """Accept main's in-flight analyzer status transition."""
             execution_events.append(f"{task_name}-processing")
+
+        def mark_media_processing_started(self):
+            """Accept main's request-level status transition."""
+
+        def mark_media_processing_completed(self):
+            """Accept main's request-level status transition."""
+
+        def mark_media_processing_failed(self, error):
+            """Accept main's request-level status transition."""
 
         def persist_quality_frames(self, flags):
             """Accept main's optional quality persistence."""

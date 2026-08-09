@@ -130,6 +130,66 @@ def test_mark_processing_upserts_processing_status():
 
 
 # ---------------------------------------------------------------------------
+# media_processing_status lifecycle
+# ---------------------------------------------------------------------------
+def test_mark_media_processing_started_sets_processing_status():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.mark_media_processing_started()
+
+    sql, params = cur.executed[0]
+    assert "UPDATE requests" in sql
+    assert params == ("processing", None, REQUEST_ID)
+
+
+def test_mark_media_processing_completed_sets_completed_status():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.mark_media_processing_completed()
+
+    sql, params = cur.executed[0]
+    assert "UPDATE requests" in sql
+    assert params == ("completed", None, REQUEST_ID)
+
+
+def test_mark_media_processing_failed_sets_failed_status_and_error():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.mark_media_processing_failed("boom")
+
+    sql, params = cur.executed[0]
+    assert "UPDATE requests" in sql
+    assert params == ("failed", "boom", REQUEST_ID)
+
+
+def test_record_media_processing_error_updates_error_only():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.record_media_processing_error("storage 503")
+
+    sql, params = cur.executed[0]
+    assert "UPDATE requests" in sql
+    assert "media_processing_status" not in sql
+    assert params == ("storage 503", REQUEST_ID)
+
+
+def test_mark_media_processing_exhausted_updates_status_only():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.mark_media_processing_exhausted()
+
+    sql, params = cur.executed[0]
+    assert "UPDATE requests" in sql
+    assert "media_processing_error" not in sql
+    assert params == (REQUEST_ID,)
+
+
+# ---------------------------------------------------------------------------
 # completed_analyzers()
 # ---------------------------------------------------------------------------
 def test_completed_analyzers_returns_successful_task_names():

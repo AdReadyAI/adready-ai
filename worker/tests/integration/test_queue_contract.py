@@ -916,6 +916,15 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
             assert task_name == "ocr"
             self._status.mark_processing(task_name)
 
+        def mark_media_processing_started(self):
+            """Accept main's request-level status transition."""
+
+        def mark_media_processing_completed(self):
+            """Accept main's request-level status transition."""
+
+        def mark_media_processing_failed(self, error):
+            """Accept main's request-level status transition."""
+
         def persist_video_metadata(self, metadata, scene_result):
             """Accept main's metadata write outside generic task results."""
 
