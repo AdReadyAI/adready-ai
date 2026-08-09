@@ -100,6 +100,11 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-09** — Creative-brief parsing is now an explicit **Parse brief**
+  button under the textarea in `CampaignForm`, not an `onBlur` handler. Blur
+  spent an LLM call on every tab-out and gave no way to re-parse; the button
+  disables itself while parsing and while the text still matches the last
+  parsed version (`lastParsed` state, previously the `lastParsedRef` ref).
 - **2026-08-07** — Uploads are capped at 100 MB per file (`MAX_UPLOAD_BYTES` in
   `pages/UploadPage.tsx`); oversized files land on the grid as errors and are
   never sent. Client-side only — the enforcing limits are in
