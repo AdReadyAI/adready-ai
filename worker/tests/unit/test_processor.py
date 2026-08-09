@@ -1,6 +1,5 @@
 """Unit tests for the worker processor orchestration (app/processor.py)."""
 
-from unittest.mock import MagicMock
 from types import SimpleNamespace
 
 import pytest
@@ -73,63 +72,28 @@ class FakeDB:
         self.marked_processing.append(task_name)
 
 
-class FakeProductContextDB:
-    """Record the Product Context orchestration without touching Postgres."""
-
-    def __init__(self, url):
-        self.url = url
-        self.raw_text = None
-
-    def product_url_requiring_context(self):
-        return self.url
-
-    def upsert_product_context(self, raw_text, reference_asset_urls):
-        self.raw_text = raw_text
-
-
-def test_populate_product_context_extracts_and_persists_page_text():
-    db = FakeProductContextDB("https://example.com/product")
-    extractor = MagicMock()
-    extractor.extract.return_value = SimpleNamespace(
-        raw_text="Product facts",
-        reference_asset_urls=("https://example.com/product.jpg",),
-    )
-
-    processor._populate_product_context(db, extractor=extractor)
-
-    assert db.raw_text == "Product facts"
-
-
-def test_populate_product_context_skips_request_without_pending_url():
-    db = FakeProductContextDB(None)
-    extractor = MagicMock()
-
-    processor._populate_product_context(db, extractor=extractor)
-
-    extractor.extract.assert_not_called()
-    assert db.raw_text is None
-
-
 # ---------------------------------------------------------------------------
 # _run_analysis()
 # ---------------------------------------------------------------------------
 def test_run_analysis_collects_successful_results():
     tasks = {"transcription": lambda: "RESULT", "context": lambda: "CTX"}
-    results, errors = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
+    results, errors, unrecoverable = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
 
     assert results == {"transcription": "RESULT", "context": "CTX"}
     assert errors == {}
+    assert unrecoverable is False
 
 
 def test_run_analysis_skips_completed_tasks():
     tasks = {"transcription": lambda: "RESULT", "context": lambda: "CTX"}
     db = FakeDB(done={"transcription"})
 
-    results, errors = processor._run_analysis(db, FakeAnalyzer(tasks))
+    results, errors, unrecoverable = processor._run_analysis(db, FakeAnalyzer(tasks))
 
     assert "transcription" not in results
     assert results == {"context": "CTX"}
     assert errors == {}
+    assert unrecoverable is False
 
 
 def test_run_analysis_marks_pending_tasks_as_processing():
@@ -176,21 +140,35 @@ def test_run_analysis_routes_exceptions_to_errors():
         raise RuntimeError("kaboom")
 
     tasks = {"transcription": lambda: "OK", "ocr": boom}
-    results, errors = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
+    results, errors, unrecoverable = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
 
     assert results == {"transcription": "OK"}
     assert set(errors) == {"ocr"}
     assert "kaboom" in errors["ocr"]
+    assert unrecoverable is False
+
+
+def test_run_analysis_flags_permanent_errors_as_unrecoverable():
+    def boom():
+        raise PermanentError("never gonna work")
+
+    tasks = {"transcription": lambda: "OK", "ocr": boom}
+    results, errors, unrecoverable = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
+
+    assert results == {"transcription": "OK"}
+    assert set(errors) == {"ocr"}
+    assert unrecoverable is True
 
 
 def test_run_analysis_skips_none_results():
     # Stub tasks return None; they must not be recorded as results (would break persist).
     tasks = {"transcription": lambda: None, "context": lambda: "CTX"}
-    results, errors = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
+    results, errors, unrecoverable = processor._run_analysis(FakeDB(), FakeAnalyzer(tasks))
 
     assert "transcription" not in results
     assert results == {"context": "CTX"}
     assert errors == {}
+    assert unrecoverable is False
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +267,7 @@ def _wire_process_message(
     fail_video_metadata_persist=False,
 ):
     class FakePreprocessor:
-        def __init__(self, request_id, work_dir):
+        def __init__(self, request_id, work_dir, msg_id=None):
             pass
 
         def prepare(self):
@@ -325,12 +303,16 @@ def _wire_process_message(
 
         def mark_processing(self, task_name):
             pass
-        def product_url_requiring_context(self):
-            return None
 
-        def upsert_product_context(self, raw_text, reference_asset_urls):
+        def mark_media_processing_started(self):
+            pass
+
+        def mark_media_processing_completed(self):
+            pass
+
+        def mark_media_processing_failed(self, error):
             if recorder is not None:
-                recorder["product_context"] = raw_text
+                recorder["media_processing_error"] = error
 
         def persist_results(self, results, errors):
             if recorder is not None:
@@ -394,6 +376,17 @@ def test_process_message_raises_when_a_task_fails(monkeypatch):
     _wire_process_message(monkeypatch, tasks)
 
     with pytest.raises(RuntimeError):
+        processor.process_message(cur=object(), msg_id=7, payload=VALID_PAYLOAD)
+
+
+def test_process_message_raises_unrecoverable_when_task_fails_permanently(monkeypatch):
+    def boom():
+        raise PermanentError("never gonna work")
+
+    tasks = {"ocr": boom}
+    _wire_process_message(monkeypatch, tasks)
+
+    with pytest.raises(processor.UnrecoverableError):
         processor.process_message(cur=object(), msg_id=7, payload=VALID_PAYLOAD)
 
 
@@ -585,7 +578,7 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
     class FakePreprocessor:
         """Return prepared media without shared preprocessing."""
 
-        def __init__(self, payload, work_dir):
+        def __init__(self, payload, work_dir, msg_id=None):
             self.payload = payload
 
         def prepare(self):
@@ -622,16 +615,21 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
         def __init__(self, cur, request_id):
             self.request_id = request_id
 
-        def product_url_requiring_context(self):
-            """Model a request whose product context is already complete."""
-            return None
-
         def completed_analyzers(self):
             return set()
 
         def mark_processing(self, task_name):
             """Accept main's in-flight analyzer status transition."""
             execution_events.append(f"{task_name}-processing")
+
+        def mark_media_processing_started(self):
+            """Accept main's request-level status transition."""
+
+        def mark_media_processing_completed(self):
+            """Accept main's request-level status transition."""
+
+        def mark_media_processing_failed(self, error):
+            """Accept main's request-level status transition."""
 
         def persist_quality_frames(self, flags):
             """Accept main's optional quality persistence."""

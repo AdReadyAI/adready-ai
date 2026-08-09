@@ -841,7 +841,7 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
     class SyntheticPreprocessor:
         """Supply trusted local media while preserving the worker entry point."""
 
-        def __init__(self, payload, work_dir):
+        def __init__(self, payload, work_dir, msg_id=None):
             self.payload = payload
             self.work_dir = work_dir
 
@@ -902,10 +902,6 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
             self.request_id = request_id
             self._status = Supabase(cur, request_id)
 
-        def product_url_requiring_context(self):
-            """Keep this OCR scenario independent of Product Context work."""
-            return None
-
         def completed_analyzers(self):
             """Leave only OCR pending through the real analyzer registry."""
             return {
@@ -919,6 +915,15 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
             """Use the production shared-status write for the pending OCR task."""
             assert task_name == "ocr"
             self._status.mark_processing(task_name)
+
+        def mark_media_processing_started(self):
+            """Accept main's request-level status transition."""
+
+        def mark_media_processing_completed(self):
+            """Accept main's request-level status transition."""
+
+        def mark_media_processing_failed(self, error):
+            """Accept main's request-level status transition."""
 
         def persist_video_metadata(self, metadata, scene_result):
             """Accept main's metadata write outside generic task results."""

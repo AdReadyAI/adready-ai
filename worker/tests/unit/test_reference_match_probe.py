@@ -23,6 +23,7 @@ from analyzer.frame_sampling.probes.reference_match import (
     _ModelInput,
 )
 from analyzer.types import VideoMetadata
+from app.errors import UnrecoverableError
 
 
 # ---- helpers ----
@@ -128,6 +129,22 @@ def test_configure_with_empty_references_skips_model_load(monkeypatch):
     assert probe._clip_model is None
     assert probe._clip_preprocess is None
     assert probe._ref_clip_embeds is None
+
+
+# ---- configure(): corrupt reference image ----
+def test_configure_raises_unrecoverable_on_corrupt_reference_image(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        reference_match, "get_mobileclip", lambda: _fake_mobileclip(embed_dim=2)
+    )
+
+    bad_ref = tmp_path / "bad.jpg"
+    bad_ref.write_bytes(b"not an image")
+
+    probe = _FakeReferenceProbe()
+    setup = _setup(product_image_paths=[str(bad_ref)])
+
+    with pytest.raises(UnrecoverableError):
+        probe.configure(setup)
     assert probe._ref_orb_descriptors == []
 
 

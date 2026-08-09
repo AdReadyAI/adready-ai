@@ -63,6 +63,9 @@ export async function loadAgentContext(
   const logoDetectionId = processing?.find((row) =>
     row.task_name === "logo_detection"
   )?.id;
+  const productContextId = processing?.find((row) =>
+    row.task_name === "product_context"
+  )?.id;
   const [
     briefResponse,
     metadataResponse,
@@ -82,8 +85,12 @@ export async function loadAgentContext(
       : Promise.resolve({ data: null, error: null }),
     supabase.from("video_metadata").select("*").eq("request_id", requestId)
       .maybeSingle(),
-    supabase.from("product_context").select("*").eq("request_id", requestId)
-      .maybeSingle(),
+    productContextId
+      ? supabase.from("product_context").select("*").eq(
+        "processing_id",
+        productContextId,
+      ).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
     transcriptionId
       ? supabase.from("transcript_segments").select(
         "segment_id, start_ms, end_ms, text, speaker",
