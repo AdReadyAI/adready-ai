@@ -100,6 +100,12 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-09** — Fixed the red `main` build. Adding required `videoPath` /
+  `timestampSeconds` to `VideoResult` / `Issue` broke three older test fixtures
+  that still built those objects the old way. Only the CI `quality` job caught
+  it: vitest transpiles through esbuild, which strips types without checking
+  them, so `npm run test:unit` stayed green while `tsc -b` failed. Widening a
+  shared type means every fixture that constructs it, tests included.
 - **2026-08-09** — Expanded issue rows play the real video instead of a fake
   black box. `components/results/IssueClip.tsx` is an ordinary player (native
   `controls` — play/pause, scrub, volume, fullscreen) that opens parked on the
