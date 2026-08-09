@@ -11,7 +11,7 @@ import app.processor as processor  # noqa: E402
 from app.errors import PermanentError, TransientError  # noqa: E402
 from app.schemas import JobPayload  # noqa: E402
 from analyzer.frame_sampling.probes.quality import QualityFlag, QualityProbeResult  # noqa: E402
-from analyzer.output_models import TranscriptionResult, TranscriptSegment  # noqa: E402
+from analyzer.output_models import ProductContextRow, TranscriptionResult, TranscriptSegment  # noqa: E402
 from analyzer.ocr.completion import OcrCompletionCoordinator  # noqa: E402
 from analyzer.ocr.roboflow import RoboflowEasyOcrAdapter  # noqa: E402
 from analyzer.ocr.routing import OcrCandidateMode  # noqa: E402
@@ -73,41 +73,42 @@ class FakeDB:
         self.marked_processing.append(task_name)
 
 
-class FakeProductContextDB:
-    """Record the Product Context orchestration without touching Postgres."""
-
-    def __init__(self, url):
-        self.url = url
-        self.raw_text = None
-
-    def product_url_requiring_context(self):
-        return self.url
-
-    def upsert_product_context(self, raw_text, reference_asset_urls):
-        self.raw_text = raw_text
-
-
-def test_populate_product_context_extracts_and_persists_page_text():
-    db = FakeProductContextDB("https://example.com/product")
+def test_product_context_wrapper_adds_task_when_url_present():
     extractor = MagicMock()
     extractor.extract.return_value = SimpleNamespace(
         raw_text="Product facts",
         reference_asset_urls=("https://example.com/product.jpg",),
     )
+    wrapped = processor._ProductContextAnalyzer(
+        FakeAnalyzer({"transcription": lambda: "RESULT"}),
+        "https://example.com/product",
+        extractor=extractor,
+    )
 
-    processor._populate_product_context(db, extractor=extractor)
+    tasks = wrapped.analysis_tasks()
+    result = tasks["product_context"]()
 
-    assert db.raw_text == "Product facts"
+    assert result.rows == [
+        ProductContextRow(
+            raw_text="Product facts",
+            reference_asset_urls=["https://example.com/product.jpg"],
+        )
+    ]
+    assert tasks["transcription"]() == "RESULT"
 
 
-def test_populate_product_context_skips_request_without_pending_url():
-    db = FakeProductContextDB(None)
+def test_product_context_wrapper_skips_task_without_pending_url():
     extractor = MagicMock()
+    wrapped = processor._ProductContextAnalyzer(
+        FakeAnalyzer({"transcription": lambda: "RESULT"}),
+        None,
+        extractor=extractor,
+    )
 
-    processor._populate_product_context(db, extractor=extractor)
+    tasks = wrapped.analysis_tasks()
 
+    assert "product_context" not in tasks
     extractor.extract.assert_not_called()
-    assert db.raw_text is None
 
 
 # ---------------------------------------------------------------------------
@@ -325,12 +326,6 @@ def _wire_process_message(
 
         def mark_processing(self, task_name):
             pass
-        def product_url_requiring_context(self):
-            return None
-
-        def upsert_product_context(self, raw_text, reference_asset_urls):
-            if recorder is not None:
-                recorder["product_context"] = raw_text
 
         def persist_results(self, results, errors):
             if recorder is not None:
@@ -621,10 +616,6 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
 
         def __init__(self, cur, request_id):
             self.request_id = request_id
-
-        def product_url_requiring_context(self):
-            """Model a request whose product context is already complete."""
-            return None
 
         def completed_analyzers(self):
             return set()

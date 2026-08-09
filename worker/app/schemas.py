@@ -12,3 +12,4 @@ class JobPayload(BaseModel):
     video_path: StrictStr
     product_image_paths: list[str]
     logo_paths: list[str]
+    product_url: StrictStr | None = None

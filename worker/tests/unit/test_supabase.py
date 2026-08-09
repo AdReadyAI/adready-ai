@@ -152,50 +152,6 @@ def test_completed_analyzers_empty():
 
 
 # ---------------------------------------------------------------------------
-# Product Context
-# ---------------------------------------------------------------------------
-def test_product_url_requiring_context_returns_unprocessed_url():
-    cur = FakeCursor(fetchone_queue=[("https://example.com/product",)])
-    db = Supabase(cur=cur, request_id=REQUEST_ID)
-
-    url = db.product_url_requiring_context()
-
-    assert url == "https://example.com/product"
-    sql, params = cur.executed[0]
-    assert "FROM requests" in sql
-    assert "LEFT JOIN product_context" in sql
-    assert params == (REQUEST_ID,)
-
-
-def test_product_url_requiring_context_returns_none_when_already_populated():
-    cur = FakeCursor(fetchone_queue=[None])
-    db = Supabase(cur=cur, request_id=REQUEST_ID)
-
-    assert db.product_url_requiring_context() is None
-
-
-def test_upsert_product_context_updates_extracted_values_transactionally():
-    cur = FakeCursor()
-    db = Supabase(cur=cur, request_id=REQUEST_ID)
-
-    db.upsert_product_context(
-        "Product facts",
-        ("https://example.com/product.jpg",),
-    )
-
-    sql, params = cur.executed[0]
-    assert "INSERT INTO product_context" in sql
-    assert "ON CONFLICT (request_id)" in sql
-    assert "reference_asset_urls" in sql
-    assert params == (
-        REQUEST_ID,
-        "Product facts",
-        ["https://example.com/product.jpg"],
-    )
-    assert cur.connection.commits == 1
-
-
-# ---------------------------------------------------------------------------
 # _upsert_processing()
 # ---------------------------------------------------------------------------
 def test_upsert_processing_issues_upsert_and_returns_id():

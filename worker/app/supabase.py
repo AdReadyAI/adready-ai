@@ -146,30 +146,6 @@ class Supabase:
         )
         return {row[0] for row in self.cur.fetchall()}
 
-    def upsert_product_context(
-        self,
-        raw_text: str,
-        reference_asset_urls: tuple[str, ...],
-    ) -> None:
-        """Persist extracted Product Reference values without replacing curated fields."""
-        with self.transaction():
-            self.cur.execute(
-                """
-                INSERT INTO product_context (request_id, raw_text, reference_asset_urls)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (request_id)
-                DO UPDATE SET
-                  raw_text = EXCLUDED.raw_text,
-                  reference_asset_urls = ARRAY(
-                    SELECT DISTINCT UNNEST(
-                      product_context.reference_asset_urls
-                      || EXCLUDED.reference_asset_urls
-                    )
-                  );
-                """,
-                (self.request_id, raw_text, list(reference_asset_urls)),
-            )
-    
     def _upsert_processing(self, task_name, status, result_table, error=None) -> str:
         self.cur.execute(
             """
