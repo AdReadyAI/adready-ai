@@ -841,7 +841,7 @@ def test_fixed_rate_ocr_completes_idempotently_through_worker(
     class SyntheticPreprocessor:
         """Supply trusted local media while preserving the worker entry point."""
 
-        def __init__(self, payload, work_dir):
+        def __init__(self, payload, work_dir, msg_id=None):
             self.payload = payload
             self.work_dir = work_dir
 

@@ -52,7 +52,7 @@ def process_message(cur, msg_id, payload):
     job_start = time.perf_counter()
     logger.info("[job %s] Processing: %s", msg_id, request_id)
     with tempfile.TemporaryDirectory(prefix=f"job_{msg_id}_") as work_dir:
-        preprocessor = VideoPreprocessor(payload, work_dir)
+        preprocessor = VideoPreprocessor(payload, work_dir, msg_id=msg_id)
         with phase(logger, f"[job {msg_id}] Preprocessing"):
             artifact = preprocessor.prepare()
 

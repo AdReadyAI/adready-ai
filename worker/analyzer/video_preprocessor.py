@@ -23,16 +23,17 @@ from config.settings import (
 )
 
 class VideoPreprocessor:
-    def __init__(self, job_payload: JobPayload, work_dir):
+    def __init__(self, job_payload: JobPayload, work_dir, msg_id=None):
         self.job_payload = job_payload
         self.work_dir = work_dir
+        self.msg_id = msg_id
         self._probe_results: dict[str, ProbeResult] = {}
         self._has_audio = True
 
     # ---- public entry point ----
     def prepare(self) -> Artifacts:
         """Orchestrate the whole prep and return the artifacts bundle."""
-        job_id = self.job_payload.request_id
+        job_id = self.msg_id
         with phase(logger, f"[job {job_id}] Download video"):
             video_path = self._download_video()
         with phase(logger, f"[job {job_id}] Probe metadata"):

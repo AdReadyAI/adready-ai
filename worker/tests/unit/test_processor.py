@@ -267,7 +267,7 @@ def _wire_process_message(
     fail_video_metadata_persist=False,
 ):
     class FakePreprocessor:
-        def __init__(self, request_id, work_dir):
+        def __init__(self, request_id, work_dir, msg_id=None):
             pass
 
         def prepare(self):
@@ -578,7 +578,7 @@ def test_process_message_wraps_only_the_registered_ocr_task(monkeypatch):
     class FakePreprocessor:
         """Return prepared media without shared preprocessing."""
 
-        def __init__(self, payload, work_dir):
+        def __init__(self, payload, work_dir, msg_id=None):
             self.payload = payload
 
         def prepare(self):
