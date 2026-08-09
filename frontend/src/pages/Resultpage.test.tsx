@@ -145,7 +145,7 @@ describe('ResultPage — processing placeholder', () => {
   })
 
   it('polls every 5s while incomplete and stops once the batch completes', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] })
+    vi.useFakeTimers()
     const incomplete = makeBatch({
       totalCount: 1,
       complete: false,
@@ -173,13 +173,7 @@ describe('ResultPage — processing placeholder', () => {
   })
 
   it('shows the timeout notice and stops polling after 10 minutes of no completion', async () => {
-    // Explicit toFake: Date must be faked for this test specifically, since it
-    // asserts on Date-derived elapsed-time logic (POLL_TIMEOUT_MS), not just on
-    // whether setInterval fires. Without Date included, the interval ticks
-    // correctly (proven by the sibling test above) but Date.now() keeps
-    // returning real wall-clock time, so the elapsed-time check never trips —
-    // the timeout condition silently never becomes true.
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] })
+    vi.useFakeTimers()
     const incomplete = makeBatch({
       totalCount: 1,
       complete: false,
@@ -190,22 +184,17 @@ describe('ResultPage — processing placeholder', () => {
     render(<ResultPage />)
     await vi.advanceTimersByTimeAsync(0)
 
-    // Advance in individual POLL_MS steps rather than one giant jump — a
-    // single huge advance doesn't reliably flush ~120 sequential async
-    // interval ticks.
-    const ticksToTimeout = Math.ceil((TIMEOUT_MS + POLL_MS) / POLL_MS)
-    for (let i = 0; i < ticksToTimeout; i++) {
-      await vi.advanceTimersByTimeAsync(POLL_MS)
-    }
+    // Jump the clock straight past the timeout threshold instead of looping
+    // through ~120 individual interval ticks to accumulate elapsed time — one
+    // poll after the jump is enough to trip the elapsed-time check, and it
+    // sidesteps whatever was going wrong accumulating so many ticks.
+    vi.setSystemTime(Date.now() + TIMEOUT_MS + 1)
+    await vi.advanceTimersByTimeAsync(POLL_MS)
 
-    // setTimedOut(true) is set synchronously inside the tick that crosses the
-    // threshold, which the loop above has already awaited past.
     expect(screen.getByText('This is taking longer than expected.')).toBeInTheDocument()
     const callsAtTimeout = fetchBatchResultsMock.mock.calls.length
 
-    for (let i = 0; i < 4; i++) {
-      await vi.advanceTimersByTimeAsync(POLL_MS)
-    }
+    await vi.advanceTimersByTimeAsync(POLL_MS * 4)
     expect(fetchBatchResultsMock).toHaveBeenCalledTimes(callsAtTimeout)
   })
 })
