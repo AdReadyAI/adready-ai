@@ -100,6 +100,29 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-09** — Split the advanced brief fields into required and optional in
+  `AdvancedFieldsSection`. The four required ones (Brand Voice, Target Audience,
+  Required Messages, Brand Guidelines) each gate a sub-check that the
+  brief/brand alignment agents force to `cannot_assess` when the input is blank;
+  submit is now blocked on them via the exported `missingRequiredAdvanced`. The
+  other four are prompt context only, so they stay optional.
+- **2026-08-09** — Fixed the red `main` build. Adding required `videoPath` /
+  `timestampSeconds` to `VideoResult` / `Issue` broke three older test fixtures
+  that still built those objects the old way. Only the CI `quality` job caught
+  it: vitest transpiles through esbuild, which strips types without checking
+  them, so `npm run test:unit` stayed green while `tsc -b` failed. Widening a
+  shared type means every fixture that constructs it, tests included.
+- **2026-08-09** — Expanded issue rows play the real video instead of a fake
+  black box. `components/results/IssueClip.tsx` is an ordinary player (native
+  `controls` — play/pause, scrub, volume, fullscreen) that opens parked on the
+  issue's frame, clamped to the clip's duration since nothing guarantees
+  `video_timestamp` falls inside the video. `Issue` gains `timestampSeconds`
+  (same parser as the display label, so the chip and the seek cannot drift) and
+  `VideoResult` gains `videoPath`; `lib/useSignedVideoUrl.ts` signs one URL per
+  selected video from the private `uploads` bucket and drops out-of-order
+  responses, which would otherwise pair a clip with the wrong video. Note the
+  fallback is silent: an unplayable file (HEVC, which Chrome cannot decode and
+  iPhones record by default) shows the static frame with no explanation.
 - **2026-08-07** — Uploads are capped at 100 MB per file (`MAX_UPLOAD_BYTES` in
   `pages/UploadPage.tsx`); oversized files land on the grid as errors and are
   never sent. Client-side only — the enforcing limits are in

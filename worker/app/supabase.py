@@ -142,8 +142,8 @@ class Supabase:
                 INSERT INTO video_metadata (
                     request_id, duration_ms, aspect_ratio, resolution,
                     shot_count, cuts_per_second, avg_shot_s, min_shot_s, max_shot_s,
-                    dynamism
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    dynamism, fps
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (request_id) DO UPDATE SET
                     duration_ms = EXCLUDED.duration_ms,
                     aspect_ratio = EXCLUDED.aspect_ratio,
@@ -153,7 +153,8 @@ class Supabase:
                     avg_shot_s = EXCLUDED.avg_shot_s,
                     min_shot_s = EXCLUDED.min_shot_s,
                     max_shot_s = EXCLUDED.max_shot_s,
-                    dynamism = EXCLUDED.dynamism;
+                    dynamism = EXCLUDED.dynamism,
+                    fps = EXCLUDED.fps;
                 """,
                 (
                     self.request_id,
@@ -166,6 +167,7 @@ class Supabase:
                     pacing.get("min_shot_s"),
                     pacing.get("max_shot_s"),
                     scene_result.dynamism if scene_result else None,
+                    metadata.fps,
                 ),
             )
 

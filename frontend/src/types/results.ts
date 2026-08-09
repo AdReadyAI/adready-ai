@@ -85,6 +85,19 @@ export interface Issue {
    * rather than trusted. null when the issue has no associated frame.
    */
   timestamp: string | null
+  /**
+   * The same moment in seconds, for seeking the clip player.
+   *
+   * Not derivable from `timestamp` at the call site — that is a display label,
+   * and re-parsing it in the component is how the shown time and the seeked
+   * time drift apart. Both come from one parser in resultsTransform.
+   *
+   * These two can legitimately disagree on presence: a timestamp in a format we
+   * do not recognize keeps its text (worth showing) but has null seconds
+   * (nowhere to seek). So the player must gate on THIS field, not on
+   * `timestamp` — otherwise an unparseable value seeks to NaN.
+   */
+  timestampSeconds: number | null
 }
 
 /** One video's complete result: a `requests` row joined to its scores and issues. */
@@ -95,6 +108,15 @@ export interface VideoResult {
   rank: number
   /** Filename, derived from `requests.video_storage_paths[0]`. */
   name: string
+  /**
+   * `video_storage_paths[0]` — the object key in the private `uploads` bucket.
+   *
+   * Not a URL. The bucket is private (migration 005) with SELECT scoped to the
+   * owner's folder (migration 006), so playback needs a signed URL minted at
+   * render time. Storing the key rather than a URL keeps expiry out of the
+   * data layer. null when the request recorded no video path.
+   */
+  videoPath: string | null
   /** `ad_readiness_pct`. Null when `status` is 'unassessed'. */
   score: number | null
   status: ShipStatus

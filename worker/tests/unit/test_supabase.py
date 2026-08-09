@@ -443,6 +443,7 @@ def test_persist_video_metadata_normal_case():
         1.0,
         4.0,
         "moderate",
+        30.0,
     )
     assert cur.connection.commits == 1
 
@@ -455,7 +456,7 @@ def test_persist_video_metadata_scene_result_none():
     db.persist_video_metadata(metadata, None)
 
     _, params = cur.executed[0]
-    assert params[4:] == (None, None, None, None, None, None)
+    assert params[4:] == (None, None, None, None, None, None, 30.0)
 
 
 @pytest.mark.parametrize(
