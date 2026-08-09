@@ -192,7 +192,10 @@ describe('ResultPage — processing placeholder', () => {
       await vi.advanceTimersByTimeAsync(POLL_MS)
     }
 
-    expect(screen.getByText('This is taking longer than expected.')).toBeInTheDocument()
+    // setTimedOut(true) happens inside an async interval callback — give
+    // React a chance to actually commit the re-render before querying the DOM,
+    // same as the other post-async assertions in this file.
+    await waitFor(() => expect(screen.getByText('This is taking longer than expected.')).toBeInTheDocument())
     const callsAtTimeout = fetchBatchResultsMock.mock.calls.length
 
     for (let i = 0; i < 4; i++) {
