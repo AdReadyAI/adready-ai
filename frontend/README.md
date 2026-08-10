@@ -154,7 +154,12 @@ not a full diff.
   silently missing from the ranking. `ResultPage` also stopped polling the heavy
   results query every 5s: that now fires once, when progress says the batch is
   done. No migration — everything read here was already covered by existing RLS
-  read policies. See "How the loading screen knows what's happening" above.
+  read policies. Two subtleties worth keeping: the percentage **floors** rather
+  than rounds (rounding let a 16-video batch read "100% complete" with a unit
+  still outstanding), and the results are tagged with the batch they were fetched
+  for, since React Router reuses this component across a `:batchId` change and
+  the previous batch's ranking would otherwise flash under the new URL. See "How
+  the loading screen knows what's happening" above.
 - **2026-08-09** — Split the advanced brief fields into required and optional in
   `AdvancedFieldsSection`. The four required ones (Brand Voice, Target Audience,
   Required Messages, Brand Guidelines) each gate a sub-check that the

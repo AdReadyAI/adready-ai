@@ -197,6 +197,45 @@ describe('ResultPage gating', () => {
 
     expect(fetchBatchResultsMock).toHaveBeenCalledOnce()
   })
+
+  // React Router reuses this component when only the :batchId param changes, so
+  // state survives the navigation and a render always precedes the effects that
+  // react to it. Without the batch tag on `loaded` there is a window — one full
+  // results round trip — where batch A's ranking renders under batch B's URL.
+  it('never shows the previous batch results after switching batch', async () => {
+    progressRef.current = progressState([finishedRow()], {}, ['req-1'])
+    fetchBatchResultsMock.mockResolvedValue(
+      makeBatch({ totalCount: 1, complete: true, videos: [makeVideo({ name: 'batch-a.mp4' })] }),
+    )
+
+    const { rerender } = render(<ResultPage />)
+    // Scoped to the heading: the filename also appears on the ranking card.
+    expect(await screen.findByRole('heading', { name: 'batch-a.mp4' })).toBeVisible()
+
+    // Switch to a second batch that is also finished, but whose results query is
+    // still in flight — the exact moment the old data used to leak through.
+    let resolveSecond: (value: BatchResults) => void = () => {}
+    fetchBatchResultsMock.mockReturnValue(
+      new Promise<BatchResults>((resolve) => {
+        resolveSecond = resolve
+      }),
+    )
+    paramsRef.current = { batchId: 'batch-2' }
+    progressRef.current = progressState([finishedRow({ request_id: 'req-2' })], {}, ['req-2'])
+    rerender(<ResultPage />)
+
+    expect(screen.queryByRole('heading', { name: 'batch-a.mp4' })).not.toBeInTheDocument()
+    expect(screen.getByText('Loading your results…')).toBeVisible()
+
+    resolveSecond(
+      makeBatch({
+        totalCount: 1,
+        complete: true,
+        videos: [makeVideo({ requestId: 'req-2', name: 'batch-b.mp4' })],
+      }),
+    )
+    expect(await screen.findByRole('heading', { name: 'batch-b.mp4' })).toBeVisible()
+  })
 })
 
 describe('ResultPage failures', () => {

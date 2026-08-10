@@ -429,6 +429,38 @@ describe('buildBatchProgress', () => {
     expect(batch.pct).toBe(50)
   })
 
+  // Math.round used to let this read 100: one outstanding unit is 1/208 of a
+  // 16-video batch's weight, which is under the half-percent rounding threshold.
+  // "100% complete" next to a spinner is the kind of thing that discredits the
+  // whole bar, so percent() floors.
+  it('never reads 100 while work is outstanding, however large the batch', () => {
+    const done = Array.from({ length: 15 }, (_, index) =>
+      requestRow({
+        request_id: `req-${index}`,
+        video_storage_paths: [`u/b/video/req-${index}/v${index}.mp4`],
+        media_processing_status: 'completed',
+        agents_triggered_at: '2026-08-10T12:00:00Z',
+        evaluation_completion_status: 'completed',
+      }),
+    )
+    // Everything but this one's scoring row — a single unit of 208.
+    const lastRequest = requestRow({
+      request_id: 'req-last',
+      video_storage_paths: ['u/b/video/req-last/z.mp4'],
+      media_processing_status: 'completed',
+      agents_triggered_at: '2026-08-10T12:00:00Z',
+    })
+
+    const batch = buildBatchProgress({
+      requests: [...done, lastRequest],
+      agents: [...done, lastRequest].flatMap((request) => allAgents(request.request_id)),
+      scored: done.map((request) => ({ request_id: request.request_id })),
+    })
+
+    expect(batch.isDone).toBe(false)
+    expect(batch.pct).toBe(99)
+  })
+
   it('collects only the videos whose pipeline stopped', () => {
     const batch = buildBatchProgress({
       requests: [

@@ -90,6 +90,18 @@ function Notice({
 }
 
 /**
+ * The results query's outcome, tagged with the batch it was fetched for.
+ *
+ * Tagged rather than stored bare so a response can never be rendered under a
+ * different batch's URL — see the guard in ResultPage below.
+ */
+interface LoadedResults {
+  batchId: string
+  results: BatchResults | null
+  error: string | null
+}
+
+/**
  * Videos whose pipeline stopped, shown above the ranking.
  *
  * These have no scorecard and so are absent from the ranking entirely. Without
@@ -122,8 +134,7 @@ export default function ResultPage() {
 
   const { progress, error: progressError, timedOut, retry } = useRequestProgress(batchId)
 
-  const [data, setData] = useState<BatchResults | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState<LoadedResults | null>(null)
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
   const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
@@ -133,14 +144,27 @@ export default function ResultPage() {
     if (!batchId) return
 
     try {
-      setData(await fetchBatchResults(batchId))
-      setError(null)
+      setLoaded({ batchId, results: await fetchBatchResults(batchId), error: null })
     } catch (err) {
       // An error here is meaningful: RLS denials come back as empty arrays, not
       // errors, so anything thrown is a genuine failure worth surfacing.
-      setError(getErrorMessage(err, 'Could not load your results'))
+      setLoaded({
+        batchId,
+        results: null,
+        error: getErrorMessage(err, 'Could not load your results'),
+      })
     }
   }, [batchId])
+
+  // Anything belonging to a different batch is discarded rather than rendered.
+  // React Router reuses this component when only the :batchId param changes, so
+  // state survives the navigation, and a render always happens before the
+  // effects that would react to it — without this check there is a window where
+  // the previous batch's ranking shows under the new batch's URL. Same guard as
+  // useSignedVideoUrl's out-of-order response check, for the same reason.
+  const forThisBatch = loaded?.batchId === batchId ? loaded : null
+  const data = forThisBatch?.results ?? null
+  const error = forThisBatch?.error ?? null
 
   // `progress` is a fresh object on every poll, so this depends on the boolean
   // rather than the object — otherwise the results query would re-fire on every

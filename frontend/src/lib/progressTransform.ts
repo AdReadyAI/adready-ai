@@ -259,7 +259,12 @@ function percent(units: ProgressUnit[]): number {
     .filter((unit) => isTerminal(unit.status))
     .reduce((sum, unit) => sum + unit.weight, 0)
 
-  return Math.round((100 * done) / total)
+  // Floor, not round. Rounding lets a large batch display "100% complete" while
+  // work is still outstanding — at 13 weight per video, one unfinished unit in a
+  // 16-video batch is only 0.5% of the total and rounds up. Flooring makes 100
+  // reachable only when done === total, so the number can never contradict the
+  // spinner next to it.
+  return Math.floor((100 * done) / total)
 }
 
 function toStage(key: string, label: string, units: ProgressUnit[]): StageProgress {
