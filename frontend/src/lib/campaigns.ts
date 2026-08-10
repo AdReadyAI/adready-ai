@@ -76,8 +76,9 @@ export async function fetchCampaignDetail(batchId: string): Promise<CampaignDeta
         .from("requests")
         .select("product_url, campaign_goal, user_brief")
         .eq("batch_id", batchId)
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle(),
-    ]);
 
   if (briefError) {
     throw new Error(getErrorMessage(briefError, "Failed to load campaign brief"));
