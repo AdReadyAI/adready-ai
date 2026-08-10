@@ -288,7 +288,6 @@ describe('ResultPage failures', () => {
         pending: [{ requestId: 'req-2', name: 'failed.mp4' }],
         totalCount: 2,
         failedCount: 1,
-        failedRequestIds: ['req-2'],
         reviewRequestStatus: 'partially_failed',
       }),
     )

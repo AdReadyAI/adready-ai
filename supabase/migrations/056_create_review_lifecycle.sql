@@ -32,10 +32,6 @@ alter table public.requests
   foreign key (batch_id, user_id)
   references public.review_requests (review_request_id, user_id);
 
-alter table public.requests
-  add constraint requests_request_id_user_unique
-  unique (request_id, user_id);
-
 -- Safe failure categories cross the authenticated API boundary; detailed
 -- producer diagnostics remain in media_processing_error for operators only.
 alter table public.requests
@@ -71,27 +67,6 @@ create trigger trg_ensure_review_request_on_request_insert
   before insert on public.requests
   for each row
   execute function public.ensure_review_request_on_request_insert();
-
--- The original enqueue trigger used an unqualified function name. A retry runs
--- inside a security-definer function with an intentionally empty search path,
--- so qualify the queue seam to keep the existing insert behavior available.
-create or replace function public.enqueue_job_on_request_insert()
-returns trigger
-language plpgsql
-as $$
-begin
-  perform public.enqueue_job(
-    jsonb_build_object(
-      'request_id', new.request_id,
-      'bucket', 'uploads',
-      'video_path', new.video_storage_paths[1],
-      'product_image_paths', new.product_image_paths,
-      'logo_paths', new.logo_paths
-    )
-  );
-  return new;
-end;
-$$;
 
 grant select on public.review_requests to authenticated;
 
@@ -185,10 +160,6 @@ select
   ) as creative_paths,
   count(request_id) filter (where scored)::integer as scored_count,
   count(request_id) filter (where failed)::integer as failed_count,
-  coalesce(
-    array_agg(request_id order by creative_created_at) filter (where failed),
-    '{}'::uuid[]
-  ) as failed_request_ids,
   case
     when count(request_id) = 0 then 'failed'
     when count(request_id) filter (where scored) = count(request_id)

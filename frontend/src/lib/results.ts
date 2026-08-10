@@ -58,7 +58,7 @@ export async function fetchBatchResults(batchId: string): Promise<BatchResults> 
       .eq('batch_id', batchId),
     supabase
       .from('review_request_summaries')
-      .select('failed_count, failed_request_ids, status')
+      .select('failed_count, status')
       .eq('review_request_id', batchId)
       .maybeSingle(),
   ])
@@ -90,7 +90,6 @@ export async function fetchBatchResults(batchId: string): Promise<BatchResults> 
   return {
     ...assembled,
     failedCount: Number(reviewRequestSummary.data?.failed_count ?? 0),
-    failedRequestIds: (reviewRequestSummary.data?.failed_request_ids ?? []) as string[],
     reviewRequestStatus: reviewRequestSummary.data?.status,
   }
 }
