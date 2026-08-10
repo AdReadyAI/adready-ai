@@ -14,10 +14,8 @@ function requestRow(overrides: Partial<ProgressRequestRow> = {}): ProgressReques
     request_id: 'req-1',
     video_storage_paths: ['user-1/batch-1/video/req-1/ad.mp4'],
     media_processing_status: null,
-    media_processing_error: null,
     agents_triggered_at: null,
     evaluation_completion_status: null,
-    evaluation_completion_last_error: null,
     ...overrides,
   }
 }
@@ -131,17 +129,6 @@ describe('ProcessingView states', () => {
     expect(tileFor('ad.mp4').getByText('In Progress')).toBeVisible()
   })
 
-  it('surfaces a retry note without claiming the run failed', () => {
-    renderView(
-      progressFor([
-        requestRow({ media_processing_status: 'processing', media_processing_error: 'storage 503' }),
-      ]),
-    )
-
-    expect(screen.getByText('Retrying after an error: storage 503')).toBeVisible()
-    expect(tileFor('ad.mp4').getByText('In Progress')).toBeVisible()
-  })
-
   // The case the whole feature turns on: media failed, but the agents were
   // dispatched anyway, so this run is degraded rather than dead.
   it('reports a degraded run as a warning, not a stopped pipeline', () => {
@@ -149,27 +136,30 @@ describe('ProcessingView states', () => {
       progressFor([
         requestRow({
           media_processing_status: 'failed',
-          media_processing_error: 'ocr crashed',
           agents_triggered_at: '2026-08-10T12:00:00Z',
         }),
       ]),
     )
 
-    expect(screen.getByText('ocr crashed — the review continued with partial data.')).toBeVisible()
+    expect(
+      screen.getByText(
+        'Some video analysis could not be completed, so the review continued with partial data.',
+      ),
+    ).toBeVisible()
     expect(screen.queryByText('Processing stopped.')).not.toBeInTheDocument()
     expect(tileFor('ad.mp4').getByText('In Progress')).toBeVisible()
   })
 
-  it('marks a stopped video Failed and names the reason', () => {
-    renderView(
-      progressFor([
-        requestRow({ media_processing_status: 'failed', media_processing_error: 'bad codec' }),
-      ]),
-    )
+  it('marks a stopped video Failed and shows a safe reason', () => {
+    renderView(progressFor([requestRow({ media_processing_status: 'failed' })]))
 
     const tile = tileFor('ad.mp4')
     expect(tile.getByText('Failed')).toBeVisible()
-    expect(tile.getByText('bad codec')).toBeVisible()
+    expect(
+      tile.getByText(
+        'We could not process this video. Check that the file is a supported, playable video.',
+      ),
+    ).toBeVisible()
     expect(tile.getByText('Processing stopped.')).toBeVisible()
   })
 

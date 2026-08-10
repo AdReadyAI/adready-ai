@@ -32,7 +32,7 @@ import { fetchBatchResults } from '../lib/results'
 import type { BatchResults } from '../lib/results'
 import { emptyIssuesCopy, scoreText } from '../lib/reportModel'
 import { getErrorMessage } from '../lib/errorMessage'
-import { deleteReview, retryAdCreative, retryReview } from '../lib/reviews'
+import { deleteReview } from '../lib/reviews'
 import { useRequestProgress } from '../lib/useRequestProgress'
 import { useSignedVideoUrl } from '../lib/useSignedVideoUrl'
 import type { VideoProgress } from '../types/progress'
@@ -107,8 +107,8 @@ interface LoadedResults {
  *
  * These have no scorecard and so are absent from the ranking entirely. Without
  * this the user submits four videos, gets three back, and is told nothing about
- * the fourth — the failure text is sitting in `requests.media_processing_error`
- * and was never surfaced.
+ * the fourth. Explanations are stable user-facing copy derived from terminal
+ * states; raw production diagnostics never cross the browser boundary.
  */
 function FailedVideos({ videos }: { videos: VideoProgress[] }) {
   return (
@@ -120,8 +120,6 @@ function FailedVideos({ videos }: { videos: VideoProgress[] }) {
         {videos.map((video) => (
           <li key={video.requestId} className="text-sm text-red-700">
             <span className="font-semibold">{video.name}</span>
-            {/* Raw producer text — long, technical, and the only real explanation
-                the user can get. break-words keeps it inside the card. */}
             <span className="break-words"> — {video.fatalError}</span>
           </li>
         ))}
@@ -132,20 +130,20 @@ function FailedVideos({ videos }: { videos: VideoProgress[] }) {
 
 function InterruptedReview({
   data,
+  failedVideos,
   actionError,
-  activeActionId,
-  onRetry,
-  onRetryAdCreative,
+  deleting,
   onDelete,
 }: {
   data: BatchResults
+  failedVideos: VideoProgress[]
   actionError: string | null
-  activeActionId: string | null
-  onRetry: () => void
-  onRetryAdCreative: (requestId: string) => void
+  deleting: boolean
   onDelete: () => void
 }) {
-  const failedRequestIds = new Set(data.failedRequestIds ?? [])
+  const failuresByRequestId = new Map(
+    failedVideos.map((video) => [video.requestId, video.fatalError]),
+  )
 
   return (
     <Shell>
@@ -158,8 +156,8 @@ function InterruptedReview({
         </h1>
         <p className="mt-2 max-w-2xl leading-7 text-slate-600">
           {data.videos.length} of {data.totalCount} creatives produced a scorecard.{' '}
-          {data.failedCount} {data.failedCount === 1 ? 'creative needs' : 'creatives need'} a
-          complete retry.
+          {data.failedCount} {data.failedCount === 1 ? 'creative failed' : 'creatives failed'}
+          after automated recovery was exhausted.
         </p>
 
         {data.pending.length > 0 && (
@@ -167,28 +165,17 @@ function InterruptedReview({
             <h2 className="font-bold text-slate-900">Creatives without a scorecard</h2>
             <ul className="mt-3 space-y-2 text-sm text-slate-600">
               {data.pending.map((creative) => {
-                const canRetry = failedRequestIds.has(creative.requestId)
+                const reason = failuresByRequestId.get(creative.requestId)
 
-                // Only terminally failed Ad Creatives can start a focused
-                // Review Retry; unresolved creatives may still be processing.
+                // Terminal progress and result rows are fetched separately, so
+                // retain a safe fallback if one response briefly lacks detail.
                 return (
-                  <li
-                    key={creative.requestId}
-                    className="flex flex-wrap items-center justify-between gap-3"
-                  >
-                    <span>{creative.name}</span>
-                    {canRetry && (
-                      <button
-                        type="button"
-                        onClick={() => onRetryAdCreative(creative.requestId)}
-                        disabled={activeActionId !== null}
-                        className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {activeActionId === creative.requestId
-                          ? 'Starting retry…'
-                          : 'Retry this creative'}
-                      </button>
-                    )}
+                  <li key={creative.requestId} className="text-sm text-slate-600">
+                    <span className="font-semibold text-slate-800">{creative.name}</span>
+                    <span className="break-words">
+                      {' '}
+                      — {reason ?? 'The review could not be completed for this creative.'}
+                    </span>
                   </li>
                 )
               })}
@@ -199,14 +186,6 @@ function InterruptedReview({
         {actionError && <p className="mt-5 text-sm font-medium text-red-700">{actionError}</p>}
 
         <div className="mt-8 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={onRetry}
-            disabled={activeActionId !== null}
-            className="min-h-11 rounded-lg bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {activeActionId === 'complete' ? 'Starting retry…' : 'Retry complete review'}
-          </button>
           <Link
             to="/reviews"
             className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-5 text-sm font-semibold text-slate-800 hover:bg-white"
@@ -216,10 +195,10 @@ function InterruptedReview({
           <button
             type="button"
             onClick={onDelete}
-            disabled={activeActionId !== null}
+            disabled={deleting}
             className="min-h-11 rounded-lg px-4 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Delete review
+            {deleting ? 'Deleting…' : 'Delete review'}
           </button>
         </div>
       </div>
@@ -239,7 +218,7 @@ export default function ResultPage() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [activeActionId, setActiveActionId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     if (!batchId) return
@@ -310,46 +289,18 @@ export default function ResultPage() {
     }
   }
 
-  async function retryCompleteReview() {
-    if (!batchId) return
-    setActionError(null)
-    setActiveActionId('complete')
-
-    try {
-      const retryId = await retryReview(batchId)
-      navigate(`/result/${retryId}`)
-    } catch (err) {
-      setActionError(getErrorMessage(err, 'Could not retry this review'))
-      setActiveActionId(null)
-    }
-  }
-
-  async function retryFailedAdCreative(requestId: string) {
-    if (!batchId) return
-    setActionError(null)
-    setActiveActionId(requestId)
-
-    try {
-      const retryId = await retryAdCreative(batchId, requestId)
-      navigate(`/result/${retryId}`)
-    } catch (err) {
-      setActionError(getErrorMessage(err, 'Could not retry this Ad Creative'))
-      setActiveActionId(null)
-    }
-  }
-
   async function removeReview() {
     if (!batchId) return
     if (!window.confirm('Delete this review and its generated analysis?')) return
 
     setActionError(null)
-    setActiveActionId('delete')
+    setDeleting(true)
     try {
       await deleteReview(batchId)
       navigate('/reviews')
     } catch (err) {
       setActionError(getErrorMessage(err, 'Could not delete this review'))
-      setActiveActionId(null)
+      setDeleting(false)
     }
   }
 
@@ -427,14 +378,16 @@ export default function ResultPage() {
     )
   }
 
-  if (data.reviewStatus === 'partially_failed' || data.reviewStatus === 'failed') {
+  // A partial failure still has useful scorecards. Keep the normal ranking and
+  // place the failed creatives above it; only a fully failed review needs the
+  // dedicated terminal screen.
+  if (data.reviewStatus === 'failed') {
     return (
       <InterruptedReview
         data={data}
+        failedVideos={progress.failed}
         actionError={actionError}
-        activeActionId={activeActionId}
-        onRetry={() => void retryCompleteReview()}
-        onRetryAdCreative={(requestId) => void retryFailedAdCreative(requestId)}
+        deleting={deleting}
         onDelete={() => void removeReview()}
       />
     )

@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import {
-  deleteReview,
-  listReviews,
-  retryReview,
-  type ReviewStatus,
-  type ReviewSummary,
-} from '../lib/reviews'
+import { Link } from 'react-router-dom'
+import { deleteReview, listReviews, type ReviewStatus, type ReviewSummary } from '../lib/reviews'
 
 const STATUS: Record<
   ReviewStatus,
@@ -54,7 +48,6 @@ function reviewDate(isoDate: string): { primary: string; exact: string } {
 }
 
 export default function ReviewsPage() {
-  const navigate = useNavigate()
   const [reviews, setReviews] = useState<ReviewSummary[] | null>(null)
   const [pageError, setPageError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -73,22 +66,9 @@ export default function ReviewsPage() {
     void load()
   }, [load])
 
-  async function handleRetry(review: ReviewSummary) {
-    setActionError(null)
-    setActiveActionId(review.id)
-
-    try {
-      const retryId = await retryReview(review.id)
-      navigate(`/result/${retryId}`)
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Could not retry this review')
-      setActiveActionId(null)
-    }
-  }
-
   async function handleDelete(review: ReviewSummary) {
     const confirmed = window.confirm(
-      `Delete the review submitted ${reviewDate(review.createdAt).primary}? Its uploaded assets will be retained for safe reuse by related retries.`,
+      `Delete the review submitted ${reviewDate(review.createdAt).primary} and its generated analysis?`,
     )
     if (!confirmed) return
 
@@ -111,8 +91,8 @@ export default function ReviewsPage() {
         <div>
           <h1 className="text-4xl font-bold tracking-[-0.025em] text-slate-950">Previous reviews</h1>
           <p className="mt-2 max-w-2xl text-base leading-7 text-slate-600">
-            Return to completed scorecards, inspect interrupted reviews, or rerun the full analysis
-            with the same uploaded assets.
+            Return to completed scorecards or inspect creatives whose automated review could not
+            be completed.
           </p>
         </div>
         <Link
@@ -185,9 +165,6 @@ export default function ReviewsPage() {
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status.classes}`}>
                         {status.label}
                       </span>
-                      {review.retryOfId && (
-                        <span className="text-xs font-medium text-slate-500">Complete retry</span>
-                      )}
                     </div>
                     <p className="mt-2 text-sm text-slate-600">{status.detail}</p>
                     <p className="mt-1 text-sm text-slate-500">
@@ -212,19 +189,11 @@ export default function ReviewsPage() {
                     </Link>
                     <button
                       type="button"
-                      onClick={() => void handleRetry(review)}
-                      disabled={activeActionId !== null}
-                      className="min-h-10 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900"
-                    >
-                      {isBusy ? 'Working…' : 'Retry all'}
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => void handleDelete(review)}
                       disabled={activeActionId !== null}
                       className="min-h-10 rounded-lg px-3 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700"
                     >
-                      Delete
+                      {isBusy ? 'Deleting…' : 'Delete'}
                     </button>
                   </div>
                 </article>

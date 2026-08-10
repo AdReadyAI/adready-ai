@@ -52,12 +52,9 @@ export interface ProgressUnit {
   weight: number
   status: UnitStatus
   /**
-   * Why, in the user's words — an error message, a retry note, or null.
-   *
-   * Comes from `requests.media_processing_error` /
-   * `requests.evaluation_completion_last_error`, which are written by the worker
-   * and the completion function respectively. Raw producer text: useful, but
-   * never assume it is short or friendly.
+   * A stable, user-safe explanation of a terminal or degraded state, or null.
+   * Raw worker and evaluator diagnostics are intentionally never represented in
+   * this browser-facing type.
    */
   detail: string | null
 }
@@ -94,7 +91,8 @@ export interface VideoProgress {
    *
    * A degraded run that still produced a score reports its failure through
    * `warning` units instead, so this field answers exactly one question: is
-   * there going to be a result for this video or not?
+   * there going to be a result for this video or not? The value is safe display
+   * copy, never a raw production diagnostic.
    */
   fatalError: string | null
 }

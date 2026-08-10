@@ -6,9 +6,8 @@
 // An earlier design put a `security definer` view over `video_processing` so the
 // browser could see per-task detail on an otherwise service_role-only table.
 // Migration 055 made that unnecessary for the loading screen: it mirrors the
-// worker's own stage onto `requests`, whose owner-read policy (migration 007)
-// already covers every column. So the three queries below need **zero** new
-// grants, no definer view, and no RLS test to prove a union branch did not leak.
+// worker's own stage onto `requests`. Browser access is intentionally limited to
+// status columns; raw worker and evaluator diagnostics remain service-role-only.
 //
 // The cost is granularity — this cannot say "transcription done, OCR running",
 // only "media processing running". If that detail is ever wanted, a view is the
@@ -38,7 +37,7 @@ export async function fetchBatchProgress(batchId: string): Promise<BatchProgress
     // parses this string at the *type* level to infer the row shape, and `+`
     // collapses it to plain `string`, which types the result as an error row.
     .select(
-      'request_id, video_storage_paths, media_processing_status, media_processing_error, agents_triggered_at, evaluation_completion_status, evaluation_completion_last_error',
+      'request_id, video_storage_paths, media_processing_status, agents_triggered_at, evaluation_completion_status',
     )
     .eq('batch_id', batchId)
 

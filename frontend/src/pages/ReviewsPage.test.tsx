@@ -6,7 +6,6 @@ import ReviewsPage from './ReviewsPage'
 
 const reviewMocks = vi.hoisted(() => ({
   listReviews: vi.fn(),
-  retryReview: vi.fn(),
   deleteReview: vi.fn(),
 }))
 
@@ -14,7 +13,6 @@ vi.mock('../lib/reviews', () => reviewMocks)
 
 const failedReview = {
   id: 'review-1',
-  retryOfId: null,
   createdAt: '2026-08-08T15:30:00.000Z',
   creativeCount: 2,
   creativeNames: ['launch.mp4', 'cutdown.mp4'],
@@ -28,7 +26,6 @@ function renderPage() {
     <MemoryRouter initialEntries={['/reviews']}>
       <Routes>
         <Route path="reviews" element={<ReviewsPage />} />
-        <Route path="result/:batchId" element={<p>Retry result route</p>} />
       </Routes>
     </MemoryRouter>,
   )
@@ -37,7 +34,6 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks()
   reviewMocks.listReviews.mockResolvedValue([failedReview])
-  reviewMocks.retryReview.mockResolvedValue('retry-1')
   reviewMocks.deleteReview.mockResolvedValue(undefined)
   vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
@@ -50,16 +46,6 @@ describe('ReviewsPage', () => {
     expect(await screen.findByText('Partially failed')).toBeVisible()
     expect(screen.getByText('2 creatives · 1 scored · 1 failed')).toBeVisible()
     expect(screen.getByText('launch.mp4, cutdown.mp4')).toBeVisible()
-  })
-
-  it('starts a complete retry and opens the new result route', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(await screen.findByRole('button', { name: 'Retry all' }))
-
-    expect(reviewMocks.retryReview).toHaveBeenCalledWith('review-1')
-    expect(await screen.findByText('Retry result route')).toBeVisible()
   })
 
   it('confirms deletion and removes the review from history', async () => {
