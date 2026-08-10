@@ -14,6 +14,7 @@ function requestRow(overrides: Partial<ProgressRequestRow> = {}): ProgressReques
     request_id: 'req-1',
     video_storage_paths: ['user-1/batch-1/video/req-1/ad.mp4'],
     media_processing_status: null,
+    media_processing_failure_code: null,
     agents_triggered_at: null,
     evaluation_completion_status: null,
     ...overrides,
@@ -144,7 +145,23 @@ describe('media unit', () => {
 
     expect(media.status).toBe('error')
     expect(media.detail).toBe(
-      'We could not process this video. Check that the file is a supported, playable video.',
+      'Automated video processing could not finish, so this creative could not be reviewed.',
+    )
+  })
+
+  it('explains when automatic media retries were exhausted', () => {
+    const media = unitFor(
+      build(
+        requestRow({
+          media_processing_status: 'failed',
+          media_processing_failure_code: 'media_processing_retries_exhausted',
+        }),
+      ),
+      'media',
+    )
+
+    expect(media.detail).toBe(
+      'Automated video processing could not finish after multiple attempts. Try again later or contact support.',
     )
   })
 
@@ -319,7 +336,7 @@ describe('weighted percentage', () => {
     expect(video.pct).toBe(100)
     expect(video.isDone).toBe(true)
     expect(video.fatalError).toBe(
-      'We could not process this video. Check that the file is a supported, playable video.',
+      'Automated video processing could not finish, so this creative could not be reviewed.',
     )
   })
 
@@ -459,7 +476,7 @@ describe('buildBatchProgress', () => {
 
     expect(batch.failed.map((video) => video.requestId)).toEqual(['req-1'])
     expect(batch.failed[0].fatalError).toBe(
-      'We could not process this video. Check that the file is a supported, playable video.',
+      'Automated video processing could not finish, so this creative could not be reviewed.',
     )
   })
 

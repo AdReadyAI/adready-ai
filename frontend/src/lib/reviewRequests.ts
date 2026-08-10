@@ -1,31 +1,31 @@
 import { getErrorMessage } from './errorMessage'
 import { supabase } from './supabaseClient'
 
-export type ReviewStatus =
+export type ReviewRequestStatus =
   | 'queued'
   | 'processing'
   | 'completed'
   | 'partially_failed'
   | 'failed'
 
-export type ReviewSummary = {
+export type ReviewRequestSummary = {
   id: string
   createdAt: string
   creativeCount: number
   creativeNames: string[]
   scoredCount: number
   failedCount: number
-  status: ReviewStatus
+  status: ReviewRequestStatus
 }
 
-type ReviewSummaryRow = {
+type ReviewRequestSummaryRow = {
   review_request_id: string
   created_at: string
   creative_count: number
   creative_paths: string[] | null
   scored_count: number
   failed_count: number
-  status: ReviewStatus
+  status: ReviewRequestStatus
 }
 
 /** Return a human-readable filename without exposing the private storage key. */
@@ -42,7 +42,7 @@ function creativeName(storagePath: string): string {
 }
 
 /** Load the current user's visible Review Requests in reverse chronology. */
-export async function listReviews(): Promise<ReviewSummary[]> {
+export async function listReviewRequests(): Promise<ReviewRequestSummary[]> {
   const { data, error } = await supabase
     .from('review_request_summaries')
     .select(
@@ -51,10 +51,10 @@ export async function listReviews(): Promise<ReviewSummary[]> {
     .order('created_at', { ascending: false })
 
   if (error) {
-    throw new Error(getErrorMessage(error, 'Failed to load previous reviews'))
+    throw new Error(getErrorMessage(error, 'Failed to load previous Review Requests'))
   }
 
-  return ((data ?? []) as ReviewSummaryRow[]).map((row) => ({
+  return ((data ?? []) as ReviewRequestSummaryRow[]).map((row) => ({
     id: row.review_request_id,
     createdAt: row.created_at,
     creativeCount: row.creative_count,
@@ -66,7 +66,7 @@ export async function listReviews(): Promise<ReviewSummary[]> {
 }
 
 /** Remove a Review Request and its generated analysis from visible history. */
-export async function deleteReview(reviewRequestId: string): Promise<void> {
+export async function deleteReviewRequest(reviewRequestId: string): Promise<void> {
   const { data, error } = await supabase.rpc('delete_review_request', {
     p_review_request_id: reviewRequestId,
   })

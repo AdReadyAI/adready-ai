@@ -15,14 +15,14 @@ import type { VideoResult } from '../types/results'
 import type { RequestProgressState } from '../lib/useRequestProgress'
 
 const {
-  deleteReviewMock,
+  deleteReviewRequestMock,
   fetchBatchResultsMock,
   navigateMock,
   paramsRef,
   progressRef,
   retryMock,
 } = vi.hoisted(() => ({
-  deleteReviewMock: vi.fn(),
+  deleteReviewRequestMock: vi.fn(),
   fetchBatchResultsMock: vi.fn(),
   navigateMock: vi.fn(),
   paramsRef: { current: {} as { batchId?: string } },
@@ -32,8 +32,8 @@ const {
 
 vi.mock('../lib/results', () => ({ fetchBatchResults: fetchBatchResultsMock }))
 vi.mock('../lib/downloadReport', () => ({ downloadReport: vi.fn() }))
-vi.mock('../lib/reviews', () => ({
-  deleteReview: deleteReviewMock,
+vi.mock('../lib/reviewRequests', () => ({
+  deleteReviewRequest: deleteReviewRequestMock,
 }))
 vi.mock('../lib/useRequestProgress', () => ({ useRequestProgress: () => progressRef.current }))
 
@@ -52,6 +52,7 @@ function requestRow(overrides: Partial<ProgressRequestRow> = {}): ProgressReques
     request_id: 'req-1',
     video_storage_paths: ['user-1/batch-1/video/req-1/ad.mp4'],
     media_processing_status: null,
+    media_processing_failure_code: null,
     agents_triggered_at: null,
     evaluation_completion_status: null,
     ...overrides,
@@ -117,7 +118,7 @@ beforeEach(() => {
   fetchBatchResultsMock.mockReset()
   navigateMock.mockReset()
   retryMock.mockReset()
-  deleteReviewMock.mockReset()
+  deleteReviewRequestMock.mockReset()
   paramsRef.current = { batchId: 'batch-1' }
   progressRef.current = progressState([requestRow()])
 })
@@ -264,7 +265,7 @@ describe('ResultPage failures', () => {
     render(<ResultPage />)
 
     expect(screen.getByRole('progressbar', { name: 'Overall progress' })).toBeVisible()
-    expect(screen.queryByText('Review interrupted')).not.toBeInTheDocument()
+    expect(screen.queryByText('Review Request failed')).not.toBeInTheDocument()
     expect(fetchBatchResultsMock).not.toHaveBeenCalled()
   })
 
@@ -288,7 +289,7 @@ describe('ResultPage failures', () => {
         totalCount: 2,
         failedCount: 1,
         failedRequestIds: ['req-2'],
-        reviewStatus: 'partially_failed',
+        reviewRequestStatus: 'partially_failed',
       }),
     )
 
@@ -296,7 +297,7 @@ describe('ResultPage failures', () => {
 
     expect(await screen.findByText('failed.mp4')).toBeVisible()
     expect(
-      screen.getByText(/We could not process this video/),
+      screen.getByText(/Automated video processing could not finish/),
     ).toBeVisible()
     expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
   })
@@ -324,7 +325,7 @@ describe('ResultPage failures', () => {
 
     expect(await screen.findByText('1 video could not be reviewed')).toBeVisible()
     expect(screen.getByText('b.mp4')).toBeVisible()
-    expect(screen.getByText(/We could not process this video/)).toBeVisible()
+    expect(screen.getByText(/Automated video processing could not finish/)).toBeVisible()
     expect(screen.getByText('Your results are ready.')).toBeVisible()
   })
 
@@ -337,7 +338,7 @@ describe('ResultPage failures', () => {
     render(<ResultPage />)
 
     expect(await screen.findByText('No results to show')).toBeVisible()
-    expect(screen.getByText(/We could not process this video/)).toBeVisible()
+    expect(screen.getByText(/Automated video processing could not finish/)).toBeVisible()
   })
 
   it('surfaces a failure of the results query itself', async () => {

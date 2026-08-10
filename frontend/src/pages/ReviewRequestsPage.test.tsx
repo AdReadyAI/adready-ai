@@ -2,16 +2,16 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import ReviewsPage from './ReviewsPage'
+import ReviewRequestsPage from './ReviewRequestsPage'
 
-const reviewMocks = vi.hoisted(() => ({
-  listReviews: vi.fn(),
-  deleteReview: vi.fn(),
+const reviewRequestMocks = vi.hoisted(() => ({
+  listReviewRequests: vi.fn(),
+  deleteReviewRequest: vi.fn(),
 }))
 
-vi.mock('../lib/reviews', () => reviewMocks)
+vi.mock('../lib/reviewRequests', () => reviewRequestMocks)
 
-const failedReview = {
+const failedReviewRequest = {
   id: 'review-1',
   createdAt: '2026-08-08T15:30:00.000Z',
   creativeCount: 2,
@@ -25,7 +25,7 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/reviews']}>
       <Routes>
-        <Route path="reviews" element={<ReviewsPage />} />
+        <Route path="reviews" element={<ReviewRequestsPage />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -33,16 +33,16 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  reviewMocks.listReviews.mockResolvedValue([failedReview])
-  reviewMocks.deleteReview.mockResolvedValue(undefined)
+  reviewRequestMocks.listReviewRequests.mockResolvedValue([failedReviewRequest])
+  reviewRequestMocks.deleteReviewRequest.mockResolvedValue(undefined)
   vi.spyOn(window, 'confirm').mockReturnValue(true)
 })
 
-describe('ReviewsPage', () => {
+describe('ReviewRequestsPage', () => {
   it('shows previous creatives and partial failure context', async () => {
     renderPage()
 
-    expect(await screen.findByRole('heading', { name: 'Previous reviews' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Previous Review Requests' })).toBeVisible()
     expect(await screen.findByText('Partially failed')).toBeVisible()
     expect(screen.getByText('2 creatives · 1 scored · 1 failed')).toBeVisible()
     expect(screen.getByText('launch.mp4, cutdown.mp4')).toBeVisible()
@@ -55,7 +55,7 @@ describe('ReviewsPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Delete' }))
 
     expect(window.confirm).toHaveBeenCalledOnce()
-    expect(reviewMocks.deleteReview).toHaveBeenCalledWith('review-1')
+    expect(reviewRequestMocks.deleteReviewRequest).toHaveBeenCalledWith('review-1')
     expect(await screen.findByText('No reviews yet')).toBeVisible()
   })
 
@@ -66,7 +66,7 @@ describe('ReviewsPage', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Delete' }))
 
-    expect(reviewMocks.deleteReview).not.toHaveBeenCalled()
+    expect(reviewRequestMocks.deleteReviewRequest).not.toHaveBeenCalled()
     expect(screen.getByText('launch.mp4, cutdown.mp4')).toBeVisible()
   })
 })

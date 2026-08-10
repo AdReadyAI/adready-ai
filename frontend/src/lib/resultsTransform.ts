@@ -65,7 +65,7 @@ export interface BatchResults {
   /** Request identities for terminally failed Ad Creatives eligible for retry. */
   failedRequestIds?: string[]
   /** Review Request lifecycle state used to distinguish active from terminal failures. */
-  reviewStatus?: 'queued' | 'processing' | 'completed' | 'partially_failed' | 'failed'
+  reviewRequestStatus?: 'queued' | 'processing' | 'completed' | 'partially_failed' | 'failed'
 }
 
 // ---- status --------------------------------------------------------------
@@ -382,7 +382,7 @@ export function assembleVideoResults(input: {
     complete: requests.length > 0 && pending.length === 0,
     failedCount: 0,
     failedRequestIds: [],
-    reviewStatus: requests.length > 0 && pending.length === 0 ? 'completed' : 'queued',
+    reviewRequestStatus: requests.length > 0 && pending.length === 0 ? 'completed' : 'queued',
   }
 }
 

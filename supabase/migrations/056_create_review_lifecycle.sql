@@ -36,6 +36,19 @@ alter table public.requests
   add constraint requests_request_id_user_unique
   unique (request_id, user_id);
 
+-- Safe failure categories cross the authenticated API boundary; detailed
+-- producer diagnostics remain in media_processing_error for operators only.
+alter table public.requests
+  add column media_processing_failure_code text,
+  add constraint requests_media_processing_failure_code_check
+  check (
+    media_processing_failure_code is null
+    or media_processing_failure_code in (
+      'media_processing_failed',
+      'media_processing_retries_exhausted'
+    )
+  );
+
 -- Existing upload clients create requests rows directly. Materialize their
 -- Review Request before the foreign key is checked so rollout is backwards
 -- compatible and the parent timestamp matches the first creative submitted.
@@ -108,7 +121,8 @@ grant select (
   evaluation_completion_started_at,
   evaluation_completion_completed_at,
   agents_triggered_at,
-  media_processing_status
+  media_processing_status,
+  media_processing_failure_code
 ) on public.requests to authenticated;
 
 grant select (request_id, status) on public.video_processing to authenticated;
@@ -139,18 +153,20 @@ with review_creatives as (
     request.video_storage_paths[1] as creative_path,
     request.evaluation_completion_status,
     score.request_id is not null as scored,
-    request.evaluation_completion_status = 'failed'
+    score.request_id is null
+      and (
+        request.evaluation_completion_status = 'failed'
+        or (
+          request.media_processing_status = 'failed'
+          and request.agents_triggered_at is null
+        )
+      ) as failed,
+    request.media_processing_status in ('pending', 'processing')
       or exists (
         select 1
-        from public.video_processing processing_failure
-        where processing_failure.request_id = request.request_id
-          and processing_failure.status = 'error'
-      ) as failed,
-    exists (
-      select 1
-      from public.video_processing processing
-      where processing.request_id = request.request_id
-    ) as has_processing
+        from public.video_processing processing
+        where processing.request_id = request.request_id
+      ) as has_processing
   from public.review_requests review
   left join public.requests request
     on request.batch_id = review.review_request_id

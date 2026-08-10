@@ -64,7 +64,12 @@ class Supabase:
         self._set_media_processing_status("completed")
 
     def mark_media_processing_failed(self, error: str) -> None:
-        self._set_media_processing_status("failed", error)
+        """End a non-retryable run while retaining separate safe and raw reasons."""
+        self._set_media_processing_status(
+            "failed",
+            error,
+            failure_code="media_processing_failed",
+        )
 
     def record_media_processing_error(self, error: str) -> None:
         """Persist the latest failure reason without ending the retry cycle."""
@@ -74,17 +79,26 @@ class Supabase:
         )
 
     def mark_media_processing_exhausted(self) -> None:
-        """Flip status to failed once retries end, keeping the last recorded error."""
+        """End an exhausted retry cycle without replacing its raw diagnostic."""
         self.cur.execute(
-            "UPDATE requests SET media_processing_status = 'failed' WHERE request_id = %s;",
+            "UPDATE requests SET media_processing_status = 'failed', "
+            "media_processing_failure_code = 'media_processing_retries_exhausted' "
+            "WHERE request_id = %s;",
             (self.request_id,),
         )
 
-    def _set_media_processing_status(self, status: str, error: str | None = None) -> None:
+    def _set_media_processing_status(
+        self,
+        status: str,
+        error: str | None = None,
+        failure_code: str | None = None,
+    ) -> None:
+        """Persist lifecycle state with browser-safe and operator-only reasons."""
         self.cur.execute(
-            "UPDATE requests SET media_processing_status = %s, media_processing_error = %s "
+            "UPDATE requests SET media_processing_status = %s, media_processing_error = %s, "
+            "media_processing_failure_code = %s "
             "WHERE request_id = %s;",
-            (status, error, self.request_id),
+            (status, error, failure_code, self.request_id),
         )
 
     def persist_quality_frames(self, flags: list[QualityFlag]) -> None:

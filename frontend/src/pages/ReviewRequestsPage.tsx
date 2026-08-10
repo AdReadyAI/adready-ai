@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { deleteReview, listReviews, type ReviewStatus, type ReviewSummary } from '../lib/reviews'
+import {
+  deleteReviewRequest,
+  listReviewRequests,
+  type ReviewRequestStatus,
+  type ReviewRequestSummary,
+} from '../lib/reviewRequests'
 
 const STATUS: Record<
-  ReviewStatus,
+  ReviewRequestStatus,
   { label: string; detail: string; classes: string }
 > = {
   queued: {
@@ -33,7 +38,8 @@ const STATUS: Record<
   },
 }
 
-function reviewDate(isoDate: string): { primary: string; exact: string } {
+/** Format one Review Request timestamp for scanning and precise hover detail. */
+function reviewRequestDate(isoDate: string): { primary: string; exact: string } {
   const date = new Date(isoDate)
   return {
     primary: new Intl.DateTimeFormat(undefined, {
@@ -47,18 +53,21 @@ function reviewDate(isoDate: string): { primary: string; exact: string } {
   }
 }
 
-export default function ReviewsPage() {
-  const [reviews, setReviews] = useState<ReviewSummary[] | null>(null)
+/** Show the authenticated user's Review Request history and lifecycle state. */
+export default function ReviewRequestsPage() {
+  const [reviewRequests, setReviewRequests] = useState<ReviewRequestSummary[] | null>(null)
   const [pageError, setPageError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [activeActionId, setActiveActionId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    // Replace the full collection so deletion and server lifecycle changes do
+    // not leave stale Review Requests mixed with freshly loaded summaries.
     try {
-      setReviews(await listReviews())
+      setReviewRequests(await listReviewRequests())
       setPageError(null)
     } catch (error) {
-      setPageError(error instanceof Error ? error.message : 'Could not load previous reviews')
+      setPageError(error instanceof Error ? error.message : 'Could not load previous Review Requests')
     }
   }, [])
 
@@ -66,18 +75,21 @@ export default function ReviewsPage() {
     void load()
   }, [load])
 
-  async function handleDelete(review: ReviewSummary) {
+  /** Delete one Review Request, then remove the same identity from local history. */
+  async function handleDelete(reviewRequest: ReviewRequestSummary) {
     const confirmed = window.confirm(
-      `Delete the review submitted ${reviewDate(review.createdAt).primary} and its generated analysis?`,
+      `Delete the Review Request submitted ${reviewRequestDate(reviewRequest.createdAt).primary} and its generated analysis?`,
     )
     if (!confirmed) return
 
     setActionError(null)
-    setActiveActionId(review.id)
+    setActiveActionId(reviewRequest.id)
 
     try {
-      await deleteReview(review.id)
-      setReviews((current) => current?.filter((item) => item.id !== review.id) ?? [])
+      await deleteReviewRequest(reviewRequest.id)
+      setReviewRequests(
+        (current) => current?.filter((item) => item.id !== reviewRequest.id) ?? [],
+      )
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'Could not delete this review')
     } finally {
@@ -89,7 +101,9 @@ export default function ReviewsPage() {
     <section className="mx-auto w-full max-w-6xl pb-12">
       <div className="flex flex-col gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-4xl font-bold tracking-[-0.025em] text-slate-950">Previous reviews</h1>
+          <h1 className="text-4xl font-bold tracking-[-0.025em] text-slate-950">
+            Previous Review Requests
+          </h1>
           <p className="mt-2 max-w-2xl text-base leading-7 text-slate-600">
             Return to completed scorecards or inspect creatives whose automated review could not
             be completed.
@@ -111,7 +125,7 @@ export default function ReviewsPage() {
 
       {pageError && (
         <div className="mt-10 rounded-xl bg-red-50 px-6 py-8" role="alert">
-          <h2 className="font-bold text-red-900">Previous reviews could not be loaded</h2>
+          <h2 className="font-bold text-red-900">Review Requests could not be loaded</h2>
           <p className="mt-1 text-sm text-red-800">{pageError}</p>
           <button
             type="button"
@@ -123,15 +137,19 @@ export default function ReviewsPage() {
         </div>
       )}
 
-      {!pageError && reviews === null && (
-        <div className="mt-10 space-y-3" aria-label="Loading previous reviews" aria-busy="true">
+      {!pageError && reviewRequests === null && (
+        <div
+          className="mt-10 space-y-3"
+          aria-label="Loading previous Review Requests"
+          aria-busy="true"
+        >
           {[0, 1, 2].map((item) => (
             <div key={item} className="h-28 animate-pulse rounded-xl bg-slate-200/70" />
           ))}
         </div>
       )}
 
-      {!pageError && reviews?.length === 0 && (
+      {!pageError && reviewRequests?.length === 0 && (
         <div className="mt-10 rounded-2xl bg-white px-6 py-16 text-center shadow-[0_6px_24px_rgba(15,23,42,0.06)]">
           <h2 className="text-xl font-bold text-slate-900">No reviews yet</h2>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
@@ -147,19 +165,21 @@ export default function ReviewsPage() {
         </div>
       )}
 
-      {!pageError && reviews && reviews.length > 0 && (
+      {!pageError && reviewRequests && reviewRequests.length > 0 && (
         <ol className="mt-8 divide-y divide-slate-200 border-y border-slate-200">
-          {reviews.map((review) => {
-            const status = STATUS[review.status]
-            const date = reviewDate(review.createdAt)
-            const isBusy = activeActionId === review.id
+          {reviewRequests.map((reviewRequest) => {
+            // One list item is one submission-level Review Request; individual
+            // Ad Creatives stay summarized inside it rather than becoming rows.
+            const status = STATUS[reviewRequest.status]
+            const date = reviewRequestDate(reviewRequest.createdAt)
+            const isBusy = activeActionId === reviewRequest.id
 
             return (
-              <li key={review.id} className="py-6 first:pt-0 sm:first:pt-0">
+              <li key={reviewRequest.id} className="py-6 first:pt-0 sm:first:pt-0">
                 <article className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-3">
-                      <time dateTime={review.createdAt} title={date.exact} className="font-bold text-slate-950">
+                      <time dateTime={reviewRequest.createdAt} title={date.exact} className="font-bold text-slate-950">
                         {date.primary}
                       </time>
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status.classes}`}>
@@ -168,28 +188,29 @@ export default function ReviewsPage() {
                     </div>
                     <p className="mt-2 text-sm text-slate-600">{status.detail}</p>
                     <p className="mt-1 text-sm text-slate-500">
-                      {review.creativeCount} {review.creativeCount === 1 ? 'creative' : 'creatives'}
+                      {reviewRequest.creativeCount}{' '}
+                      {reviewRequest.creativeCount === 1 ? 'creative' : 'creatives'}
                       {' · '}
-                      {review.scoredCount} scored
-                      {review.failedCount > 0 && ` · ${review.failedCount} failed`}
+                      {reviewRequest.scoredCount} scored
+                      {reviewRequest.failedCount > 0 && ` · ${reviewRequest.failedCount} failed`}
                     </p>
-                    {review.creativeNames.length > 0 && (
-                      <p className="mt-2 truncate text-sm font-medium text-slate-700" title={review.creativeNames.join(', ')}>
-                        {review.creativeNames.join(', ')}
+                    {reviewRequest.creativeNames.length > 0 && (
+                      <p className="mt-2 truncate text-sm font-medium text-slate-700" title={reviewRequest.creativeNames.join(', ')}>
+                        {reviewRequest.creativeNames.join(', ')}
                       </p>
                     )}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     <Link
-                      to={`/result/${review.id}`}
+                      to={`/result/${reviewRequest.id}`}
                       className="inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-800 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700"
                     >
                       View review
                     </Link>
                     <button
                       type="button"
-                      onClick={() => void handleDelete(review)}
+                      onClick={() => void handleDelete(reviewRequest)}
                       disabled={activeActionId !== null}
                       className="min-h-10 rounded-lg px-3 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700"
                     >

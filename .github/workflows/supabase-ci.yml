@@ -47,6 +47,11 @@ jobs:
       - name: Lint database schema
         run: supabase db lint --local --level warning --fail-on error
 
+      # Lifecycle projections encode user-visible terminal states, so exercise
+      # their behavior against the fully replayed schema rather than mocks.
+      - name: Run database tests
+        run: supabase test db --local supabase/tests/review_lifecycle.test.sql
+
       - name: Stop local Supabase services
         if: always()
         run: supabase stop --no-backup

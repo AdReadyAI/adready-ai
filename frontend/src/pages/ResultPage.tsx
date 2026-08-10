@@ -32,7 +32,7 @@ import { fetchBatchResults } from '../lib/results'
 import type { BatchResults } from '../lib/results'
 import { emptyIssuesCopy, scoreText } from '../lib/reportModel'
 import { getErrorMessage } from '../lib/errorMessage'
-import { deleteReview } from '../lib/reviews'
+import { deleteReviewRequest } from '../lib/reviewRequests'
 import { useRequestProgress } from '../lib/useRequestProgress'
 import { useSignedVideoUrl } from '../lib/useSignedVideoUrl'
 import type { VideoProgress } from '../types/progress'
@@ -128,7 +128,8 @@ function FailedVideos({ videos }: { videos: VideoProgress[] }) {
   )
 }
 
-function InterruptedReview({
+/** Show terminal Failure Reasons when no Ad Creative produced a Scorecard. */
+function FailedReviewRequest({
   data,
   failedVideos,
   actionError,
@@ -149,7 +150,7 @@ function InterruptedReview({
     <Shell>
       <div className="max-w-3xl">
         <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
-          Review interrupted
+          Review Request failed
         </span>
         <h1 className="mt-4 text-3xl font-bold text-slate-950">
           Some analysis could not be completed.
@@ -198,7 +199,7 @@ function InterruptedReview({
             disabled={deleting}
             className="min-h-11 rounded-lg px-4 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {deleting ? 'Deleting…' : 'Delete review'}
+            {deleting ? 'Deleting…' : 'Delete Review Request'}
           </button>
         </div>
       </div>
@@ -289,17 +290,18 @@ export default function ResultPage() {
     }
   }
 
-  async function removeReview() {
+  /** Delete the current Review Request and leave its now-invalid result URL. */
+  async function removeReviewRequest() {
     if (!batchId) return
-    if (!window.confirm('Delete this review and its generated analysis?')) return
+    if (!window.confirm('Delete this Review Request and its generated analysis?')) return
 
     setActionError(null)
     setDeleting(true)
     try {
-      await deleteReview(batchId)
+      await deleteReviewRequest(batchId)
       navigate('/reviews')
     } catch (err) {
-      setActionError(getErrorMessage(err, 'Could not delete this review'))
+      setActionError(getErrorMessage(err, 'Could not delete this Review Request'))
       setDeleting(false)
     }
   }
@@ -381,14 +383,14 @@ export default function ResultPage() {
   // A partial failure still has useful scorecards. Keep the normal ranking and
   // place the failed creatives above it; only a fully failed review needs the
   // dedicated terminal screen.
-  if (data.reviewStatus === 'failed') {
+  if (data.reviewRequestStatus === 'failed') {
     return (
-      <InterruptedReview
+      <FailedReviewRequest
         data={data}
         failedVideos={progress.failed}
         actionError={actionError}
         deleting={deleting}
-        onDelete={() => void removeReview()}
+        onDelete={() => void removeReviewRequest()}
       />
     )
   }

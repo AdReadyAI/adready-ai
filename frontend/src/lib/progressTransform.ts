@@ -40,6 +40,8 @@ export interface ProgressRequestRow {
   video_storage_paths: string[] | null
   /** 'pending' | 'processing' | 'completed' | 'failed', or null before pickup. */
   media_processing_status: string | null
+  /** Stable browser-safe category; raw producer diagnostics are never selected. */
+  media_processing_failure_code: string | null
   /** Set by migration 044 when the agents were dispatched. Null means they never were. */
   agents_triggered_at: string | null
   /** 'pending' | 'processing' | 'completed' | 'failed', or null. Migration 048. */
@@ -98,11 +100,20 @@ export const EVALUATORS: ReadonlyArray<{ key: string; label: string }> = [
 /** Shown on downstream work that will never run because the video died first. */
 const SKIPPED_DETAIL = 'Skipped — video processing failed'
 const MEDIA_FAILURE_DETAIL =
-  'We could not process this video. Check that the file is a supported, playable video.'
+  'Automated video processing could not finish, so this creative could not be reviewed.'
+const MEDIA_RETRIES_EXHAUSTED_DETAIL =
+  'Automated video processing could not finish after multiple attempts. Try again later or contact support.'
 const DEGRADED_MEDIA_DETAIL =
   'Some video analysis could not be completed, so the review continued with partial data.'
 const SCORING_FAILURE_DETAIL =
   'We could not finish scoring this creative. No score is available for this review.'
+
+/** Translate a producer-owned safe category into stable user-facing copy. */
+function mediaFailureDetail(request: ProgressRequestRow): string {
+  return request.media_processing_failure_code === 'media_processing_retries_exhausted'
+    ? MEDIA_RETRIES_EXHAUSTED_DETAIL
+    : MEDIA_FAILURE_DETAIL
+}
 
 // ---- media processing ----------------------------------------------------
 
@@ -141,7 +152,7 @@ function mediaUnit(request: ProgressRequestRow): ProgressUnit {
       // the terminal state, while operators retain the raw error in `requests`.
       return agentsDispatched(request)
         ? { ...base, status: 'warning', detail: DEGRADED_MEDIA_DETAIL }
-        : { ...base, status: 'error', detail: MEDIA_FAILURE_DETAIL }
+        : { ...base, status: 'error', detail: mediaFailureDetail(request) }
 
     case 'processing':
       // The worker only writes 'completed' after every analyzer has persisted
@@ -280,7 +291,7 @@ function toStage(key: string, label: string, units: ProgressUnit[]): StageProgre
  */
 function fatalErrorFor(request: ProgressRequestRow): string | null {
   if (isFatalMediaFailure(request)) {
-    return MEDIA_FAILURE_DETAIL
+    return mediaFailureDetail(request)
   }
   if (request.evaluation_completion_status === 'failed') {
     return SCORING_FAILURE_DETAIL

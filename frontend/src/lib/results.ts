@@ -39,7 +39,7 @@ export async function fetchBatchResults(batchId: string): Promise<BatchResults> 
 
   const requestIds = requestRows.map((row) => row.request_id)
 
-  const [scoresResult, dimensionsResult, issuesResult, reviewResult] = await Promise.all([
+  const [scoresResult, dimensionsResult, issuesResult, reviewRequestSummary] = await Promise.all([
     supabase
       .from('result_score_table')
       .select('request_id, ad_readiness_pct, readiness_status')
@@ -74,8 +74,10 @@ export async function fetchBatchResults(batchId: string): Promise<BatchResults> 
   if (issuesResult.error) {
     throw new Error(getErrorMessage(issuesResult.error, 'Failed to load issues'))
   }
-  if (reviewResult.error) {
-    throw new Error(getErrorMessage(reviewResult.error, 'Failed to load review status'))
+  if (reviewRequestSummary.error) {
+    throw new Error(
+      getErrorMessage(reviewRequestSummary.error, 'Failed to load Review Request status'),
+    )
   }
 
   const assembled = assembleVideoResults({
@@ -87,9 +89,9 @@ export async function fetchBatchResults(batchId: string): Promise<BatchResults> 
 
   return {
     ...assembled,
-    failedCount: Number(reviewResult.data?.failed_count ?? 0),
-    failedRequestIds: (reviewResult.data?.failed_request_ids ?? []) as string[],
-    reviewStatus: reviewResult.data?.status,
+    failedCount: Number(reviewRequestSummary.data?.failed_count ?? 0),
+    failedRequestIds: (reviewRequestSummary.data?.failed_request_ids ?? []) as string[],
+    reviewRequestStatus: reviewRequestSummary.data?.status,
   }
 }
 

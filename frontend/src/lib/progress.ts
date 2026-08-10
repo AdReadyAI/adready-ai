@@ -37,7 +37,7 @@ export async function fetchBatchProgress(batchId: string): Promise<BatchProgress
     // parses this string at the *type* level to infer the row shape, and `+`
     // collapses it to plain `string`, which types the result as an error row.
     .select(
-      'request_id, video_storage_paths, media_processing_status, agents_triggered_at, evaluation_completion_status',
+      'request_id, video_storage_paths, media_processing_status, media_processing_failure_code, agents_triggered_at, evaluation_completion_status',
     )
     .eq('batch_id', batchId)
 
