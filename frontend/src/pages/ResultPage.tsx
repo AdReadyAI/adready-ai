@@ -27,12 +27,17 @@ import { fetchBatchResults } from '../lib/results'
 import type { BatchResults } from '../lib/results'
 import { emptyIssuesCopy, scoreText } from '../lib/reportModel'
 import { getErrorMessage } from '../lib/errorMessage'
-import { deleteReview, retryReview } from '../lib/reviews'
+import { deleteReview, retryAdCreative, retryReview } from '../lib/reviews'
 
 // Matches task-pipeline-progress-view.md D1 (5000ms) and D9 (10 minutes) so the
 // real progress view is a drop-in swap rather than a behaviour change.
 const POLL_MS = 5000
 const POLL_TIMEOUT_MS = 10 * 60 * 1000
+
+/** A Review Request is terminal only after every Ad Creative has resolved. */
+function isTerminalReview(data: BatchResults): boolean {
+  return ['completed', 'partially_failed', 'failed'].includes(data.reviewStatus ?? '')
+}
 
 function Shell({ children }: { children: React.ReactNode }) {
   // Full-bleed out of AppLayout's centered max-w-4xl main (the -mt-8 cancels
@@ -126,16 +131,20 @@ function ProcessingPlaceholder({
 function InterruptedReview({
   data,
   actionError,
-  actionPending,
+  activeActionId,
   onRetry,
+  onRetryAdCreative,
   onDelete,
 }: {
   data: BatchResults
   actionError: string | null
-  actionPending: boolean
+  activeActionId: string | null
   onRetry: () => void
+  onRetryAdCreative: (requestId: string) => void
   onDelete: () => void
 }) {
+  const failedRequestIds = new Set(data.failedRequestIds ?? [])
+
   return (
     <Shell>
       <div className="max-w-3xl">
@@ -155,9 +164,32 @@ function InterruptedReview({
           <div className="mt-8 rounded-xl bg-white px-6 py-5 shadow-[0_6px_24px_rgba(15,23,42,0.06)]">
             <h2 className="font-bold text-slate-900">Creatives without a scorecard</h2>
             <ul className="mt-3 space-y-2 text-sm text-slate-600">
-              {data.pending.map((creative) => (
-                <li key={creative.requestId}>{creative.name}</li>
-              ))}
+              {data.pending.map((creative) => {
+                const canRetry = failedRequestIds.has(creative.requestId)
+
+                // Only terminally failed Ad Creatives can start a focused
+                // Review Retry; unresolved creatives may still be processing.
+                return (
+                  <li
+                    key={creative.requestId}
+                    className="flex flex-wrap items-center justify-between gap-3"
+                  >
+                    <span>{creative.name}</span>
+                    {canRetry && (
+                      <button
+                        type="button"
+                        onClick={() => onRetryAdCreative(creative.requestId)}
+                        disabled={activeActionId !== null}
+                        className="min-h-9 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {activeActionId === creative.requestId
+                          ? 'Starting retry…'
+                          : 'Retry this creative'}
+                      </button>
+                    )}
+                  </li>
+                )
+              })}
             </ul>
           </div>
         )}
@@ -168,10 +200,10 @@ function InterruptedReview({
           <button
             type="button"
             onClick={onRetry}
-            disabled={actionPending}
+            disabled={activeActionId !== null}
             className="min-h-11 rounded-lg bg-violet-600 px-5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {actionPending ? 'Starting retry…' : 'Retry complete review'}
+            {activeActionId === 'complete' ? 'Starting retry…' : 'Retry complete review'}
           </button>
           <Link
             to="/reviews"
@@ -182,7 +214,7 @@ function InterruptedReview({
           <button
             type="button"
             onClick={onDelete}
-            disabled={actionPending}
+            disabled={activeActionId !== null}
             className="min-h-11 rounded-lg px-4 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Delete review
@@ -205,7 +237,7 @@ export default function ResultPage() {
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [actionPending, setActionPending] = useState(false)
+  const [activeActionId, setActiveActionId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!batchId) return null
@@ -240,7 +272,7 @@ export default function ResultPage() {
       const next = await load()
       if (cancelled) return
 
-      if (next?.complete || (next?.failedCount ?? 0) > 0) {
+      if (next && isTerminalReview(next)) {
         stop()
         return
       }
@@ -254,7 +286,7 @@ export default function ResultPage() {
       const first = await load()
       // Only start an interval if the batch is actually still running — a
       // finished batch should cost exactly one query.
-      if (cancelled || first === null || first.complete || (first.failedCount ?? 0) > 0) return
+      if (cancelled || first === null || isTerminalReview(first)) return
       intervalId = setInterval(() => void tick(), POLL_MS)
     })()
 
@@ -295,14 +327,28 @@ export default function ResultPage() {
   async function retryCompleteReview() {
     if (!batchId) return
     setActionError(null)
-    setActionPending(true)
+    setActiveActionId('complete')
 
     try {
       const retryId = await retryReview(batchId)
       navigate(`/result/${retryId}`)
     } catch (err) {
       setActionError(getErrorMessage(err, 'Could not retry this review'))
-      setActionPending(false)
+      setActiveActionId(null)
+    }
+  }
+
+  async function retryFailedAdCreative(requestId: string) {
+    if (!batchId) return
+    setActionError(null)
+    setActiveActionId(requestId)
+
+    try {
+      const retryId = await retryAdCreative(batchId, requestId)
+      navigate(`/result/${retryId}`)
+    } catch (err) {
+      setActionError(getErrorMessage(err, 'Could not retry this Ad Creative'))
+      setActiveActionId(null)
     }
   }
 
@@ -311,13 +357,13 @@ export default function ResultPage() {
     if (!window.confirm('Delete this review and its generated analysis?')) return
 
     setActionError(null)
-    setActionPending(true)
+    setActiveActionId('delete')
     try {
       await deleteReview(batchId)
       navigate('/reviews')
     } catch (err) {
       setActionError(getErrorMessage(err, 'Could not delete this review'))
-      setActionPending(false)
+      setActiveActionId(null)
     }
   }
 
@@ -356,13 +402,14 @@ export default function ResultPage() {
     )
   }
 
-  if (!data.complete && (data.failedCount ?? 0) > 0) {
+  if (data.reviewStatus === 'partially_failed' || data.reviewStatus === 'failed') {
     return (
       <InterruptedReview
         data={data}
         actionError={actionError}
-        actionPending={actionPending}
+        activeActionId={activeActionId}
         onRetry={() => void retryCompleteReview()}
+        onRetryAdCreative={(requestId) => void retryFailedAdCreative(requestId)}
         onDelete={() => void removeReview()}
       />
     )

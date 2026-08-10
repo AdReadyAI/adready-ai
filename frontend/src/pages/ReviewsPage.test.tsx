@@ -47,7 +47,7 @@ describe('ReviewsPage', () => {
     renderPage()
 
     expect(await screen.findByRole('heading', { name: 'Previous reviews' })).toBeVisible()
-    expect(screen.getByText('Partially failed')).toBeVisible()
+    expect(await screen.findByText('Partially failed')).toBeVisible()
     expect(screen.getByText('2 creatives · 1 scored · 1 failed')).toBeVisible()
     expect(screen.getByText('launch.mp4, cutdown.mp4')).toBeVisible()
   })

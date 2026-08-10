@@ -89,6 +89,28 @@ export async function retryReview(
   return (data as string | null) ?? newReviewRequestId
 }
 
+/**
+ * Start a focused Review Retry for one terminally failed Ad Creative while
+ * preserving the source Review Request as immutable history.
+ */
+export async function retryAdCreative(
+  sourceReviewRequestId: string,
+  sourceRequestId: string,
+  newReviewRequestId = crypto.randomUUID(),
+): Promise<string> {
+  const { data, error } = await supabase.rpc('retry_ad_creative_review_request', {
+    p_source_review_request_id: sourceReviewRequestId,
+    p_source_request_id: sourceRequestId,
+    p_new_review_request_id: newReviewRequestId,
+  })
+
+  if (error) {
+    throw new Error(getErrorMessage(error, 'Failed to retry this Ad Creative'))
+  }
+
+  return (data as string | null) ?? newReviewRequestId
+}
+
 /** Remove a Review Request and its generated analysis from visible history. */
 export async function deleteReview(reviewRequestId: string): Promise<void> {
   const { data, error } = await supabase.rpc('delete_review_request', {

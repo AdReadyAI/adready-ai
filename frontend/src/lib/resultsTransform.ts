@@ -62,6 +62,10 @@ export interface BatchResults {
   complete: boolean
   /** Terminally failed creatives, supplied by the review-lifecycle projection. */
   failedCount?: number
+  /** Request identities for terminally failed Ad Creatives eligible for retry. */
+  failedRequestIds?: string[]
+  /** Review Request lifecycle state used to distinguish active from terminal failures. */
+  reviewStatus?: 'queued' | 'processing' | 'completed' | 'partially_failed' | 'failed'
 }
 
 // ---- status --------------------------------------------------------------
@@ -328,6 +332,8 @@ export function assembleVideoResults(input: {
     totalCount: requests.length,
     complete: requests.length > 0 && pending.length === 0,
     failedCount: 0,
+    failedRequestIds: [],
+    reviewStatus: requests.length > 0 && pending.length === 0 ? 'completed' : 'queued',
   }
 }
 
