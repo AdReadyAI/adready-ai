@@ -20,7 +20,7 @@ Routes (`src/App.tsx`):
 | --- | --- | --- |
 | `/auth/signin`, `/auth/signup` | `pages/auth/*` | public |
 | `/upload` | `pages/UploadPage.tsx` | protected |
-| `/result` | `pages/ResultPage.tsx` | protected |
+| `/result/:batchId` | `pages/ResultPage.tsx` | protected |
 
 ## Structure
 
@@ -29,13 +29,56 @@ src/
 |- pages/              # route-level components (UploadPage, ResultPage, auth/*)
 |- components/
 |  |- upload/           # dropzone, media cards, campaign form
-|  |- results/          # rank card, metric bar, issue row
+|  |- results/          # rank card, metric bar, issue row, live ProcessingView
 |  |- layout/, auth/    # app chrome, ProtectedRoute
 |- contexts/            # AuthContext (Supabase session)
-|- lib/                 # supabaseClient, auth helpers
-|- mocks/               # fixture data for ResultPage until it's wired to real data
+|- lib/                 # supabaseClient, auth helpers, queries + pure transforms, hooks
 `- types/
 ```
+
+## How the loading screen knows what's happening
+
+`/result/:batchId` is one page with two faces: a live progress view while the
+pipeline runs, then the results view. `lib/useRequestProgress.ts` is the only
+thing that polls (5s), and it stops the moment every video is terminal. The
+heavy results query fires exactly once, when that flips.
+
+Progress is **derived from evidence the pipeline already writes**, never from a
+stored percentage — so the bar cannot drift out of sync with reality:
+
+| Stage | Weight | Read from |
+| --- | --- | --- |
+| Processing your video | 5 | `requests.media_processing_status` (migration 055, written by `worker/app/supabase.py`) |
+| Reviewing your creative | 1 × 7 | one unit per evaluator, ticked when it has rows in `agent_results` |
+| Scoring | 1 | `result_score_table` row, or `requests.evaluation_completion_status` (migration 048) |
+
+The checklist is **per video, not per batch**. A batch-level rollup was built
+first and it lies: with one failed video out of four, every row collapses to a
+red "Skipped" while the other three are running along perfectly well. Videos in
+a batch have genuinely different fates, so each one carries its own card, its own
+checklist, and its own colour.
+
+Two things are easy to get wrong here:
+
+- **The evaluator keys are agent names, not dimension ids.** `storyline_clarity`
+  and `brief_alignment` are two separate agents that both feed the single
+  `storyline_brief` *dimension*, and the agent behind `visual_asset_quality` is
+  called `visual_quality`. The authoritative list is the `agent` enum in
+  `supabase/functions/shared/schemas.ts`. Get it wrong and those rows never tick
+  — silently.
+- **A failed media stage is not automatically fatal.** Migration 044 fires the
+  agents once every `video_processing` row has left `'processing'`, success *or*
+  error — so a video can fail some analysis tasks and still get a scorecard from
+  partial data. `requests.agents_triggered_at` is the guard column that trigger
+  stamps, so its presence is what separates "degraded, carry on" (amber warning)
+  from "the run stopped here" (red, and the video is named as unreviewable).
+
+No new migration and no database view were needed: `requests`' owner-read policy
+(007) already covers its columns, `agent_results` has read policies from 027, and
+`result_score_table` from 045. The cost is granularity — this can say "processing
+video", not "transcription done, OCR running". Per-task detail would need a
+`security definer` view over `video_processing`, which stays service_role-only;
+it would slot in behind `lib/progress.ts` without changing anything above it.
 
 ## Request / batch data model
 
@@ -100,6 +143,23 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-10** — The loading screen shows real pipeline state instead of a
+  score-row count. `lib/progressTransform.ts` derives weighted per-video progress
+  from `requests.media_processing_status` / `agents_triggered_at` /
+  `evaluation_completion_status`, `agent_results`, and `result_score_table`;
+  `lib/useRequestProgress.ts` polls it and `components/results/ProcessingView.tsx`
+  renders the checklist. Worker errors are now visible to the user — a failure
+  that still handed off to the agents renders amber and keeps going, one that
+  stopped the run renders red and the video is named as unreviewable rather than
+  silently missing from the ranking. `ResultPage` also stopped polling the heavy
+  results query every 5s: that now fires once, when progress says the batch is
+  done. No migration — everything read here was already covered by existing RLS
+  read policies. Two subtleties worth keeping: the percentage **floors** rather
+  than rounds (rounding let a 16-video batch read "100% complete" with a unit
+  still outstanding), and the results are tagged with the batch they were fetched
+  for, since React Router reuses this component across a `:batchId` change and
+  the previous batch's ranking would otherwise flash under the new URL. See "How
+  the loading screen knows what's happening" above.
 - **2026-08-09** — Split the advanced brief fields into required and optional in
   `AdvancedFieldsSection`. The four required ones (Brand Voice, Target Audience,
   Required Messages, Brand Guidelines) each gate a sub-check that the

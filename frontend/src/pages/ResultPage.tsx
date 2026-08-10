@@ -1,25 +1,30 @@
-// Route: /result/:batchId — the results view: ranked videos, scorecard, and the
-// issue deep-dive. Reads result_score_table / result_score_dimensions / issues
-// via lib/results.ts.
+// Route: /result/:batchId — one page, two faces. While the pipeline runs it is a
+// live progress view; once every video is terminal it becomes the results view:
+// ranked videos, scorecard, and the issue deep-dive.
 //
-// ⚠️ The processing view here is a deliberate PLACEHOLDER, not the real one.
-// The loading experience is owned by `task-pipeline-progress-view.md`, which
-// specifies a weighted progress view over all four pipeline stages plus a
-// `useRequestProgress` hook. This page only knows about the last stage — a video
-// appears once it has a result_score_table row — so it cannot show meaningful
-// movement during preprocessing, analysis, or evaluation.
+// ## Who owns the clock
 //
-// The handoff point is already compatible: that task's D11 completes when every
-// unit is terminal *including* the scoring row, which is exactly the `complete`
-// flag used here. So LiveProcessingView can replace ProcessingPlaceholder
-// without touching anything below it. Poll interval and timeout are set to that
-// task's D1/D9 values for the same reason.
+// `useRequestProgress` is the only thing that polls. It watches the batch's
+// pipeline state (see lib/progressTransform.ts, which derives it from
+// `requests`, `agent_results` and `result_score_table`) and stops the moment
+// every unit is terminal.
+//
+// The heavy results query fires exactly once, when that flips. That ordering is
+// safe rather than racy: a video is only counted done when its scorecard exists
+// — `result_score_table` has a row, or `evaluation_completion_status` is
+// 'completed', which complete-evaluation only writes *after* both projections
+// have succeeded. So by the time we ask for results, they are there.
+//
+// The previous version polled the results query itself every 5s and inferred
+// "still processing" from missing score rows. That could only ever report the
+// last stage of four, so it sat at "0 of N scored" for almost the whole run.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import DownloadIcon from '../components/icons/DownloadIcon'
 import IssueRow from '../components/results/IssueRow'
 import MetricBar from '../components/results/MetricBar'
+import ProcessingView from '../components/results/ProcessingView'
 import RankCard from '../components/results/RankCard'
 import { STATUS } from '../components/results/status'
 import { downloadReport } from '../lib/downloadReport'
@@ -27,12 +32,9 @@ import { fetchBatchResults } from '../lib/results'
 import type { BatchResults } from '../lib/results'
 import { emptyIssuesCopy, scoreText } from '../lib/reportModel'
 import { getErrorMessage } from '../lib/errorMessage'
+import { useRequestProgress } from '../lib/useRequestProgress'
 import { useSignedVideoUrl } from '../lib/useSignedVideoUrl'
-
-// Matches task-pipeline-progress-view.md D1 (5000ms) and D9 (10 minutes) so the
-// real progress view is a drop-in swap rather than a behaviour change.
-const POLL_MS = 5000
-const POLL_TIMEOUT_MS = 10 * 60 * 1000
+import type { VideoProgress } from '../types/progress'
 
 function Shell({ children }: { children: React.ReactNode }) {
   // Full-bleed out of AppLayout's centered max-w-4xl main (the -mt-8 cancels
@@ -48,10 +50,13 @@ function Notice({
   title,
   body,
   tone = 'neutral',
+  onRetry,
 }: {
   title: string
   body: string
   tone?: 'neutral' | 'error'
+  /** Adds a "Try again" button beside the escape hatch. Omit when nothing is retryable. */
+  onRetry?: () => void
 }) {
   return (
     <Shell>
@@ -62,134 +67,114 @@ function Notice({
       >
         <p className="text-lg font-bold text-slate-900">{title}</p>
         <p className="mx-auto mt-2 max-w-lg text-sm text-slate-500">{body}</p>
-        <Link
-          to="/upload"
-          className="mt-6 inline-block rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
-        >
-          Back to upload
-        </Link>
+        <div className="mt-6 flex items-center justify-center gap-3">
+          {onRetry !== undefined && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Try again
+            </button>
+          )}
+          <Link
+            to="/upload"
+            className="inline-block rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-700"
+          >
+            Back to upload
+          </Link>
+        </div>
       </div>
     </Shell>
   )
 }
 
 /**
- * PLACEHOLDER loading view. See the file header.
+ * The results query's outcome, tagged with the batch it was fetched for.
  *
- * Shows only what this page can honestly know: how many videos in the batch have
- * produced a score row. That is the pipeline's final stage, so this sits at 0%
- * for most of a real run. The weighted, per-stage progress view specified in
- * task-pipeline-progress-view.md replaces this wholesale — it is intentionally
- * small so there is little to unpick when that lands.
+ * Tagged rather than stored bare so a response can never be rendered under a
+ * different batch's URL — see the guard in ResultPage below.
  */
-function ProcessingPlaceholder({
-  data,
-  timedOut,
-}: {
-  data: BatchResults
-  timedOut: boolean
-}) {
-  const done = data.videos.length
+interface LoadedResults {
+  batchId: string
+  results: BatchResults | null
+  error: string | null
+}
 
+/**
+ * Videos whose pipeline stopped, shown above the ranking.
+ *
+ * These have no scorecard and so are absent from the ranking entirely. Without
+ * this the user submits four videos, gets three back, and is told nothing about
+ * the fourth — the failure text is sitting in `requests.media_processing_error`
+ * and was never surfaced.
+ */
+function FailedVideos({ videos }: { videos: VideoProgress[] }) {
   return (
-    <Shell>
-      <h1 className="text-3xl font-bold text-slate-900">Reviewing your ad creatives...</h1>
-      <p className="mt-1 text-slate-500">
-        {done} of {data.totalCount} scored. This usually takes 2–3 minutes.
+    <div className="mb-8 rounded-2xl border border-red-200 bg-red-50 px-6 py-5">
+      <p className="font-bold text-red-700">
+        {videos.length} {videos.length === 1 ? 'video' : 'videos'} could not be reviewed
       </p>
-
-      <div className="mt-8 rounded-2xl border border-slate-200 bg-white px-6 py-8">
-        <div className="flex items-center gap-4">
-          <span className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-slate-900" />
-          <div>
-            <p className="font-semibold text-slate-900">Analyzing your creatives…</p>
-            <p className="mt-0.5 text-sm text-slate-500">
-              {data.pending.length} still processing
-              {data.pending.length > 0 && `: ${data.pending.map((v) => v.name).join(', ')}`}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {timedOut && (
-        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-6 py-5">
-          <p className="font-bold text-amber-700">This is taking longer than expected.</p>
-          <p className="mt-1 text-sm text-amber-700">
-            We've stopped checking for now. Reload the page to resume.
-          </p>
-        </div>
-      )}
-    </Shell>
+      <ul className="mt-3 space-y-2">
+        {videos.map((video) => (
+          <li key={video.requestId} className="text-sm text-red-700">
+            <span className="font-semibold">{video.name}</span>
+            {/* Raw producer text — long, technical, and the only real explanation
+                the user can get. break-words keeps it inside the card. */}
+            <span className="break-words"> — {video.fatalError}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
 export default function ResultPage() {
   const { batchId } = useParams<{ batchId: string }>()
 
-  const [data, setData] = useState<BatchResults | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [timedOut, setTimedOut] = useState(false)
+  const { progress, error: progressError, timedOut, retry } = useRequestProgress(batchId)
+
+  const [loaded, setLoaded] = useState<LoadedResults | null>(null)
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
   const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    if (!batchId) return null
+    if (!batchId) return
 
     try {
-      const next = await fetchBatchResults(batchId)
-      setData(next)
-      setError(null)
-      return next
+      setLoaded({ batchId, results: await fetchBatchResults(batchId), error: null })
     } catch (err) {
       // An error here is meaningful: RLS denials come back as empty arrays, not
       // errors, so anything thrown is a genuine failure worth surfacing.
-      setError(getErrorMessage(err, 'Could not load your results'))
-      return null
+      setLoaded({
+        batchId,
+        results: null,
+        error: getErrorMessage(err, 'Could not load your results'),
+      })
     }
   }, [batchId])
 
+  // Anything belonging to a different batch is discarded rather than rendered.
+  // React Router reuses this component when only the :batchId param changes, so
+  // state survives the navigation, and a render always happens before the
+  // effects that would react to it — without this check there is a window where
+  // the previous batch's ranking shows under the new batch's URL. Same guard as
+  // useSignedVideoUrl's out-of-order response check, for the same reason.
+  const forThisBatch = loaded?.batchId === batchId ? loaded : null
+  const data = forThisBatch?.results ?? null
+  const error = forThisBatch?.error ?? null
+
+  // `progress` is a fresh object on every poll, so this depends on the boolean
+  // rather than the object — otherwise the results query would re-fire on every
+  // tick of a finished batch.
+  const isDone = progress?.isDone ?? false
+
   useEffect(() => {
-    if (!batchId) return
-
-    let cancelled = false
-    let intervalId: ReturnType<typeof setInterval> | undefined
-    const startedAt = Date.now()
-    setTimedOut(false)
-
-    const stop = () => {
-      if (intervalId !== undefined) clearInterval(intervalId)
-      intervalId = undefined
-    }
-
-    const tick = async () => {
-      const next = await load()
-      if (cancelled) return
-
-      if (next?.complete) {
-        stop()
-        return
-      }
-      if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-        setTimedOut(true)
-        stop()
-      }
-    }
-
-    void (async () => {
-      const first = await load()
-      // Only start an interval if the batch is actually still running — a
-      // finished batch should cost exactly one query.
-      if (cancelled || first === null || first.complete) return
-      intervalId = setInterval(() => void tick(), POLL_MS)
-    })()
-
-    return () => {
-      cancelled = true
-      stop()
-    }
-  }, [batchId, load])
+    if (!isDone) return
+    void load()
+  }, [isDone, load])
 
   const selected = useMemo(() => {
     if (!data || data.videos.length === 0) return null
@@ -224,7 +209,7 @@ export default function ResultPage() {
     }
   }
 
-  // ---- the five states --------------------------------------------------
+  // ---- the states, in order ----------------------------------------------
 
   if (!batchId) {
     return (
@@ -235,11 +220,21 @@ export default function ResultPage() {
     )
   }
 
-  if (error) {
-    return <Notice title="Could not load your results" body={error} tone="error" />
+  // Nothing to show *and* we can't reach the server. With a `progress` in hand
+  // the poll error is only a banner (see ProcessingView) — the run continues
+  // whether or not we can watch it — but with nothing at all this is the page.
+  if (progress === null && (progressError !== null || timedOut)) {
+    return (
+      <Notice
+        title="Could not load your review"
+        body={progressError ?? 'We stopped checking after ten minutes with no response.'}
+        tone="error"
+        onRetry={retry}
+      />
+    )
   }
 
-  if (!data) {
+  if (progress === null) {
     return (
       <Shell>
         <p className="text-slate-500">Loading your results…</p>
@@ -250,7 +245,7 @@ export default function ResultPage() {
   // Zero requests means the batch id is unknown or belongs to someone else.
   // Those are indistinguishable from here by design: the RLS policies return an
   // empty set rather than revealing that a batch exists but isn't yours.
-  if (data.totalCount === 0) {
+  if (progress.videos.length === 0) {
     return (
       <Notice
         title="Batch not found"
@@ -259,15 +254,45 @@ export default function ResultPage() {
     )
   }
 
-  if (!data.complete) {
-    return <ProcessingPlaceholder data={data} timedOut={timedOut} />
+  if (!isDone) {
+    return (
+      <Shell>
+        <ProcessingView
+          progress={progress}
+          error={progressError}
+          timedOut={timedOut}
+          onRetry={retry}
+        />
+      </Shell>
+    )
+  }
+
+  // Past here the pipeline is finished and we are waiting on / showing the
+  // results query, which only runs once isDone flips.
+  if (error) {
+    return (
+      <Notice title="Could not load your results" body={error} tone="error" onRetry={load} />
+    )
+  }
+
+  if (!data) {
+    return (
+      <Shell>
+        <p className="text-slate-500">Loading your results…</p>
+      </Shell>
+    )
   }
 
   if (!selected) {
     return (
       <Notice
         title="No results to show"
-        body="This batch finished without producing any scored videos."
+        body={
+          progress.failed.length > 0
+            ? `Every video in this batch failed to process. ${progress.failed[0].fatalError}`
+            : 'This batch finished without producing any scored videos.'
+        }
+        tone={progress.failed.length > 0 ? 'error' : 'neutral'}
       />
     )
   }
@@ -278,6 +303,10 @@ export default function ResultPage() {
 
   return (
     <Shell>
+      {/* Above the heading on purpose: a partial batch is the one thing the user
+          needs to know before reading a ranking that is quietly missing a video. */}
+      {progress.failed.length > 0 && <FailedVideos videos={progress.failed} />}
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Your results are ready.</h1>
