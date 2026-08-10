@@ -328,6 +328,15 @@ describe('weighted percentage', () => {
     ).toBe(100)
   })
 
+  it('uses a persisted Scorecard as proof that stale prerequisite stages finished', () => {
+    const video = build(requestRow(), [], true)
+
+    expect(video.pct).toBe(100)
+    expect(video.isDone).toBe(true)
+    expect(video.status).toBe('success')
+    expect(video.fatalError).toBeNull()
+  })
+
   // Every unit is terminal ('error' counts), so the page must be free to move on
   // rather than spinning until the ten-minute timeout.
   it('reaches 100 and done on a fatally failed video', () => {

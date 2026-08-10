@@ -305,10 +305,30 @@ export function buildVideoProgress(
   scored: boolean,
   thumb: string = THUMBS[0],
 ): VideoProgress {
+  // A persisted Scorecard is the pipeline's strongest completion evidence. It
+  // also predates the explicit media lifecycle columns, so legacy requests can
+  // legitimately have a score while those newer fields remain null. Normalize
+  // only the derived progress shape; the database history stays untouched.
+  const progressRequest: ProgressRequestRow = scored
+    ? {
+        ...request,
+        media_processing_status: 'completed',
+        agents_triggered_at: request.agents_triggered_at ?? 'completed-by-scorecard',
+        evaluation_completion_status: 'completed',
+      }
+    : request
+  const progressReported = scored
+    ? new Set(EVALUATORS.map((evaluator) => evaluator.key))
+    : reported
+
   const stages: StageProgress[] = [
-    toStage('media', 'Processing your video', [mediaUnit(request)]),
-    toStage('evaluation', 'Reviewing your creative', evaluationUnits(request, reported)),
-    toStage('scoring', 'Scoring', [scoringUnit(request, scored)]),
+    toStage('media', 'Processing your video', [mediaUnit(progressRequest)]),
+    toStage(
+      'evaluation',
+      'Reviewing your creative',
+      evaluationUnits(progressRequest, progressReported),
+    ),
+    toStage('scoring', 'Scoring', [scoringUnit(progressRequest, scored)]),
   ]
 
   const units = stages.flatMap((stage) => stage.units)
@@ -321,7 +341,7 @@ export function buildVideoProgress(
     pct: percent(units),
     status: rollUpStatus(units),
     isDone: units.every((unit) => isTerminal(unit.status)),
-    fatalError: fatalErrorFor(request),
+    fatalError: fatalErrorFor(progressRequest),
   }
 }
 

@@ -195,6 +195,21 @@ describe('ResultPage gating', () => {
     expect(fetchBatchResultsMock).toHaveBeenCalledExactlyOnceWith('batch-1')
   })
 
+  it('renders an existing scorecard even when an old media status is stale', async () => {
+    // A persisted Scorecard is downstream proof that this Ad Creative finished.
+    // Legacy rows may lack the newer media lifecycle columns, but must never
+    // strand a completed Review Request on the progress screen at 61%.
+    progressRef.current = progressState([requestRow()], {}, ['req-1'])
+    fetchBatchResultsMock.mockResolvedValue(
+      makeBatch({ totalCount: 1, complete: true, videos: [makeVideo()] }),
+    )
+
+    render(<ResultPage />)
+
+    expect(await screen.findByText('Your results are ready.')).toBeVisible()
+    expect(fetchBatchResultsMock).toHaveBeenCalledExactlyOnceWith('batch-1')
+  })
+
   // The hook hands back a fresh object every poll; depending on it rather than on
   // the boolean would re-fire this query on every tick of a finished batch.
   it('does not re-query results when progress re-renders unchanged', async () => {
