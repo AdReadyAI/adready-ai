@@ -379,7 +379,7 @@ from analyzer.object_detector import Detection
 from analyzer.types import Frame, VideoMetadata
 
 
-def _artifacts(frames, product_image_paths=("ref_p.jpg",), logo_paths=("ref_l.jpg",)):
+def _artifacts(frames, product_image_paths=("ref_p.jpg",), logo_paths=("ref_l.jpg",), product_url=None):
     return Artifacts(
         job_id="r1",
         storage_ref="bucket/video.mp4",
@@ -390,6 +390,7 @@ def _artifacts(frames, product_image_paths=("ref_p.jpg",), logo_paths=("ref_l.jp
         work_dir="/tmp",
         product_image_paths=tuple(product_image_paths),
         logo_paths=tuple(logo_paths),
+        product_url=product_url,
     )
 
 
@@ -478,6 +479,46 @@ def test_detect_logo_low_confidence_is_cannot_determine(tmp_path):
 
     assert result.rows[0].reference_match == "cannot_determine"
     assert result.rows[0].prominence == "background_signage"  # small + centered
+
+
+# ---------------------------------------------------------------------------
+# extract_product_context (Product Context extraction)
+# ---------------------------------------------------------------------------
+from types import SimpleNamespace
+
+from analyzer.output_models import ProductContextRow
+
+
+def test_analysis_tasks_omits_product_context_without_url():
+    analyzer = _analyzer(_artifacts([], product_url=None))
+
+    assert "product_context" not in analyzer.analysis_tasks()
+
+
+def test_analysis_tasks_includes_product_context_with_url():
+    analyzer = _analyzer(_artifacts([], product_url="https://example.com/product"))
+
+    assert "product_context" in analyzer.analysis_tasks()
+
+
+def test_extract_product_context_extracts_and_wraps_rows():
+    analyzer = _analyzer(_artifacts([], product_url="https://example.com/product"))
+
+    extracted = SimpleNamespace(
+        raw_text="Product facts",
+        reference_asset_urls=("https://example.com/product.jpg",),
+    )
+    with patch("analyzer.video_analyzer.ProductPageExtractor") as mock_cls:
+        mock_cls.return_value.extract.return_value = extracted
+        result = analyzer.extract_product_context()
+
+    mock_cls.return_value.extract.assert_called_once_with("https://example.com/product")
+    assert result.rows == [
+        ProductContextRow(
+            raw_text="Product facts",
+            reference_asset_urls=["https://example.com/product.jpg"],
+        )
+    ]
 
 
 # ---------------------------------------------------------------------------

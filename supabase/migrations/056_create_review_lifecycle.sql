@@ -1,4 +1,4 @@
--- Review Requests are the user-facing parent of the existing per-creative
+-- Migration 056 makes Review Requests the user-facing parent of per-creative
 -- requests rows. Keeping this identity separate lets history, retries, and
 -- deletion operate on a complete submission without leaking the pipeline's
 -- one-row-per-video implementation into the website.

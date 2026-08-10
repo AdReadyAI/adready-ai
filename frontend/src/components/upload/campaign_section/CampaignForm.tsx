@@ -4,7 +4,8 @@ import { getErrorMessage } from "../../../lib/errorMessage";
 import { supabase } from "../../../lib/supabaseClient";
 import type { UploadedVideo, UploadedImage } from "../../../pages/UploadPage";
 import type { ParsedCreativeBrief } from "../../../types/brief";
-import AdvancedFieldsSection from "./AdvancedFieldsSection";
+import AdvancedFieldsSection, { missingRequiredAdvanced } from "./AdvancedFieldsSection";
+import RequiredMark from "./RequiredMark";
 
 type CampaignMode = "create" | "existing";
 
@@ -55,7 +56,9 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
     policy_requirements: [],
   });
   const [parsing, setParsing] = useState(false);
-  const lastParsedRef = useRef("");
+  // State, not a ref: the Parse button's enabled/disabled look is derived from
+  // this, so React has to re-render when it changes.
+  const [lastParsed, setLastParsed] = useState("");
   // video.id → request_id, minted client-side so the requests insert is
   // idempotent (see handleSubmit). Keyed by video id rather than array index
   // so adding or removing a video between a failed submit and a retry can't
@@ -72,14 +75,37 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
   const hasCompletedVideo = videos.some((v) => v.status === "done");
   const noneUploading = videos.every((v) => v.status !== "uploading");
 
-  const isCreateValid = productUrl.trim() && campaignGoal && destinationPlatform && creativeBrief.trim();
+  // The required advanced fields aren't cosmetic gating: each one guards a
+  // sub-check in brief-alignment-agent / brand-alignment-agent that degrades to
+  // `cannot_assess` when its input is blank. Submitting without them buys a
+  // review with holes in it, so block here rather than let the user pay for a
+  // partial result. The optional fields are prompt context only — no check is
+  // dropped when they're empty.
+        
+   // Nothing typed → nothing to parse. Same text as last time → the answer is
+  // already on screen, so don't spend another LLM call on it.
+  const trimmedBrief = creativeBrief.trim();
+  const canParseBrief = Boolean(trimmedBrief) && trimmedBrief !== lastParsed && !parsing;
+  const briefAlreadyParsed = Boolean(trimmedBrief) && trimmedBrief === lastParsed;
+        
+  const missingAdvanced = missingRequiredAdvanced(advancedFields);
+
+  const isCreateValid =
+    productUrl.trim() &&
+    campaignGoal &&
+    destinationPlatform &&
+    creativeBrief.trim() &&
+    missingAdvanced.length === 0;
   const isExistingValid = selectedCampaign;
   const isFormValid =
     (mode === "create" ? isCreateValid : isExistingValid) && hasCompletedVideo && noneUploading;
 
-  async function handleBlurBrief() {
+  // Parsing is user-triggered (the "Parse brief" button) rather than fired on
+  // blur: blur meant every tab-out or stray click spent an LLM call, and the
+  // user had no way to ask for a re-parse or to skip parsing entirely.
+  async function handleParseBrief() {
     const text = creativeBrief.trim();
-    if (!text || text === lastParsedRef.current) return;
+    if (!text || text === lastParsed) return;
 
     setParsing(true);
     setSubmitError(null);
@@ -97,7 +123,7 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
         return;
       }
 
-      lastParsedRef.current = text;
+      setLastParsed(text);
       const parsed: ParsedCreativeBrief = {
         brand_voice: data.data.brand_voice ?? "",
         target_audience: data.data.target_audience ?? "",
@@ -314,12 +340,14 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
             <div>
               <label htmlFor="productUrl" className="block text-sm font-medium text-slate-700 mb-1">
                 Product URL
+                <RequiredMark />
               </label>
               <input
                 id="productUrl"
                 type="url"
                 value={productUrl}
                 onChange={(e) => setProductUrl(e.target.value)}
+                aria-required="true"
                 placeholder="https://your-product-page.com"
                 className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 placeholder-[#9B9A97] focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
               />
@@ -328,11 +356,13 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
             <div>
               <label htmlFor="campaignGoal" className="block text-sm font-medium text-slate-700 mb-1">
                 Campaign Goal
+                <RequiredMark />
               </label>
               <select
                 id="campaignGoal"
                 value={campaignGoal}
                 onChange={(e) => setCampaignGoal(e.target.value)}
+                aria-required="true"
                 className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 placeholder-[#9B9A97] text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
               >
                 <option value="" disabled>Select a goal</option>
@@ -345,11 +375,13 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
             <div>
               <label htmlFor="destinationPlatform" className="block text-sm font-medium text-slate-700 mb-1">
                 Destination Platform
+                <RequiredMark />
               </label>
               <select
                 id="destinationPlatform"
                 value={destinationPlatform}
                 onChange={(e) => setDestinationPlatform(e.target.value)}
+                aria-required="true"
                 className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
               >
                 <option value="" disabled>Select a platform</option>
@@ -363,16 +395,46 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
           <div>
             <label htmlFor="creativeBrief" className="block text-sm font-medium text-slate-700 mb-1">
               Creative Brief
+              <RequiredMark />
             </label>
             <textarea
               id="creativeBrief"
               value={creativeBrief}
               onChange={(e) => setCreativeBrief(e.target.value)}
-              onBlur={handleBlurBrief}
+              aria-required="true"
               placeholder="Describe your ad’s goal, key message, and target audience…"
               rows={4}
               className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 placeholder-[#9B9A97] focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent resize-none"
             />
+            <div className="mt-2 flex items-center gap-3">
+              {/* type="button" is load-bearing: the default inside a <form> is
+                  "submit", which would fire handleSubmit instead of parsing. */}
+              <button
+                type="button"
+                onClick={handleParseBrief}
+                disabled={!canParseBrief}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#534AB7] px-3 py-1.5 text-sm font-medium text-[#534AB7] hover:bg-[#F0EFF9] transition-colors disabled:border-[#E2E1DC] disabled:text-[#9B9A97] disabled:hover:bg-transparent disabled:cursor-not-allowed"
+              >
+                {parsing ? (
+                  <>
+                    <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Parsing brief…
+                  </>
+                ) : (
+                  <>✨ {lastParsed ? "Re-parse brief" : "Parse brief"}</>
+                )}
+              </button>
+              <p className="text-xs text-[#9B9A97]">
+                {parsing
+                  ? "Reading your brief…"
+                  : briefAlreadyParsed
+                    ? "Brief parsed — edit the text to parse again."
+                    : "Fills the advanced fields below automatically. Optional."}
+              </p>
+            </div>
           </div>
 
           <AdvancedFieldsSection
@@ -387,11 +449,13 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
         <div>
           <label htmlFor="existingCampaign" className="block text-sm font-medium text-slate-700 mb-1">
             Select campaign
+            <RequiredMark />
           </label>
           <select
             id="existingCampaign"
             value={selectedCampaign}
             onChange={(e) => setSelectedCampaign(e.target.value)}
+            aria-required="true"
             className="w-full bg-[#F0EFEB] rounded-lg border border-[#E2E1DC] px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#534AB7] focus:border-transparent"
           >
             <option value="" disabled>Choose a campaign</option>
@@ -403,6 +467,13 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
       )}
 
       {submitError && <p className="text-sm text-red-600">{submitError}</p>}
+
+      {mode === "create" && !parsing && missingAdvanced.length > 0 && (
+        <p className="text-sm text-[#8A6216]">
+          Fill in {missingAdvanced.join(", ")} under Advanced brief details — the review skips
+          those checks otherwise.
+        </p>
+      )}
 
       <div className="flex items-center justify-between">
         <p className="text-sm text-[#9B9A97]">🔒  Your videos are secure and never shared.</p>

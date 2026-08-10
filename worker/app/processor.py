@@ -13,10 +13,9 @@ from analyzer.ocr.frame_artifacts import SupabaseOcrFrameArtifactStore
 from analyzer.ocr.roboflow import build_roboflow_easyocr_adapter_from_env
 from app.log_utils import phase
 from app.schemas import JobPayload
-from app.errors import TransientError
+from app.errors import PermanentError, TransientError, UnrecoverableError
 from config.settings import ANALYSIS_TASK_MAX_ATTEMPTS, SUPABASE_URL
 from analyzer.output_models import TaskResult
-from app.product_context import ProductPageExtractor
 from app.ocr_runs import OcrRunLifecycle
 from app.supabase import Supabase
 
@@ -48,12 +47,12 @@ def process_message(cur, msg_id, payload):
     ocr_configuration = OcrRuntimeConfig.from_env()
     request_id = payload.request_id
     db = Supabase(cur=cur, request_id=request_id)
+    db.mark_media_processing_started()
 
     job_start = time.perf_counter()
     logger.info("[job %s] Processing: %s", msg_id, request_id)
-    _populate_product_context(db)
     with tempfile.TemporaryDirectory(prefix=f"job_{msg_id}_") as work_dir:
-        preprocessor = VideoPreprocessor(payload, work_dir)
+        preprocessor = VideoPreprocessor(payload, work_dir, msg_id=msg_id)
         with phase(logger, f"[job {msg_id}] Preprocessing"):
             artifact = preprocessor.prepare()
 
@@ -94,33 +93,18 @@ def process_message(cur, msg_id, payload):
         )
 
         with phase(logger, f"[job {msg_id}] Analysis"):
-            results, errors = _run_analysis(db, analyzer, msg_id)
+            results, errors, unrecoverable = _run_analysis(db, analyzer, msg_id)
 
         db.persist_results(results, errors)
 
+        if unrecoverable:
+            raise UnrecoverableError(f"[job {msg_id}] analyzers failed permanently: {list(errors)}")
         if errors:
             raise RuntimeError(f"[job {msg_id}] analyzers failed: {list(errors)}")
 
+    db.mark_media_processing_completed()
     logger.info("[job %s] Done in %.2fs", msg_id, time.perf_counter() - job_start)
 
-
-def _populate_product_context(
-    db: Supabase,
-    extractor: ProductPageExtractor | None = None,
-) -> None:
-    """Populate missing Product Context from the Review Request's product URL."""
-    product_url = db.product_url_requiring_context()
-    if product_url is None:
-        return
-
-    # Extraction stays outside the persistence layer so network behavior and
-    # database writes remain independently testable and retryable.
-    page_extractor = extractor or ProductPageExtractor()
-    context = page_extractor.extract(product_url)
-    db.upsert_product_context(
-        context.raw_text,
-        context.reference_asset_urls,
-    )
 
 
 def _parse_payload(msg_id, payload: dict) -> JobPayload:
@@ -157,7 +141,7 @@ class _OcrLifecycleAnalyzer:
 
 def _run_analysis(
     db: Supabase, analyzer: VideoAnalyzer, msg_id=None
-) -> tuple[dict[str, TaskResult], dict[str, str]]:
+) -> tuple[dict[str, TaskResult], dict[str, str], bool]:
     done = db.completed_analyzers()
     tasks = {n: fn for n, fn in analyzer.analysis_tasks().items() if n not in done}
     logger.info("[job %s] Analysis tasks scheduled: %s", msg_id, list(tasks))
@@ -166,6 +150,7 @@ def _run_analysis(
         db.mark_processing(name)
 
     results, errors = {}, {}
+    unrecoverable = False
     with ThreadPoolExecutor(max_workers=max(len(tasks), 1)) as executor:
         futures = {
             executor.submit(_with_retry, fn, msg_id=msg_id): name
@@ -177,13 +162,16 @@ def _run_analysis(
                 result = future.result()
                 if result is not None:
                     results[name] = result
+            except PermanentError as e:
+                errors[name] = str(e)
+                unrecoverable = True
             except Exception as e:
                 errors[name] = str(e)
     logger.info(
         "[job %s] Analysis tasks complete: %d succeeded, %d failed (%s)",
         msg_id, len(results), len(errors), list(errors),
     )
-    return results, errors
+    return results, errors, unrecoverable
 
 def _with_retry(fn, attempts=ANALYSIS_TASK_MAX_ATTEMPTS, base=1.0, msg_id=None):
     name = getattr(fn, "_analysis_task", getattr(fn, "__name__", "task"))

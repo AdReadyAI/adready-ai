@@ -8,6 +8,7 @@ const results: BatchResults = {
       requestId: 'req-1',
       rank: 1,
       name: 'hero_cut_v3.mp4',
+      videoPath: null,
       score: 82,
       status: 'ready',
       thumb: 'bg-violet-100 text-violet-500',

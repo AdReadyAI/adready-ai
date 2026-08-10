@@ -1,6 +1,7 @@
 import Dropzone from "../Dropzone";
 import MediaGrid from "../MediaGrid";
 import VideoCard from "./VideoCard";
+import RequiredMark from "../campaign_section/RequiredMark";
 import type { UploadedVideo } from "../../../pages/UploadPage";
 
 type UploadSectionProps = {
@@ -12,7 +13,7 @@ type UploadSectionProps = {
 export default function UploadSection({ videos, onFilesSelected, onRemoveVideo }: UploadSectionProps) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-6">
-      <h2 className="font-semibold flex text-slate-900 text-lg items-center gap-2 mb-4"><span className="bg-[#534AB7] text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>Upload Your Video ad(s)</h2>
+      <h2 className="font-semibold flex text-slate-900 text-lg items-center gap-2 mb-4"><span className="bg-[#534AB7] text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span>Upload Your Video ad(s)<RequiredMark announce /></h2>
       <Dropzone
         onFilesSelected={onFilesSelected}
         accept="video/mp4,video/quicktime"
