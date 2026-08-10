@@ -99,7 +99,7 @@ export default function ReviewRequestsPage() {
 
   return (
     <section className="mx-auto w-full max-w-6xl pb-12">
-      <div className="flex flex-col gap-5 border-b border-slate-200 pb-7 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-5 pb-7 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-4xl font-bold tracking-[-0.025em] text-slate-950">
             Previous Review Requests
@@ -166,7 +166,7 @@ export default function ReviewRequestsPage() {
       )}
 
       {!pageError && reviewRequests && reviewRequests.length > 0 && (
-        <ol className="mt-8 divide-y divide-slate-200 border-y border-slate-200">
+        <ol className="mt-8 divide-y divide-slate-200">
           {reviewRequests.map((reviewRequest) => {
             // One list item is one submission-level Review Request; individual
             // Ad Creatives stay summarized inside it rather than becoming rows.
