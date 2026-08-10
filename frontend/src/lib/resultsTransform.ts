@@ -175,8 +175,13 @@ export function normalizeTimestamp(raw: string | null | undefined): string | nul
 /**
  * Thumbnail tints, assigned by position so a video keeps its color even as the
  * ranking reorders the cards. Purely cosmetic — no table stores this.
+ *
+ * Exported so the loading screen assigns tints by the same rule over the same
+ * name-sorted order: a video then keeps one colour from the progress tile
+ * through to its ranking card, rather than appearing to change identity when
+ * the results land.
  */
-const THUMBS = [
+export const THUMBS = [
   'bg-violet-100 text-violet-500',
   'bg-emerald-100 text-emerald-500',
   'bg-amber-100 text-amber-500',
