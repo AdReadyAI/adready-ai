@@ -1,5 +1,6 @@
 import bisect
 import inspect
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -273,10 +274,12 @@ class VideoAnalyzer:
                 shot_index, is_shot_start, is_fade = shot_info(frame.index)
                 try:
                     caption = future.result()
-                except (TransientError, PermanentError):
-                    logger.exception(
-                        "Captioning failed for frame %s, keeping row with empty caption fields",
+                except (TransientError, PermanentError) as e:
+                    logger.error(
+                        "Captioning failed for frame %s, keeping row with empty caption fields: %s",
                         frame.index,
+                        e,
+                        exc_info=logger.isEnabledFor(logging.DEBUG),
                     )
                     rows.append(VisualFrameRow(
                         frame_id=dh.frame_id("v", frame),
