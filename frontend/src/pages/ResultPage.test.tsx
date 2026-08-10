@@ -14,15 +14,27 @@ import type { BatchResults } from '../lib/resultsTransform'
 import type { VideoResult } from '../types/results'
 import type { RequestProgressState } from '../lib/useRequestProgress'
 
-const { fetchBatchResultsMock, progressRef, paramsRef, retryMock } = vi.hoisted(() => ({
+const {
+  deleteReviewRequestMock,
+  fetchBatchResultsMock,
+  navigateMock,
+  paramsRef,
+  progressRef,
+  retryMock,
+} = vi.hoisted(() => ({
+  deleteReviewRequestMock: vi.fn(),
   fetchBatchResultsMock: vi.fn(),
-  retryMock: vi.fn(),
-  progressRef: { current: {} as RequestProgressState },
+  navigateMock: vi.fn(),
   paramsRef: { current: {} as { batchId?: string } },
+  progressRef: { current: {} as RequestProgressState },
+  retryMock: vi.fn(),
 }))
 
 vi.mock('../lib/results', () => ({ fetchBatchResults: fetchBatchResultsMock }))
 vi.mock('../lib/downloadReport', () => ({ downloadReport: vi.fn() }))
+vi.mock('../lib/reviewRequests', () => ({
+  deleteReviewRequest: deleteReviewRequestMock,
+}))
 vi.mock('../lib/useRequestProgress', () => ({ useRequestProgress: () => progressRef.current }))
 
 // Signs a playback URL against the real Supabase client — mocked out entirely so
@@ -31,6 +43,7 @@ vi.mock('../lib/useSignedVideoUrl', () => ({ useSignedVideoUrl: () => null }))
 
 vi.mock('react-router-dom', () => ({
   useParams: () => paramsRef.current,
+  useNavigate: () => navigateMock,
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => <a href={to}>{children}</a>,
 }))
 
@@ -39,10 +52,9 @@ function requestRow(overrides: Partial<ProgressRequestRow> = {}): ProgressReques
     request_id: 'req-1',
     video_storage_paths: ['user-1/batch-1/video/req-1/ad.mp4'],
     media_processing_status: null,
-    media_processing_error: null,
+    media_processing_failure_code: null,
     agents_triggered_at: null,
     evaluation_completion_status: null,
-    evaluation_completion_last_error: null,
     ...overrides,
   }
 }
@@ -104,7 +116,9 @@ function makeBatch(overrides: Partial<BatchResults> = {}): BatchResults {
 
 beforeEach(() => {
   fetchBatchResultsMock.mockReset()
+  navigateMock.mockReset()
   retryMock.mockReset()
+  deleteReviewRequestMock.mockReset()
   paramsRef.current = { batchId: 'batch-1' }
   progressRef.current = progressState([requestRow()])
 })
@@ -239,8 +253,56 @@ describe('ResultPage gating', () => {
 })
 
 describe('ResultPage failures', () => {
-  // The failure text is sitting in requests.media_processing_error; before this
-  // the user submitted two videos, got one back, and was told nothing.
+  it('keeps the Review Request active while any Ad Creative is still processing', () => {
+    progressRef.current = progressState([
+      requestRow({ media_processing_status: 'processing' }),
+      requestRow({
+        request_id: 'req-2',
+        media_processing_status: 'failed',
+      }),
+    ])
+
+    render(<ResultPage />)
+
+    expect(screen.getByRole('progressbar', { name: 'Overall progress' })).toBeVisible()
+    expect(screen.queryByText('Review Request failed')).not.toBeInTheDocument()
+    expect(fetchBatchResultsMock).not.toHaveBeenCalled()
+  })
+
+  it('shows a safe reason for each failed Ad Creative without offering a retry', async () => {
+    progressRef.current = progressState(
+      [
+        finishedRow(),
+        requestRow({
+          request_id: 'req-2',
+          video_storage_paths: ['user-1/batch-1/video/req-2/failed.mp4'],
+          media_processing_status: 'failed',
+        }),
+      ],
+      {},
+      ['req-1'],
+    )
+    fetchBatchResultsMock.mockResolvedValue(
+      makeBatch({
+        videos: [makeVideo()],
+        pending: [{ requestId: 'req-2', name: 'failed.mp4' }],
+        totalCount: 2,
+        failedCount: 1,
+        reviewRequestStatus: 'partially_failed',
+      }),
+    )
+
+    render(<ResultPage />)
+
+    expect(await screen.findByText('failed.mp4')).toBeVisible()
+    expect(
+      screen.getByText(/Automated video processing could not finish/),
+    ).toBeVisible()
+    expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
+  })
+
+  // The user submitted two videos and got one back, so the omitted creative and
+  // its safe terminal explanation must remain visible above the ranking.
   it('names a video whose pipeline stopped, above the ranking', async () => {
     progressRef.current = progressState(
       [
@@ -249,7 +311,6 @@ describe('ResultPage failures', () => {
           request_id: 'req-2',
           video_storage_paths: ['user-1/batch-1/video/req-2/b.mp4'],
           media_processing_status: 'failed',
-          media_processing_error: 'unsupported codec',
         }),
       ],
       {},
@@ -263,20 +324,20 @@ describe('ResultPage failures', () => {
 
     expect(await screen.findByText('1 video could not be reviewed')).toBeVisible()
     expect(screen.getByText('b.mp4')).toBeVisible()
-    expect(screen.getByText(/unsupported codec/)).toBeVisible()
+    expect(screen.getByText(/Automated video processing could not finish/)).toBeVisible()
     expect(screen.getByText('Your results are ready.')).toBeVisible()
   })
 
   it('explains a batch where every video died', async () => {
     progressRef.current = progressState([
-      requestRow({ media_processing_status: 'failed', media_processing_error: 'download failed' }),
+      requestRow({ media_processing_status: 'failed' }),
     ])
     fetchBatchResultsMock.mockResolvedValue(makeBatch({ totalCount: 1 }))
 
     render(<ResultPage />)
 
     expect(await screen.findByText('No results to show')).toBeVisible()
-    expect(screen.getByText(/download failed/)).toBeVisible()
+    expect(screen.getByText(/Automated video processing could not finish/)).toBeVisible()
   })
 
   it('surfaces a failure of the results query itself', async () => {

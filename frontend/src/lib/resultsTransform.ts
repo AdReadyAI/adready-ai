@@ -60,6 +60,10 @@ export interface BatchResults {
   totalCount: number
   /** True when every request in the batch has a score row. */
   complete: boolean
+  /** Terminally failed creatives, supplied by the review-lifecycle projection. */
+  failedCount?: number
+  /** Review Request lifecycle state used to distinguish active from terminal failures. */
+  reviewRequestStatus?: 'queued' | 'processing' | 'completed' | 'partially_failed' | 'failed'
 }
 
 // ---- status --------------------------------------------------------------
@@ -374,6 +378,8 @@ export function assembleVideoResults(input: {
     pending,
     totalCount: requests.length,
     complete: requests.length > 0 && pending.length === 0,
+    failedCount: 0,
+    reviewRequestStatus: requests.length > 0 && pending.length === 0 ? 'completed' : 'queued',
   }
 }
 

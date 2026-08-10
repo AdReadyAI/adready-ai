@@ -40,12 +40,12 @@ export interface ProgressRequestRow {
   video_storage_paths: string[] | null
   /** 'pending' | 'processing' | 'completed' | 'failed', or null before pickup. */
   media_processing_status: string | null
-  media_processing_error: string | null
+  /** Stable browser-safe category; raw producer diagnostics are never selected. */
+  media_processing_failure_code: string | null
   /** Set by migration 044 when the agents were dispatched. Null means they never were. */
   agents_triggered_at: string | null
   /** 'pending' | 'processing' | 'completed' | 'failed', or null. Migration 048. */
   evaluation_completion_status: string | null
-  evaluation_completion_last_error: string | null
 }
 
 export interface AgentResultRow {
@@ -99,6 +99,21 @@ export const EVALUATORS: ReadonlyArray<{ key: string; label: string }> = [
 
 /** Shown on downstream work that will never run because the video died first. */
 const SKIPPED_DETAIL = 'Skipped — video processing failed'
+const MEDIA_FAILURE_DETAIL =
+  'Automated video processing could not finish, so this creative could not be reviewed.'
+const MEDIA_RETRIES_EXHAUSTED_DETAIL =
+  'Automated video processing could not finish after multiple attempts. Try again later or contact support.'
+const DEGRADED_MEDIA_DETAIL =
+  'Some video analysis could not be completed, so the review continued with partial data.'
+const SCORING_FAILURE_DETAIL =
+  'We could not finish scoring this creative. No score is available for this review.'
+
+/** Translate a producer-owned safe category into stable user-facing copy. */
+function mediaFailureDetail(request: ProgressRequestRow): string {
+  return request.media_processing_failure_code === 'media_processing_retries_exhausted'
+    ? MEDIA_RETRIES_EXHAUSTED_DETAIL
+    : MEDIA_FAILURE_DETAIL
+}
 
 // ---- media processing ----------------------------------------------------
 
@@ -127,17 +142,17 @@ function mediaUnit(request: ProgressRequestRow): ProgressUnit {
   // Labelled as the work, not the stage — the stage header above it already
   // says "Processing your video", and repeating it reads as a rendering bug.
   const base = { key: 'media', label: 'Preparing and analyzing', weight: MEDIA_WEIGHT }
-  const error = request.media_processing_error
 
   switch (request.media_processing_status) {
     case 'completed':
       return { ...base, status: 'success', detail: null }
 
     case 'failed':
-      // Both branches show the same producer text; only the severity differs.
+      // Producer diagnostics stay internal. Users receive stable copy based on
+      // the terminal state, while operators retain the raw error in `requests`.
       return agentsDispatched(request)
-        ? { ...base, status: 'warning', detail: degradedDetail(error) }
-        : { ...base, status: 'error', detail: error ?? 'Video processing failed' }
+        ? { ...base, status: 'warning', detail: DEGRADED_MEDIA_DETAIL }
+        : { ...base, status: 'error', detail: mediaFailureDetail(request) }
 
     case 'processing':
       // The worker only writes 'completed' after every analyzer has persisted
@@ -151,10 +166,9 @@ function mediaUnit(request: ProgressRequestRow): ProgressUnit {
       return {
         ...base,
         status: 'processing',
-        // record_media_processing_error stamps the reason on every transient
-        // failure but leaves the status alone, because pgmq will redeliver.
-        // Surfacing it as a retry note is honest without looking fatal.
-        detail: error === null ? null : `Retrying after an error: ${error}`,
+        // Transient failures are recovered by the worker and evaluator layers.
+        // They are intentionally invisible here unless recovery is exhausted.
+        detail: null,
       }
 
     // 'pending', null, and anything a future migration adds. Unknown values fall
@@ -163,11 +177,6 @@ function mediaUnit(request: ProgressRequestRow): ProgressUnit {
     default:
       return { ...base, status: 'queued', detail: null }
   }
-}
-
-function degradedDetail(error: string | null): string {
-  const reason = error ?? 'Some analysis steps failed'
-  return `${reason} — the review continued with partial data.`
 }
 
 // ---- evaluation ----------------------------------------------------------
@@ -222,7 +231,7 @@ function scoringUnit(request: ProgressRequestRow, scored: boolean): ProgressUnit
       return {
         ...base,
         status: 'error',
-        detail: request.evaluation_completion_last_error ?? 'Scoring failed',
+        detail: SCORING_FAILURE_DETAIL,
       }
     case 'pending':
     case 'processing':
@@ -282,10 +291,10 @@ function toStage(key: string, label: string, units: ProgressUnit[]): StageProgre
  */
 function fatalErrorFor(request: ProgressRequestRow): string | null {
   if (isFatalMediaFailure(request)) {
-    return request.media_processing_error ?? 'Video processing failed'
+    return mediaFailureDetail(request)
   }
   if (request.evaluation_completion_status === 'failed') {
-    return request.evaluation_completion_last_error ?? 'Scoring failed'
+    return SCORING_FAILURE_DETAIL
   }
   return null
 }
