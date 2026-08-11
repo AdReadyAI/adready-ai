@@ -140,7 +140,7 @@ def test_mark_media_processing_started_sets_processing_status():
 
     sql, params = cur.executed[0]
     assert "UPDATE requests" in sql
-    assert params == ("processing", None, REQUEST_ID)
+    assert params == ("processing", None, None, REQUEST_ID)
 
 
 def test_mark_media_processing_completed_sets_completed_status():
@@ -151,7 +151,7 @@ def test_mark_media_processing_completed_sets_completed_status():
 
     sql, params = cur.executed[0]
     assert "UPDATE requests" in sql
-    assert params == ("completed", None, REQUEST_ID)
+    assert params == ("completed", None, None, REQUEST_ID)
 
 
 def test_mark_media_processing_failed_sets_failed_status_and_error():
@@ -162,7 +162,12 @@ def test_mark_media_processing_failed_sets_failed_status_and_error():
 
     sql, params = cur.executed[0]
     assert "UPDATE requests" in sql
-    assert params == ("failed", "boom", REQUEST_ID)
+    assert params == (
+        "failed",
+        "boom",
+        "media_processing_failed",
+        REQUEST_ID,
+    )
 
 
 def test_record_media_processing_error_updates_error_only():
@@ -186,6 +191,7 @@ def test_mark_media_processing_exhausted_updates_status_only():
     sql, params = cur.executed[0]
     assert "UPDATE requests" in sql
     assert "media_processing_error" not in sql
+    assert "media_processing_failure_code = 'media_processing_retries_exhausted'" in sql
     assert params == (REQUEST_ID,)
 
 

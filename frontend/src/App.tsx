@@ -4,6 +4,7 @@ import AppLayout from './components/layout/AppLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import UploadPage from './pages/UploadPage'
 import ResultPage from './pages/ResultPage'
+import ReviewRequestsPage from './pages/ReviewRequestsPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import AuthCallbackPage from './pages/auth/AuthCallbackPage'
 import SignInPage from './pages/auth/SignInPage'
@@ -26,6 +27,7 @@ function App() {
           <Route path="privacy" element={<PrivacyPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="upload" element={<UploadPage />} />
+            <Route path="reviews" element={<ReviewRequestsPage />} />
             {/* The batch id lives in the URL so results survive a refresh and
                 can be shared or revisited. Router state does not survive either. */}
             <Route path="result/:batchId" element={<ResultPage />} />

@@ -14,10 +14,9 @@ function requestRow(overrides: Partial<ProgressRequestRow> = {}): ProgressReques
     request_id: 'req-1',
     video_storage_paths: ['user-1/batch-1/video/req-1/ad.mp4'],
     media_processing_status: null,
-    media_processing_error: null,
+    media_processing_failure_code: null,
     agents_triggered_at: null,
     evaluation_completion_status: null,
-    evaluation_completion_last_error: null,
     ...overrides,
   }
 }
@@ -98,20 +97,6 @@ describe('media unit', () => {
     ).toBe('processing')
   })
 
-  // record_media_processing_error stamps a reason on every transient failure but
-  // leaves the status alone, because pgmq will redeliver the job.
-  it('shows a retry note while still processing after a recorded error', () => {
-    const media = unitFor(
-      build(
-        requestRow({ media_processing_status: 'processing', media_processing_error: 'storage 503' }),
-      ),
-      'media',
-    )
-
-    expect(media.status).toBe('processing')
-    expect(media.detail).toBe('Retrying after an error: storage 503')
-  })
-
   // The worker only writes 'completed' when nothing errored, so a run with one
   // failed analyzer sits on 'processing' across retries with its analysis
   // already final and the agents away. Waiting for 'completed' would stall.
@@ -135,12 +120,11 @@ describe('media unit', () => {
     ).toBe('success')
   })
 
-  it('warns rather than errors on a degraded run, and keeps the reason', () => {
+  it('warns rather than errors on a degraded run with safe display copy', () => {
     const media = unitFor(
       build(
         requestRow({
           media_processing_status: 'failed',
-          media_processing_error: 'transcription timed out',
           agents_triggered_at: '2026-08-10T12:00:00Z',
         }),
       ),
@@ -149,26 +133,36 @@ describe('media unit', () => {
 
     expect(media.status).toBe('warning')
     expect(media.detail).toBe(
-      'transcription timed out — the review continued with partial data.',
+      'Some video analysis could not be completed, so the review continued with partial data.',
     )
   })
 
-  it('errors when the run stopped, and keeps the reason', () => {
+  it('errors when the run stopped with safe actionable copy', () => {
     const media = unitFor(
-      build(
-        requestRow({ media_processing_status: 'failed', media_processing_error: 'bad codec' }),
-      ),
+      build(requestRow({ media_processing_status: 'failed' })),
       'media',
     )
 
     expect(media.status).toBe('error')
-    expect(media.detail).toBe('bad codec')
+    expect(media.detail).toBe(
+      'Automated video processing could not finish, so this creative could not be reviewed.',
+    )
   })
 
-  it('still explains a fatal failure that recorded no error text', () => {
-    expect(
-      unitFor(build(requestRow({ media_processing_status: 'failed' })), 'media').detail,
-    ).toBe('Video processing failed')
+  it('explains when automatic media retries were exhausted', () => {
+    const media = unitFor(
+      build(
+        requestRow({
+          media_processing_status: 'failed',
+          media_processing_failure_code: 'media_processing_retries_exhausted',
+        }),
+      ),
+      'media',
+    )
+
+    expect(media.detail).toBe(
+      'Automated video processing could not finish after multiple attempts. Try again later or contact support.',
+    )
   })
 
   // Migration 042 already widened one of these CHECK constraints once. An
@@ -263,19 +257,18 @@ describe('scoring unit', () => {
     ).toBe('success')
   })
 
-  it('errors with the recorded reason when completion failed', () => {
+  it('errors with safe display copy when completion failed', () => {
     const scoring = unitFor(
       build(
-        requestRow({
-          evaluation_completion_status: 'failed',
-          evaluation_completion_last_error: 'scorecard projection failed',
-        }),
+        requestRow({ evaluation_completion_status: 'failed' }),
       ),
       'scoring',
     )
 
     expect(scoring.status).toBe('error')
-    expect(scoring.detail).toBe('scorecard projection failed')
+    expect(scoring.detail).toBe(
+      'We could not finish scoring this creative. No score is available for this review.',
+    )
   })
 })
 
@@ -335,6 +328,15 @@ describe('weighted percentage', () => {
     ).toBe(100)
   })
 
+  it('uses a persisted Scorecard as proof that stale prerequisite stages finished', () => {
+    const video = build(requestRow(), [], true)
+
+    expect(video.pct).toBe(100)
+    expect(video.isDone).toBe(true)
+    expect(video.status).toBe('success')
+    expect(video.fatalError).toBeNull()
+  })
+
   // Every unit is terminal ('error' counts), so the page must be free to move on
   // rather than spinning until the ten-minute timeout.
   it('reaches 100 and done on a fatally failed video', () => {
@@ -342,14 +344,15 @@ describe('weighted percentage', () => {
 
     expect(video.pct).toBe(100)
     expect(video.isDone).toBe(true)
-    expect(video.fatalError).toBe('Video processing failed')
+    expect(video.fatalError).toBe(
+      'Automated video processing could not finish, so this creative could not be reviewed.',
+    )
   })
 
   it('reports no fatal error on a degraded run that still scored', () => {
     const video = build(
       requestRow({
         media_processing_status: 'failed',
-        media_processing_error: 'ocr crashed',
         agents_triggered_at: '2026-08-10T12:00:00Z',
       }),
       EVALUATORS.map((evaluator) => evaluator.key),
@@ -367,12 +370,13 @@ describe('weighted percentage', () => {
         media_processing_status: 'completed',
         agents_triggered_at: '2026-08-10T12:00:00Z',
         evaluation_completion_status: 'failed',
-        evaluation_completion_last_error: 'issue projection failed',
       }),
       EVALUATORS.map((evaluator) => evaluator.key),
     )
 
-    expect(video.fatalError).toBe('issue projection failed')
+    expect(video.fatalError).toBe(
+      'We could not finish scoring this creative. No score is available for this review.',
+    )
     expect(video.isDone).toBe(true)
   })
 })
@@ -467,13 +471,11 @@ describe('buildBatchProgress', () => {
         requestRow({
           request_id: 'req-1',
           media_processing_status: 'failed',
-          media_processing_error: 'bad codec',
         }),
         requestRow({
           request_id: 'req-2',
           video_storage_paths: ['user-1/batch-1/video/req-2/b.mp4'],
           media_processing_status: 'failed',
-          media_processing_error: 'ocr crashed',
           agents_triggered_at: '2026-08-10T12:00:00Z',
         }),
       ],
@@ -482,7 +484,9 @@ describe('buildBatchProgress', () => {
     })
 
     expect(batch.failed.map((video) => video.requestId)).toEqual(['req-1'])
-    expect(batch.failed[0].fatalError).toBe('bad codec')
+    expect(batch.failed[0].fatalError).toBe(
+      'Automated video processing could not finish, so this creative could not be reviewed.',
+    )
   })
 
   // Matches assembleVideoResults, so a video holds the same position in the

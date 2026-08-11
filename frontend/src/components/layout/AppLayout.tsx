@@ -17,7 +17,7 @@ export default function AppLayout() {
             {user && (
               <>
                 <NavLink to="/upload" className={navLinkClasses}>Upload</NavLink>
-                <NavLink to="/result" className={navLinkClasses}>Result</NavLink>
+                <NavLink to="/reviews" className={navLinkClasses}>Reviews</NavLink>
                 <button
                   onClick={() => signOut()}
                   className="px-3 py-2 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-100"

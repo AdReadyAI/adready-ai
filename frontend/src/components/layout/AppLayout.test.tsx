@@ -54,7 +54,7 @@ describe("AppLayout", () => {
     expect(screen.getByText("AdReady AI")).toBeVisible();
     expect(screen.getByRole("link", { name: "Sign in" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "Upload" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Result" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Reviews" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
   });
 
@@ -65,7 +65,7 @@ describe("AppLayout", () => {
     renderLayout();
 
     expect(screen.getByRole("link", { name: "Upload" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "Result" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Reviews" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "Sign in" })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Sign out" }));

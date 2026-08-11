@@ -20,7 +20,7 @@
 // last stage of four, so it sat at "0 of N scored" for almost the whole run.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import DownloadIcon from '../components/icons/DownloadIcon'
 import IssueRow from '../components/results/IssueRow'
 import MetricBar from '../components/results/MetricBar'
@@ -32,6 +32,7 @@ import { fetchBatchResults } from '../lib/results'
 import type { BatchResults } from '../lib/results'
 import { emptyIssuesCopy, scoreText } from '../lib/reportModel'
 import { getErrorMessage } from '../lib/errorMessage'
+import { deleteReviewRequest } from '../lib/reviewRequests'
 import { useRequestProgress } from '../lib/useRequestProgress'
 import { useSignedVideoUrl } from '../lib/useSignedVideoUrl'
 import type { VideoProgress } from '../types/progress'
@@ -106,8 +107,8 @@ interface LoadedResults {
  *
  * These have no scorecard and so are absent from the ranking entirely. Without
  * this the user submits four videos, gets three back, and is told nothing about
- * the fourth — the failure text is sitting in `requests.media_processing_error`
- * and was never surfaced.
+ * the fourth. Explanations are stable user-facing copy derived from terminal
+ * states; raw production diagnostics never cross the browser boundary.
  */
 function FailedVideos({ videos }: { videos: VideoProgress[] }) {
   return (
@@ -119,8 +120,6 @@ function FailedVideos({ videos }: { videos: VideoProgress[] }) {
         {videos.map((video) => (
           <li key={video.requestId} className="text-sm text-red-700">
             <span className="font-semibold">{video.name}</span>
-            {/* Raw producer text — long, technical, and the only real explanation
-                the user can get. break-words keeps it inside the card. */}
             <span className="break-words"> — {video.fatalError}</span>
           </li>
         ))}
@@ -129,8 +128,88 @@ function FailedVideos({ videos }: { videos: VideoProgress[] }) {
   )
 }
 
+/** Show terminal Failure Reasons when no Ad Creative produced a Scorecard. */
+function FailedReviewRequest({
+  data,
+  failedVideos,
+  actionError,
+  deleting,
+  onDelete,
+}: {
+  data: BatchResults
+  failedVideos: VideoProgress[]
+  actionError: string | null
+  deleting: boolean
+  onDelete: () => void
+}) {
+  const failuresByRequestId = new Map(
+    failedVideos.map((video) => [video.requestId, video.fatalError]),
+  )
+
+  return (
+    <Shell>
+      <div className="max-w-3xl">
+        <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+          Review Request failed
+        </span>
+        <h1 className="mt-4 text-3xl font-bold text-slate-950">
+          Some analysis could not be completed.
+        </h1>
+        <p className="mt-2 max-w-2xl leading-7 text-slate-600">
+          {data.videos.length} of {data.totalCount} creatives produced a scorecard.{' '}
+          {data.failedCount} {data.failedCount === 1 ? 'creative failed' : 'creatives failed'}
+          after automated recovery was exhausted.
+        </p>
+
+        {data.pending.length > 0 && (
+          <div className="mt-8 rounded-xl bg-white px-6 py-5 shadow-[0_6px_24px_rgba(15,23,42,0.06)]">
+            <h2 className="font-bold text-slate-900">Creatives without a scorecard</h2>
+            <ul className="mt-3 space-y-2 text-sm text-slate-600">
+              {data.pending.map((creative) => {
+                const reason = failuresByRequestId.get(creative.requestId)
+
+                // Terminal progress and result rows are fetched separately, so
+                // retain a safe fallback if one response briefly lacks detail.
+                return (
+                  <li key={creative.requestId} className="text-sm text-slate-600">
+                    <span className="font-semibold text-slate-800">{creative.name}</span>
+                    <span className="break-words">
+                      {' '}
+                      — {reason ?? 'The review could not be completed for this creative.'}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+
+        {actionError && <p className="mt-5 text-sm font-medium text-red-700">{actionError}</p>}
+
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link
+            to="/reviews"
+            className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-5 text-sm font-semibold text-slate-800 hover:bg-white"
+          >
+            Back to reviews
+          </Link>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={deleting}
+            className="min-h-11 rounded-lg px-4 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deleting ? 'Deleting…' : 'Delete Review Request'}
+          </button>
+        </div>
+      </div>
+    </Shell>
+  )
+}
+
 export default function ResultPage() {
   const { batchId } = useParams<{ batchId: string }>()
+  const navigate = useNavigate()
 
   const { progress, error: progressError, timedOut, retry } = useRequestProgress(batchId)
 
@@ -139,6 +218,8 @@ export default function ResultPage() {
   const [expandedIssueId, setExpandedIssueId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = useCallback(async () => {
     if (!batchId) return
@@ -206,6 +287,22 @@ export default function ResultPage() {
       setExportError(getErrorMessage(err, 'Could not build the PDF'))
     } finally {
       setExporting(false)
+    }
+  }
+
+  /** Delete the current Review Request and leave its now-invalid result URL. */
+  async function removeReviewRequest() {
+    if (!batchId) return
+    if (!window.confirm('Delete this Review Request and its generated analysis?')) return
+
+    setActionError(null)
+    setDeleting(true)
+    try {
+      await deleteReviewRequest(batchId)
+      navigate('/reviews')
+    } catch (err) {
+      setActionError(getErrorMessage(err, 'Could not delete this Review Request'))
+      setDeleting(false)
     }
   }
 
@@ -280,6 +377,21 @@ export default function ResultPage() {
       <Shell>
         <p className="text-slate-500">Loading your results…</p>
       </Shell>
+    )
+  }
+
+  // A partial failure still has useful scorecards. Keep the normal ranking and
+  // place the failed creatives above it; only a fully failed review needs the
+  // dedicated terminal screen.
+  if (data.reviewRequestStatus === 'failed') {
+    return (
+      <FailedReviewRequest
+        data={data}
+        failedVideos={progress.failed}
+        actionError={actionError}
+        deleting={deleting}
+        onDelete={() => void removeReviewRequest()}
+      />
     )
   }
 
@@ -375,7 +487,7 @@ export default function ResultPage() {
           </div>
         </div>
 
-        <div className="border-l-4 border-red-500 pl-6">
+        <div className="lg:border-l lg:border-slate-200 lg:pl-8">
           <h3 className="text-2xl font-bold text-slate-900">Issue Deep Dive &amp; Repair Center</h3>
           <p className="mt-1 text-sm text-slate-500">
             {selected.name} · {selected.issues.length} issue
