@@ -166,11 +166,15 @@ export function buildBrandResult(
       "Does the ad's logo, visual identity, and voice align with the supplied brand guidance?",
     result,
     severity,
-    confidence: logo.confidence === "low" || qualitative.confidence === "low"
-      ? "low"
-      : logo.confidence === "medium" || qualitative.confidence === "medium"
-      ? "medium"
-      : "high",
+    confidence:
+      logo.confidence === "cannot_assess" ||
+        qualitative.confidence === "cannot_assess"
+        ? "cannot_assess"
+        : logo.confidence === "low" || qualitative.confidence === "low"
+        ? "low"
+        : logo.confidence === "medium" || qualitative.confidence === "medium"
+        ? "medium"
+        : "high",
     evidence: [...logo.evidence, ...qualitative.evidence],
     explanation: result === "cannot_assess"
       ? "Brand fit could not be fully assessed because required brand guidance or qualitative evaluation was unavailable."

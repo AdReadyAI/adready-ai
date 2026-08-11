@@ -15,7 +15,7 @@ export type MetricResultValue = "true" | "false" | "cannot_assess";
 export type Severity = "none" | "low" | "medium" | "high" | "critical";
 
 /** Agent-provided confidence. Omitted input becomes `unknown`. */
-export type Confidence = "high" | "medium" | "low";
+export type Confidence = "high" | "medium" | "low" | "cannot_assess";
 
 export type ConfidenceLevel = Confidence | "unknown";
 
