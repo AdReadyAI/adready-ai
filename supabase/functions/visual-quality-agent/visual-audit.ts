@@ -30,7 +30,9 @@ const VisualAuditResponseSchema = z.object({
 
       explanation: z.string(),
 
-      evidence_text: z.string(),
+      // Models commonly express absent evidence as either null or omission.
+      // Normalize both to the empty-string contract consumed by metrics.ts.
+      evidence_text: z.string().nullish().transform((value) => value ?? ""),
 
       evidence_timestamp_ms: z.number()
         .int()
@@ -70,7 +72,6 @@ export async function auditVisualQuality(
   });
 
   const MAX_ATTEMPTS = 3;
-  let parsed: unknown;
   let lastError: unknown;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const messages: {
@@ -91,17 +92,22 @@ export async function auditVisualQuality(
     const response = await chat(messages);
 
     try {
-      parsed = parseLLMJson(response);
-      break;
+      // Parsing and schema validation share one retry boundary because either
+      // kind of malformed model response benefits from the corrective prompt.
+      return parseVisualAuditResponse(response);
     } catch (error) {
       lastError = error;
     }
   }
-  if (parsed === undefined) throw lastError;
 
-  const validated = VisualAuditResponseSchema.parse(
-    parsed,
-  );
+  throw lastError;
+}
+
+/** Parse and validate one raw model response into the evaluator contract. */
+export function parseVisualAuditResponse(
+  content: string,
+): VisualAuditFinding[] {
+  const validated = VisualAuditResponseSchema.parse(parseLLMJson(content));
 
   const requiredCheckIds = [
     "ai_artifacts",
