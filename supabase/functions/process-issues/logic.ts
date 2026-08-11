@@ -98,7 +98,13 @@ export function buildIssuesSummary(
       severity = "none";
     }
 
-    const validConfidences = ["low", "medium", "high", "cannot_assess", "unknown"];
+    const validConfidences = [
+      "low",
+      "medium",
+      "high",
+      "cannot_assess",
+      "unknown",
+    ];
     let confidence = (result.confidence || "unknown").toLowerCase();
     if (!validConfidences.includes(confidence)) {
       confidence = "unknown";

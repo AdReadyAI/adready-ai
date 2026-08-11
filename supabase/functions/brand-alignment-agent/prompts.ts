@@ -109,7 +109,9 @@ function confidence(
   left: ConfidenceLevel,
   right: ConfidenceLevel,
 ): ConfidenceLevel {
-  if (left === "cannot_assess" || right === "cannot_assess") return "cannot_assess";
+  if (left === "cannot_assess" || right === "cannot_assess") {
+    return "cannot_assess";
+  }
   if (left === "low" || right === "low") return "low";
   if (left === "medium" || right === "medium") return "medium";
   return "high";
