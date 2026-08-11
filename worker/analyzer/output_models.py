@@ -145,3 +145,15 @@ class VisualFrameResult(TaskResult[VisualFrameRow]):
     table: ClassVar[str] = "visual_frames"
 
 
+# ==============================================
+#  product_context  ->  product_context
+# ==============================================
+
+class ProductContextRow(TaskRow):
+    raw_text: str
+    reference_asset_urls: list[str]
+
+class ProductContextResult(TaskResult[ProductContextRow]):
+    table: ClassVar[str] = "product_context"
+
+

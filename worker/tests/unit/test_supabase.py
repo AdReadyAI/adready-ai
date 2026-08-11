@@ -130,6 +130,72 @@ def test_mark_processing_upserts_processing_status():
 
 
 # ---------------------------------------------------------------------------
+# media_processing_status lifecycle
+# ---------------------------------------------------------------------------
+def test_mark_media_processing_started_sets_processing_status():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.mark_media_processing_started()
+
+    sql, params = cur.executed[0]
+    assert "UPDATE requests" in sql
+    assert params == ("processing", None, None, REQUEST_ID)
+
+
+def test_mark_media_processing_completed_sets_completed_status():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.mark_media_processing_completed()
+
+    sql, params = cur.executed[0]
+    assert "UPDATE requests" in sql
+    assert params == ("completed", None, None, REQUEST_ID)
+
+
+def test_mark_media_processing_failed_sets_failed_status_and_error():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.mark_media_processing_failed("boom")
+
+    sql, params = cur.executed[0]
+    assert "UPDATE requests" in sql
+    assert params == (
+        "failed",
+        "boom",
+        "media_processing_failed",
+        REQUEST_ID,
+    )
+
+
+def test_record_media_processing_error_updates_error_only():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.record_media_processing_error("storage 503")
+
+    sql, params = cur.executed[0]
+    assert "UPDATE requests" in sql
+    assert "media_processing_status" not in sql
+    assert params == ("storage 503", REQUEST_ID)
+
+
+def test_mark_media_processing_exhausted_updates_status_only():
+    cur = FakeCursor()
+    db = Supabase(cur=cur, request_id=REQUEST_ID)
+
+    db.mark_media_processing_exhausted()
+
+    sql, params = cur.executed[0]
+    assert "UPDATE requests" in sql
+    assert "media_processing_error" not in sql
+    assert "media_processing_failure_code = 'media_processing_retries_exhausted'" in sql
+    assert params == (REQUEST_ID,)
+
+
+# ---------------------------------------------------------------------------
 # completed_analyzers()
 # ---------------------------------------------------------------------------
 def test_completed_analyzers_returns_successful_task_names():
@@ -149,50 +215,6 @@ def test_completed_analyzers_empty():
     cur = FakeCursor(fetchall_result=[])
     db = Supabase(cur=cur, request_id=REQUEST_ID)
     assert db.completed_analyzers() == set()
-
-
-# ---------------------------------------------------------------------------
-# Product Context
-# ---------------------------------------------------------------------------
-def test_product_url_requiring_context_returns_unprocessed_url():
-    cur = FakeCursor(fetchone_queue=[("https://example.com/product",)])
-    db = Supabase(cur=cur, request_id=REQUEST_ID)
-
-    url = db.product_url_requiring_context()
-
-    assert url == "https://example.com/product"
-    sql, params = cur.executed[0]
-    assert "FROM requests" in sql
-    assert "LEFT JOIN product_context" in sql
-    assert params == (REQUEST_ID,)
-
-
-def test_product_url_requiring_context_returns_none_when_already_populated():
-    cur = FakeCursor(fetchone_queue=[None])
-    db = Supabase(cur=cur, request_id=REQUEST_ID)
-
-    assert db.product_url_requiring_context() is None
-
-
-def test_upsert_product_context_updates_extracted_values_transactionally():
-    cur = FakeCursor()
-    db = Supabase(cur=cur, request_id=REQUEST_ID)
-
-    db.upsert_product_context(
-        "Product facts",
-        ("https://example.com/product.jpg",),
-    )
-
-    sql, params = cur.executed[0]
-    assert "INSERT INTO product_context" in sql
-    assert "ON CONFLICT (request_id)" in sql
-    assert "reference_asset_urls" in sql
-    assert params == (
-        REQUEST_ID,
-        "Product facts",
-        ["https://example.com/product.jpg"],
-    )
-    assert cur.connection.commits == 1
 
 
 # ---------------------------------------------------------------------------

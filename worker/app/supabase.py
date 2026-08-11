@@ -56,6 +56,51 @@ class Supabase:
 
     def mark_processing(self, task_name: str) -> None:
         self._upsert_processing(task_name, "processing", None)
+
+    def mark_media_processing_started(self) -> None:
+        self._set_media_processing_status("processing")
+
+    def mark_media_processing_completed(self) -> None:
+        self._set_media_processing_status("completed")
+
+    def mark_media_processing_failed(self, error: str) -> None:
+        """End a non-retryable run while retaining separate safe and raw reasons."""
+        self._set_media_processing_status(
+            "failed",
+            error,
+            failure_code="media_processing_failed",
+        )
+
+    def record_media_processing_error(self, error: str) -> None:
+        """Persist the latest failure reason without ending the retry cycle."""
+        self.cur.execute(
+            "UPDATE requests SET media_processing_error = %s WHERE request_id = %s;",
+            (error, self.request_id),
+        )
+
+    def mark_media_processing_exhausted(self) -> None:
+        """End an exhausted retry cycle without replacing its raw diagnostic."""
+        self.cur.execute(
+            "UPDATE requests SET media_processing_status = 'failed', "
+            "media_processing_failure_code = 'media_processing_retries_exhausted' "
+            "WHERE request_id = %s;",
+            (self.request_id,),
+        )
+
+    def _set_media_processing_status(
+        self,
+        status: str,
+        error: str | None = None,
+        failure_code: str | None = None,
+    ) -> None:
+        """Persist lifecycle state with browser-safe and operator-only reasons."""
+        self.cur.execute(
+            "UPDATE requests SET media_processing_status = %s, media_processing_error = %s, "
+            "media_processing_failure_code = %s "
+            "WHERE request_id = %s;",
+            (status, error, failure_code, self.request_id),
+        )
+
     def persist_quality_frames(self, flags: list[QualityFlag]) -> None:
         """Replace this request's flagged-frame evidence (delete + reinsert,
         same as _replace_rows) so a retried job doesn't duplicate rows —
@@ -148,46 +193,6 @@ class Supabase:
         )
         return {row[0] for row in self.cur.fetchall()}
 
-    def product_url_requiring_context(self) -> str | None:
-        """Return the Product Reference URL only when extracted context is missing."""
-        self.cur.execute(
-            """
-            SELECT r.product_url
-            FROM requests AS r
-            LEFT JOIN product_context AS pc ON pc.request_id = r.request_id
-            WHERE r.request_id = %s
-              AND NULLIF(BTRIM(r.product_url), '') IS NOT NULL
-              AND NULLIF(BTRIM(pc.raw_text), '') IS NULL;
-            """,
-            (self.request_id,),
-        )
-        row = self.cur.fetchone()
-        return row[0] if row else None
-
-    def upsert_product_context(
-        self,
-        raw_text: str,
-        reference_asset_urls: tuple[str, ...],
-    ) -> None:
-        """Persist extracted Product Reference values without replacing curated fields."""
-        with self.transaction():
-            self.cur.execute(
-                """
-                INSERT INTO product_context (request_id, raw_text, reference_asset_urls)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (request_id)
-                DO UPDATE SET
-                  raw_text = EXCLUDED.raw_text,
-                  reference_asset_urls = ARRAY(
-                    SELECT DISTINCT UNNEST(
-                      product_context.reference_asset_urls
-                      || EXCLUDED.reference_asset_urls
-                    )
-                  );
-                """,
-                (self.request_id, raw_text, list(reference_asset_urls)),
-            )
-    
     def _upsert_processing(self, task_name, status, result_table, error=None) -> str:
         self.cur.execute(
             """

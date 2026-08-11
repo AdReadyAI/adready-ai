@@ -21,3 +21,34 @@ export async function persistMetricResults(
   });
   if (error) throw error;
 }
+
+/**
+ * Atomically persist one evaluator's complete output and finish its Run.
+ *
+ * Evaluator adapters should call this only after claiming the matching Run as
+ * processing. Keeping output persistence and lifecycle completion behind one
+ * database function prevents either side from committing on its own.
+ */
+export async function completeEvaluatorRun(
+  requestId: string,
+  evaluator: string,
+  input: MetricResult[],
+): Promise<void> {
+  const results = validateMetricResults(input);
+  const supabase = createSupabaseServiceClient();
+  const { data: completed, error } = await supabase.rpc(
+    "complete_evaluator_run",
+    {
+      p_request_id: requestId,
+      p_evaluator: evaluator,
+      p_results: results,
+    },
+  );
+
+  if (error) throw error;
+  if (!completed) {
+    throw new Error(
+      `Evaluator Run does not exist: ${evaluator} for request ${requestId}`,
+    );
+  }
+}

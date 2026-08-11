@@ -33,6 +33,22 @@ const VISUAL_FINDING_SEVERITY: Record<
   4: "critical",
 };
 
+/** Actionable repair guidance for each production-readiness failure. */
+const PRODUCTION_READINESS_FIXES: Record<string, string> = {
+  video_corruption:
+    "Replace or re-export the corrupted video file, then run the review again.",
+  dropped_frames:
+    "Re-export the video with a stable frame rate and replace any damaged source frames.",
+  ai_artifacts:
+    "Regenerate or replace the affected shots until visual distortions and synthetic artifacts are removed.",
+  poor_framing_lighting:
+    "Reframe or relight the affected shots so the subject remains clear and properly exposed.",
+  jarring_transitions:
+    "Replace or smooth the affected transitions so cuts do not visibly jump or flicker.",
+  illegible_text:
+    "Increase the affected text's size, contrast, or screen time until it is clearly readable.",
+};
+
 /**
  * Evaluates all six production-readiness checks
  * and synthesizes the final MetricResult.
@@ -81,9 +97,7 @@ export function evaluateProductionReadiness(
     confidence,
     evidence: evidences.length > 0 ? evidences : undefined,
     explanation: buildExplanation(result, failedChecks, cannotAssessChecks),
-    suggested_correction: failedChecks.length > 0
-      ? "Review and correct the failed production-readiness checks before launch."
-      : undefined,
+    suggested_correction: buildSuggestedCorrection(failedChecks),
     correction_type: failedChecks.length > 0 ? "technical_fix" : undefined,
     sub_checks: subChecks,
   };
@@ -295,5 +309,24 @@ function buildExplanation(
     return `Production readiness could not be fully assessed because ${cannotAssessChecks.length} check(s) could not be assessed.`;
   }
 
-  return `${failedChecks.length} production-readiness check(s) failed.`;
+  return failedChecks
+    .map((check) =>
+      check.explanation ? `${check.name}: ${check.explanation}` : check.name
+    )
+    .join(" ");
+}
+
+/** Builds check-specific repair steps without asking users to rediscover the failure. */
+function buildSuggestedCorrection(
+  failedChecks: SubCheckResult[],
+): string | undefined {
+  if (failedChecks.length === 0) return undefined;
+
+  return failedChecks
+    .map((check) => {
+      const fix = PRODUCTION_READINESS_FIXES[check.check_id] ??
+        "Correct this issue, then run the review again.";
+      return `${check.name}: ${fix}`;
+    })
+    .join(" ");
 }

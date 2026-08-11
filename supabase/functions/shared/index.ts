@@ -4,6 +4,7 @@ export * from "./auth.ts";
 export * from "./internalAuth.ts";
 export * from "./cors.ts";
 export * from "./response.ts";
+export * from "./evaluatorHandler.ts";
 export * from "./handler.ts";
 export * from "./checks.ts";
 export * from "./context.ts";

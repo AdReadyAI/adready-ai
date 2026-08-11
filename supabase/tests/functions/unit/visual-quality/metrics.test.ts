@@ -148,7 +148,7 @@ Deno.test("aggregate: explanation counts multiple cannot_assess checks", () => {
   );
 });
 
-Deno.test("aggregate: explanation counts failed checks", () => {
+Deno.test("aggregate: explanation identifies each failed production-readiness check", () => {
   const context = buildContext({
     video_metadata: {
       ...BASE_VIDEO_METADATA,
@@ -160,11 +160,12 @@ Deno.test("aggregate: explanation counts failed checks", () => {
 
   assertEquals(
     result.explanation,
-    "2 production-readiness check(s) failed.",
+    "Video corruption: Video corruption was detected in the video metadata. " +
+      "Dropped frames: 1 dropped frame marker(s) were detected.",
   );
 });
 
-Deno.test("aggregate: suggested_correction and correction_type set only when something failed", () => {
+Deno.test("aggregate: suggested_correction gives an actionable fix for the failed check", () => {
   const context = buildContext({
     video_metadata: { ...BASE_VIDEO_METADATA, corruption_detected: true },
   });
@@ -172,7 +173,7 @@ Deno.test("aggregate: suggested_correction and correction_type set only when som
 
   assertEquals(
     result.suggested_correction,
-    "Review and correct the failed production-readiness checks before launch.",
+    "Video corruption: Replace or re-export the corrupted video file, then run the review again.",
   );
   assertEquals(result.correction_type, "technical_fix");
 });

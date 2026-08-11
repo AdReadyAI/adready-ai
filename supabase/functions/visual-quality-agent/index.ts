@@ -110,27 +110,14 @@
  *   Stage 4: Synthesis & Scoring - Map findings to production_readiness result.
  */
 
-import { createInternalEdgeHandler, err, ok } from "../shared/index.ts";
+import { createEvaluatorHandler } from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
 
 import { runVisualQualityAgent } from "./agent.ts";
 
-createInternalEdgeHandler(
+createEvaluatorHandler(
   "visual-quality-agent",
+  "visual_quality",
   AgentRunRequestSchema,
-  async (_req, ctx) => {
-    try {
-      return ok([
-        await runVisualQualityAgent(ctx.body),
-      ]);
-    } catch (error) {
-      console.error("VISUAL_QUALITY_FAILED:", error);
-
-      return err(
-        "VISUAL_QUALITY_FAILED",
-        "Unexpected visual quality failure",
-        500,
-      );
-    }
-  },
+  async (ctx) => [await runVisualQualityAgent(ctx.body)],
 );

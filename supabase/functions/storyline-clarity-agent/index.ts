@@ -20,10 +20,8 @@
  */
 
 import {
-  createInternalEdgeHandler,
+  createEvaluatorHandler,
   loadAgentContext,
-  ok,
-  persistMetricResults,
   validateMetricResults,
 } from "../shared/index.ts";
 
@@ -31,17 +29,14 @@ import { AgentRunRequestSchema } from "../shared/schemas.ts";
 
 import { runStorylineAgent } from "./agent.ts";
 
-createInternalEdgeHandler(
+createEvaluatorHandler(
   "storyline-clarity-agent",
+  "storyline_clarity",
   AgentRunRequestSchema,
-  async (_req, ctx) => {
+  async (ctx) => {
     const requestId = ctx.body.request_id;
     const context = await loadAgentContext(requestId);
     const results = await runStorylineAgent(context);
-    const validated = validateMetricResults(results);
-
-    await persistMetricResults(requestId, validated);
-
-    return ok(validated);
+    return validateMetricResults(results);
   },
 );

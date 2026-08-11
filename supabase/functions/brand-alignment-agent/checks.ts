@@ -166,7 +166,10 @@ export function buildBrandResult(
       "Does the ad's logo, visual identity, and voice align with the supplied brand guidance?",
     result,
     severity,
-    confidence: logo.confidence === "low" || qualitative.confidence === "low"
+    confidence: logo.confidence === "cannot_assess" ||
+        qualitative.confidence === "cannot_assess"
+      ? "cannot_assess"
+      : logo.confidence === "low" || qualitative.confidence === "low"
       ? "low"
       : logo.confidence === "medium" || qualitative.confidence === "medium"
       ? "medium"
