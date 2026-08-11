@@ -132,6 +132,18 @@ async function insertPassingAtomicMetrics(
   `);
 }
 
+async function insertDispatchedEvaluatorRun(
+  requestId: string,
+  evaluator: string,
+): Promise<void> {
+  // Evaluator endpoints are internal execution adapters, not dispatchers. The
+  // fixture must cross the same planned-work seam as the production trigger.
+  await executeFixtureSql(`
+    insert into public.evaluator_runs (request_id, evaluator, status)
+    values ('${requestId}', '${evaluator}', 'dispatched');
+  `);
+}
+
 async function createUserToken(email: string, password: string) {
   const response = await fetch(
     `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
@@ -727,6 +739,7 @@ Deno.test("Claims Agent persists its Launch-Readiness Scorecard metrics", async 
   const modelStub = startModelStub(PASSING_CLAIMS_POLICY_RESPONSE);
 
   try {
+    await insertDispatchedEvaluatorRun(fixture.requestId, "claims_accuracy");
     const response = await fetch(
       `${SUPABASE_URL}/functions/v1/claims-agent`,
       {
@@ -749,6 +762,15 @@ Deno.test("Claims Agent persists its Launch-Readiness Scorecard metrics", async 
       { metric_id: "policy_compliance" },
       { metric_id: "product_truth" },
     ]);
+
+    const runResponse = await serviceRequest(
+      `/rest/v1/evaluator_runs?request_id=eq.${fixture.requestId}&evaluator=eq.claims_accuracy&select=status,attempt_count`,
+      { method: "GET" },
+    );
+    assertEquals(await runResponse.json(), [{
+      status: "completed",
+      attempt_count: 1,
+    }]);
   } finally {
     await modelStub.shutdown();
     await deleteReviewFixture(fixture.requestId, fixture.userId);
@@ -760,6 +782,7 @@ Deno.test("Visual Quality Agent persists its Launch-Readiness Scorecard metric",
   const modelStub = startModelStub(PASSING_VISUAL_QUALITY_RESPONSE);
 
   try {
+    await insertDispatchedEvaluatorRun(fixture.requestId, "visual_quality");
     const response = await fetch(
       `${SUPABASE_URL}/functions/v1/visual-quality-agent`,
       {
@@ -779,6 +802,15 @@ Deno.test("Visual Quality Agent persists its Launch-Readiness Scorecard metric",
     );
     const persisted = await resultResponse.json();
     assertEquals(persisted, [{ metric_id: "production_readiness" }]);
+
+    const runResponse = await serviceRequest(
+      `/rest/v1/evaluator_runs?request_id=eq.${fixture.requestId}&evaluator=eq.visual_quality&select=status,attempt_count`,
+      { method: "GET" },
+    );
+    assertEquals(await runResponse.json(), [{
+      status: "completed",
+      attempt_count: 1,
+    }]);
   } finally {
     await modelStub.shutdown();
     await deleteReviewFixture(fixture.requestId, fixture.userId);

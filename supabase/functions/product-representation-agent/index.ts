@@ -1,11 +1,6 @@
 /** Internal Edge Function adapter for the Product Representation evaluator. */
 
-import {
-  createInternalEdgeHandler,
-  loadAgentContext,
-  ok,
-  persistMetricResults,
-} from "../shared/index.ts";
+import { createEvaluatorHandler, loadAgentContext } from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
 
 import { runProductRepresentationAgent } from "./agent.ts";
@@ -15,16 +10,13 @@ import { runProductRepresentationAgent } from "./agent.ts";
  * Processing completes. Authentication, request parsing, and generic error
  * responses remain inside the shared internal handler.
  */
-createInternalEdgeHandler(
+createEvaluatorHandler(
   "product-representation-agent",
+  "product_representation",
   AgentRunRequestSchema,
-  async (_request, context) => {
+  async (context) => {
     const requestId = context.body.request_id;
     const agentContext = await loadAgentContext(requestId);
-    const results = await runProductRepresentationAgent(agentContext);
-
-    await persistMetricResults(requestId, results);
-
-    return ok(results);
+    return await runProductRepresentationAgent(agentContext);
   },
 );

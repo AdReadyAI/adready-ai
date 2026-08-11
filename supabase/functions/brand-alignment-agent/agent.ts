@@ -1,7 +1,6 @@
 import {
   AgentRunRequestSchema,
   loadAgentContext,
-  persistMetricResults,
   validateMetricResults,
 } from "../shared/index.ts";
 
@@ -21,7 +20,7 @@ export type BrandAgentRequest = AgentRunRequest;
  * 1. Loads request context (creative brief, logo frames, visual frames, transcript, OCR).
  * 2. Evaluates deterministic logo presence and reference-match checks.
  * 3. Evaluates qualitative color palette and brand voice alignment.
- * 4. Rolls up sub-checks into the metric result and persists findings.
+ * 4. Returns validated output to the Edge Function lifecycle wrapper.
  */
 export async function runBrandAlignment(
   request: BrandAgentRequest,
@@ -31,8 +30,6 @@ export async function runBrandAlignment(
   const logo = evaluateLogoChecks(context);
   const qualitative = await evaluateQualitativeChecks(context);
   const [result] = validateMetricResults([buildBrandResult(logo, qualitative)]);
-
-  await persistMetricResults(context.request_id, [result]);
 
   return result;
 }

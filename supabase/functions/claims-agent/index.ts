@@ -118,25 +118,14 @@
  *   ]
  */
 
-import { createInternalEdgeHandler, err, ok } from "../shared/index.ts";
+import { createEvaluatorHandler } from "../shared/index.ts";
 import { AgentRunRequestSchema } from "../shared/schemas.ts";
 
 import { runClaimsAgent } from "./agent.ts";
 
-createInternalEdgeHandler(
+createEvaluatorHandler(
   "claims-agent",
+  "claims_accuracy",
   AgentRunRequestSchema,
-  async (_req, ctx) => {
-    try {
-      return ok(await runClaimsAgent(ctx.body));
-    } catch (error) {
-      console.error("CLAIMS_ACCURACY_FAILED:", error);
-
-      return err(
-        "CLAIMS_ACCURACY_FAILED",
-        "Unexpected claims accuracy failure",
-        500,
-      );
-    }
-  },
+  async (ctx) => await runClaimsAgent(ctx.body),
 );

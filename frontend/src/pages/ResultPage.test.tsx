@@ -60,7 +60,7 @@ function requestRow(overrides: Partial<ProgressRequestRow> = {}): ProgressReques
 }
 
 /**
- * `scored` doubles as the list of requests whose evaluators have all reported —
+ * `scored` doubles as the list of requests whose Evaluator Runs completed —
  * a request cannot have a score row without them, since complete-evaluation only
  * runs once every canonical metric exists.
  */
@@ -72,8 +72,12 @@ function progressState(
   return {
     progress: buildBatchProgress({
       requests: rows,
-      agents: scored.flatMap((request_id) =>
-        EVALUATORS.map((evaluator) => ({ request_id, agent: evaluator.key })),
+      evaluatorRuns: scored.flatMap((request_id) =>
+        EVALUATORS.map((evaluator) => ({
+          request_id,
+          evaluator: evaluator.key,
+          status: 'completed',
+        })),
       ),
       scored: scored.map((request_id) => ({ request_id })),
     }),
