@@ -18,7 +18,7 @@ export const LLMCheckSchema = z.object({
     "critical",
     "cannot_assess",
   ]),
-  confidence: z.enum(["low", "medium", "high"]),
+  confidence: z.enum(["low", "medium", "high", "cannot_assess"]),
   explanation: z.string(),
   evidence: z.array(
     z.object({
@@ -109,6 +109,9 @@ function confidence(
   left: ConfidenceLevel,
   right: ConfidenceLevel,
 ): ConfidenceLevel {
+  if (left === "cannot_assess" || right === "cannot_assess") {
+    return "cannot_assess";
+  }
   if (left === "low" || right === "low") return "low";
   if (left === "medium" || right === "medium") return "medium";
   return "high";

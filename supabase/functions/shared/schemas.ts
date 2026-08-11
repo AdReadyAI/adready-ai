@@ -244,7 +244,12 @@ export const SeverityLevelSchema = z.enum([
 ]);
 export type SeverityLevel = z.infer<typeof SeverityLevelSchema>;
 
-export const ConfidenceLevelSchema = z.enum(["low", "medium", "high"]);
+export const ConfidenceLevelSchema = z.enum([
+  "low",
+  "medium",
+  "high",
+  "cannot_assess",
+]);
 export type ConfidenceLevel = z.infer<typeof ConfidenceLevelSchema>;
 
 export const EvidenceRefSchema = z.object({
