@@ -143,6 +143,12 @@ npm run test:integration  # playwright
 Newest first. Keep entries short — one or two lines on what changed and why,
 not a full diff.
 
+- **2026-08-11** — "Use existing campaign" loads real batches via `lib/campaigns.ts`
+  instead of `MOCK_CAMPAIGNS`, and prefills the shared brief fields from the
+  selected batch. It copies settings only — submit still mints a new `batch_id`,
+  since no column links a batch to the one it came from. Dropdown labels lead
+  with a snippet of the brief plus the product hostname: `campaign_goal` is one
+  of six fixed values, so labels built on it alone were indistinguishable.
 - **2026-08-10** — The loading screen shows real pipeline state instead of a
   score-row count. `lib/progressTransform.ts` derives weighted per-video progress
   from `requests.media_processing_status` / `agents_triggered_at` /
