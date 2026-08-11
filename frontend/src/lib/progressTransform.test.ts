@@ -25,9 +25,13 @@ function unit(status: UnitStatus, weight = 1): ProgressUnit {
   return { key: `u-${status}-${weight}`, label: status, weight, status, detail: null }
 }
 
-/** All seven evaluators reporting, as the DB would return them. */
-function allAgents(requestId = 'req-1') {
-  return EVALUATORS.map((evaluator) => ({ request_id: requestId, agent: evaluator.key }))
+/** All seven completed Evaluator Runs, as the DB would return them. */
+function allEvaluatorRuns(requestId = 'req-1') {
+  return EVALUATORS.map((evaluator) => ({
+    request_id: requestId,
+    evaluator: evaluator.key,
+    status: 'completed',
+  }))
 }
 
 function unitFor(video: VideoProgress, unitKey: string) {
@@ -43,8 +47,12 @@ function evaluatorUnits(video: VideoProgress) {
   return EVALUATORS.map((evaluator) => unitFor(video, evaluator.key))
 }
 
-function build(row: ProgressRequestRow, agents: string[] = [], scored = false) {
-  return buildVideoProgress(row, new Set(agents), scored)
+function build(row: ProgressRequestRow, evaluators: string[] = [], scored = false) {
+  return buildVideoProgress(
+    row,
+    new Map(evaluators.map((evaluator) => [evaluator, 'completed'])),
+    scored,
+  )
 }
 
 // ---- the distinction the whole feature turns on --------------------------
@@ -182,19 +190,28 @@ describe('evaluation units', () => {
     expect(units.every((candidate) => candidate.status === 'queued')).toBe(true)
   })
 
-  // 044 dispatches all seven in one loop, so after the handoff the ones without
-  // rows are genuinely in flight rather than waiting their turn.
-  it('marks unreported evaluators as processing once dispatched', () => {
-    const video = build(
+  it('renders each persisted Evaluator Run state directly', () => {
+    const video = buildVideoProgress(
       requestRow({
         media_processing_status: 'completed',
         agents_triggered_at: '2026-08-10T12:00:00Z',
       }),
-      ['claims_accuracy'],
+      new Map([
+        ['claims_accuracy', 'completed'],
+        ['brand_alignment', 'processing'],
+        ['cta_effectiveness', 'pending'],
+        ['visual_quality', 'failed'],
+      ]),
+      false,
     )
 
     expect(unitFor(video, 'claims_accuracy').status).toBe('success')
     expect(unitFor(video, 'brand_alignment').status).toBe('processing')
+    expect(unitFor(video, 'cta_effectiveness').status).toBe('queued')
+    expect(unitFor(video, 'visual_quality').status).toBe('error')
+    expect(video.fatalError).toBe(
+      'One or more automated reviewers could not finish, so no score is available for this creative.',
+    )
   })
 
   // The keys are agent names, not dimension ids. `storyline_brief` and
@@ -383,7 +400,7 @@ describe('weighted percentage', () => {
 
 describe('buildBatchProgress', () => {
   it('is not done for a batch id that matched nothing', () => {
-    const batch = buildBatchProgress({ requests: [], agents: [], scored: [] })
+    const batch = buildBatchProgress({ requests: [], evaluatorRuns: [], scored: [] })
 
     expect(batch.videos).toHaveLength(0)
     expect(batch.isDone).toBe(false)
@@ -404,7 +421,7 @@ describe('buildBatchProgress', () => {
           media_processing_status: 'processing',
         }),
       ],
-      agents: allAgents('req-1'),
+      evaluatorRuns: allEvaluatorRuns('req-1'),
       scored: [{ request_id: 'req-1' }],
     })
 
@@ -426,7 +443,7 @@ describe('buildBatchProgress', () => {
           video_storage_paths: ['user-1/batch-1/video/req-2/b.mp4'],
         }),
       ],
-      agents: allAgents('req-1'),
+      evaluatorRuns: allEvaluatorRuns('req-1'),
       scored: [{ request_id: 'req-1' }],
     })
 
@@ -457,7 +474,9 @@ describe('buildBatchProgress', () => {
 
     const batch = buildBatchProgress({
       requests: [...done, lastRequest],
-      agents: [...done, lastRequest].flatMap((request) => allAgents(request.request_id)),
+      evaluatorRuns: [...done, lastRequest].flatMap((request) =>
+        allEvaluatorRuns(request.request_id),
+      ),
       scored: done.map((request) => ({ request_id: request.request_id })),
     })
 
@@ -479,7 +498,7 @@ describe('buildBatchProgress', () => {
           agents_triggered_at: '2026-08-10T12:00:00Z',
         }),
       ],
-      agents: allAgents('req-2'),
+      evaluatorRuns: allEvaluatorRuns('req-2'),
       scored: [{ request_id: 'req-2' }],
     })
 
@@ -497,7 +516,7 @@ describe('buildBatchProgress', () => {
         requestRow({ request_id: 'req-1', video_storage_paths: ['user-1/b/video/req-1/z.mp4'] }),
         requestRow({ request_id: 'req-2', video_storage_paths: ['user-1/b/video/req-2/a.mp4'] }),
       ],
-      agents: [],
+      evaluatorRuns: [],
       scored: [],
     })
 
@@ -510,7 +529,7 @@ describe('buildBatchProgress', () => {
         requestRow({ request_id: 'req-1', video_storage_paths: ['user-1/b/video/req-1/a.mp4'] }),
         requestRow({ request_id: 'req-2', video_storage_paths: ['user-1/b/video/req-2/b.mp4'] }),
       ],
-      agents: allAgents('req-1'),
+      evaluatorRuns: allEvaluatorRuns('req-1'),
       scored: [],
     })
 

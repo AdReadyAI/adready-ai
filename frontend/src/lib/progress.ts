@@ -17,7 +17,7 @@ import { supabase } from './supabaseClient'
 import { getErrorMessage } from './errorMessage'
 import { buildBatchProgress } from './progressTransform'
 import type {
-  AgentResultRow,
+  EvaluatorRunRow,
   ProgressRequestRow,
   ScoredRequestRow,
 } from './progressTransform'
@@ -55,17 +55,20 @@ export async function fetchBatchProgress(batchId: string): Promise<BatchProgress
 
   const requestIds = requestRows.map((row) => row.request_id)
 
-  const [agentsResult, scoredResult] = await Promise.all([
-    // Only the two columns the checklist needs. agent_results carries the full
-    // evaluator payload — explanations, corrections — and pulling all of it
-    // every 5 seconds for the whole batch would be wasteful. It has no batch_id
-    // column (migration 018), so this filters on request ids.
-    supabase.from('agent_results').select('request_id, agent').in('request_id', requestIds),
+  const [evaluatorRunsResult, scoredResult] = await Promise.all([
+    // Evaluator Runs are the lifecycle source for progress. Results remain the
+    // output source and are intentionally not polled while work is running.
+    supabase
+      .from('evaluator_runs')
+      .select('request_id, evaluator, status')
+      .in('request_id', requestIds),
     supabase.from('result_score_table').select('request_id').eq('batch_id', batchId),
   ])
 
-  if (agentsResult.error) {
-    throw new Error(getErrorMessage(agentsResult.error, 'Failed to load evaluator progress'))
+  if (evaluatorRunsResult.error) {
+    throw new Error(
+      getErrorMessage(evaluatorRunsResult.error, 'Failed to load evaluator progress'),
+    )
   }
   if (scoredResult.error) {
     throw new Error(getErrorMessage(scoredResult.error, 'Failed to load scoring progress'))
@@ -73,7 +76,7 @@ export async function fetchBatchProgress(batchId: string): Promise<BatchProgress
 
   return buildBatchProgress({
     requests: requestRows,
-    agents: (agentsResult.data ?? []) as AgentResultRow[],
+    evaluatorRuns: (evaluatorRunsResult.data ?? []) as EvaluatorRunRow[],
     scored: (scoredResult.data ?? []) as ScoredRequestRow[],
   })
 }

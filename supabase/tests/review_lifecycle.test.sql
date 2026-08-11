@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(8);
+select plan(9);
 
 insert into auth.users (id)
 values ('00000000-0000-0000-0000-000000000001');
@@ -16,7 +16,8 @@ values
   ('10000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000003', array['failed.mp4']),
   ('10000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000003', array['running.mp4']),
   ('10000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000004', array['scored.mp4']),
-  ('10000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000004', array['failed-too.mp4']);
+  ('10000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000004', array['failed-too.mp4']),
+  ('10000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000005', array['evaluator-failed.mp4']);
 
 update public.requests
 set media_processing_status = 'failed'
@@ -62,6 +63,13 @@ values
   ('10000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002', 'test', 80, 'Ready'),
   ('10000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-000000000004', 'test', 80, 'Ready');
 
+insert into public.evaluator_runs (request_id, evaluator, status)
+values (
+  '10000000-0000-0000-0000-000000000007',
+  'claims_accuracy',
+  'failed'
+);
+
 select is(
   (select status from public.review_request_summaries where review_request_id = '20000000-0000-0000-0000-000000000001'),
   'failed',
@@ -90,6 +98,12 @@ select is(
   (select status from public.review_request_summaries where review_request_id = '20000000-0000-0000-0000-000000000004'),
   'partially_failed',
   'scored and terminally failed creatives produce a partial failure'
+);
+
+select is(
+  (select status from public.review_request_summaries where review_request_id = '20000000-0000-0000-0000-000000000005'),
+  'failed',
+  'a terminal evaluator failure makes its Review Request fail visibly'
 );
 
 select ok(

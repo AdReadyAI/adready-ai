@@ -12,7 +12,7 @@
 //
 //   requests.media_processing_status   worker/app/supabase.py:60-88 (migration 055)
 //   requests.agents_triggered_at       migration 044's trigger
-//   agent_results.agent                whichever evaluators have reported
+//   evaluator_runs.status              each planned evaluator's lifecycle
 //   result_score_table                 written last, by complete-evaluation
 //
 // The upside of deriving rather than storing: the bar cannot lie. A worker that
@@ -48,9 +48,10 @@ export interface ProgressRequestRow {
   evaluation_completion_status: string | null
 }
 
-export interface AgentResultRow {
+export interface EvaluatorRunRow {
   request_id: string
-  agent: string
+  evaluator: string
+  status: string
 }
 
 export interface ScoredRequestRow {
@@ -73,7 +74,8 @@ const EVALUATOR_WEIGHT = 1
 const SCORING_WEIGHT = 1
 
 /**
- * The seven evaluators, keyed by the value they write into `agent_results.agent`.
+ * The seven evaluators, keyed by `evaluator_runs.evaluator` and the matching
+ * value each evaluator writes into `agent_results.agent`.
  *
  * ⚠️ These are **agent names, not dimension ids**. The two look similar and are
  * not the same: `storyline_clarity` and `brief_alignment` are separate agents
@@ -107,6 +109,8 @@ const DEGRADED_MEDIA_DETAIL =
   'Some video analysis could not be completed, so the review continued with partial data.'
 const SCORING_FAILURE_DETAIL =
   'We could not finish scoring this creative. No score is available for this review.'
+const EVALUATOR_FAILURE_DETAIL =
+  'One or more automated reviewers could not finish, so no score is available for this creative.'
 
 /** Translate a producer-owned safe category into stable user-facing copy. */
 function mediaFailureDetail(request: ProgressRequestRow): string {
@@ -183,7 +187,7 @@ function mediaUnit(request: ProgressRequestRow): ProgressUnit {
 
 function evaluationUnits(
   request: ProgressRequestRow,
-  reported: ReadonlySet<string>,
+  evaluatorStatuses: ReadonlyMap<string, string>,
 ): ProgressUnit[] {
   const fatal = isFatalMediaFailure(request)
   const dispatched = agentsDispatched(request)
@@ -191,21 +195,34 @@ function evaluationUnits(
   return EVALUATORS.map(({ key, label }) => {
     const base = { key, label, weight: EVALUATOR_WEIGHT }
 
-    if (reported.has(key)) {
-      // agent_results is PK (request_id, agent, metric_id) and migration 030
-      // writes all of one agent's metrics inside a single transaction, so a
-      // half-written agent is never observable. One row means it finished.
-      return { ...base, status: 'success' as UnitStatus, detail: null }
-    }
     if (fatal) {
       return { ...base, status: 'error' as UnitStatus, detail: SKIPPED_DETAIL }
     }
-    // All seven are dispatched together in 044's loop, so once the handoff has
-    // happened every evaluator without rows is genuinely in flight.
-    return {
-      ...base,
-      status: (dispatched ? 'processing' : 'queued') as UnitStatus,
-      detail: null,
+
+    switch (evaluatorStatuses.get(key)) {
+      case 'completed':
+        return { ...base, status: 'success' as UnitStatus, detail: null }
+      case 'dispatch_failed':
+      case 'failed':
+      case 'timed_out':
+        return {
+          ...base,
+          status: 'error' as UnitStatus,
+          detail: EVALUATOR_FAILURE_DETAIL,
+        }
+      case 'dispatched':
+      case 'processing':
+        return { ...base, status: 'processing' as UnitStatus, detail: null }
+      case 'pending':
+        return { ...base, status: 'queued' as UnitStatus, detail: null }
+      default:
+        // Legacy requests predate Evaluator Runs. Preserve their previous
+        // progress behavior without making absence carry meaning for new work.
+        return {
+          ...base,
+          status: (dispatched ? 'processing' : 'queued') as UnitStatus,
+          detail: null,
+        }
     }
   })
 }
@@ -289,19 +306,29 @@ function toStage(key: string, label: string, units: ProgressUnit[]): StageProgre
  * — the skipped downstream units carry 'error' too, and reporting "Skipped"
  * as the reason would tell the user nothing about what actually broke.
  */
-function fatalErrorFor(request: ProgressRequestRow): string | null {
+function fatalErrorFor(
+  request: ProgressRequestRow,
+  evaluatorStatuses: ReadonlyMap<string, string>,
+): string | null {
   if (isFatalMediaFailure(request)) {
     return mediaFailureDetail(request)
   }
   if (request.evaluation_completion_status === 'failed') {
     return SCORING_FAILURE_DETAIL
   }
+  if (
+    [...evaluatorStatuses.values()].some((status) =>
+      ['dispatch_failed', 'failed', 'timed_out'].includes(status),
+    )
+  ) {
+    return EVALUATOR_FAILURE_DETAIL
+  }
   return null
 }
 
 export function buildVideoProgress(
   request: ProgressRequestRow,
-  reported: ReadonlySet<string>,
+  evaluatorStatuses: ReadonlyMap<string, string>,
   scored: boolean,
   thumb: string = THUMBS[0],
 ): VideoProgress {
@@ -317,16 +344,16 @@ export function buildVideoProgress(
         evaluation_completion_status: 'completed',
       }
     : request
-  const progressReported = scored
-    ? new Set(EVALUATORS.map((evaluator) => evaluator.key))
-    : reported
+  const progressEvaluatorStatuses = scored
+    ? new Map(EVALUATORS.map((evaluator) => [evaluator.key, 'completed']))
+    : evaluatorStatuses
 
   const stages: StageProgress[] = [
     toStage('media', 'Processing your video', [mediaUnit(progressRequest)]),
     toStage(
       'evaluation',
       'Reviewing your creative',
-      evaluationUnits(progressRequest, progressReported),
+      evaluationUnits(progressRequest, progressEvaluatorStatuses),
     ),
     toStage('scoring', 'Scoring', [scoringUnit(progressRequest, scored)]),
   ]
@@ -341,26 +368,31 @@ export function buildVideoProgress(
     pct: percent(units),
     status: rollUpStatus(units),
     isDone: units.every((unit) => isTerminal(unit.status)),
-    fatalError: fatalErrorFor(progressRequest),
+    fatalError: fatalErrorFor(progressRequest, progressEvaluatorStatuses),
   }
 }
 
 export function buildBatchProgress(input: {
   requests: ProgressRequestRow[]
-  agents: AgentResultRow[]
+  evaluatorRuns: EvaluatorRunRow[]
   scored: ScoredRequestRow[]
 }): BatchProgress {
-  const { requests, agents, scored } = input
+  const { requests, evaluatorRuns, scored } = input
 
-  const reportedByRequest = new Map<string, Set<string>>()
-  for (const row of agents) {
-    const existing = reportedByRequest.get(row.request_id)
-    if (existing) existing.add(row.agent)
-    else reportedByRequest.set(row.request_id, new Set([row.agent]))
+  const evaluatorStatusesByRequest = new Map<string, Map<string, string>>()
+  for (const row of evaluatorRuns) {
+    const existing = evaluatorStatusesByRequest.get(row.request_id)
+    if (existing) existing.set(row.evaluator, row.status)
+    else {
+      evaluatorStatusesByRequest.set(
+        row.request_id,
+        new Map([[row.evaluator, row.status]]),
+      )
+    }
   }
 
   const scoredRequests = new Set(scored.map((row) => row.request_id))
-  const empty: ReadonlySet<string> = new Set()
+  const empty: ReadonlyMap<string, string> = new Map()
 
   const videos = [...requests]
     // Sorted by filename before tints are handed out, matching
@@ -374,7 +406,7 @@ export function buildBatchProgress(input: {
     .map((request, index) =>
       buildVideoProgress(
         request,
-        reportedByRequest.get(request.request_id) ?? empty,
+        evaluatorStatusesByRequest.get(request.request_id) ?? empty,
         scoredRequests.has(request.request_id),
         THUMBS[index % THUMBS.length],
       ),

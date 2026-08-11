@@ -1,4 +1,4 @@
-import { loadAgentContext, persistMetricResults } from "../shared/index.ts";
+import { loadAgentContext } from "../shared/index.ts";
 import { validateMetricResults } from "../shared/validation.ts";
 
 import type { AgentRunRequest, MetricResult } from "../shared/schemas.ts";
@@ -14,7 +14,7 @@ import { evaluateProductionReadiness } from "./metrics.ts";
  * 2. Runs the LLM-assisted visual audit.
  * 3. Evaluates all six production-readiness checks.
  * 4. Builds the final production_readiness metric.
- * 5. Persists the result and sub-checks.
+ * 5. Returns validated output to the Edge Function lifecycle wrapper.
  */
 export async function runVisualQualityAgent(
   request: AgentRunRequest,
@@ -29,11 +29,6 @@ export async function runVisualQualityAgent(
       visualFindings,
     ),
   ]);
-
-  await persistMetricResults(
-    context.request_id,
-    [result],
-  );
 
   return result;
 }

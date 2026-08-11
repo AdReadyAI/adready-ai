@@ -2,11 +2,7 @@
  * agent.ts — Claims Accuracy Agent orchestration.
  */
 
-import {
-  loadAgentContext,
-  persistMetricResults,
-  validateMetricResults,
-} from "../shared/index.ts";
+import { loadAgentContext, validateMetricResults } from "../shared/index.ts";
 import type { AgentRunRequest, MetricResult } from "../shared/index.ts";
 import { extractClaims, substantiateClaims, triageClaims } from "./checks.ts";
 import type { VerifiableClaim } from "./checks.ts";
@@ -61,11 +57,7 @@ export async function runClaimsAgent(
     ),
   ];
 
-  const validated = validateMetricResults(results);
-
-  // Persist only schema-valid metrics so downstream scorecard reads never see
-  // a partial or structurally invalid Claims Agent evaluation.
-  await persistMetricResults(context.request_id, validated);
-
-  return validated;
+  // The Edge Function lifecycle wrapper owns atomic result persistence and
+  // Evaluator Run completion after this domain pipeline returns.
+  return validateMetricResults(results);
 }

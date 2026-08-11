@@ -21,10 +21,14 @@ function requestRow(overrides: Partial<ProgressRequestRow> = {}): ProgressReques
   }
 }
 
-function progressFor(rows: ProgressRequestRow[], agents: string[] = [], scored: string[] = []) {
+function progressFor(rows: ProgressRequestRow[], evaluators: string[] = [], scored: string[] = []) {
   return buildBatchProgress({
     requests: rows,
-    agents: agents.map((agent) => ({ request_id: 'req-1', agent })),
+    evaluatorRuns: evaluators.map((evaluator) => ({
+      request_id: 'req-1',
+      evaluator,
+      status: 'completed',
+    })),
     scored: scored.map((request_id) => ({ request_id })),
   })
 }
