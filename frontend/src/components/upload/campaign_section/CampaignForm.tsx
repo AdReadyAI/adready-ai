@@ -92,6 +92,10 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
   const [campaignsError, setCampaignsError] = useState<string | null>(null);
   const [campaignLoading, setCampaignLoading] = useState(false);
   const [campaignDetailLoaded, setCampaignDetailLoaded] = useState(false);
+  // Incremented on every selection. Each in-flight detail fetch captures the
+  // value it started with and only writes state if it's still the current one,
+  // so a slow response for an earlier pick can't land on top of a newer one.
+  const campaignSelectionRef = useRef(0);
 
   // Load the user's previous batches when the "existing campaign" tab is opened.
   // RLS scopes the query to the current user, so no user id is passed.
@@ -124,10 +128,18 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
   // batch's shared request fields, so the user can review/edit before submit.
   // A NEW batch (the current upload session's batchId) is still created on
   // submit — the prefilled values are reused, not the old batch's identity.
-  async function handleSelectCampaign(batchId: string) {
-    setSelectedCampaign(batchId);
-    if (!batchId) {
+  async function handleSelectCampaign(sourceBatchId: string) {
+    // Claim this selection before any await. Renamed off `batchId` on purpose:
+    // the prop of that name is the NEW batch this submit will create, and the
+    // two must not be confusable inside a function that talks about both.
+    const selection = ++campaignSelectionRef.current;
+
+    setSelectedCampaign(sourceBatchId);
+    if (!sourceBatchId) {
       setCampaignDetailLoaded(false);
+      // Bumping the ref above orphaned any in-flight fetch, so its `finally` no
+      // longer owns the spinner — clear it here or it hangs on screen.
+      setCampaignLoading(false);
       return;
     }
 
@@ -136,7 +148,9 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
     setSubmitError(null);
 
     try {
-      const detail = await fetchCampaignDetail(batchId);
+      const detail = await fetchCampaignDetail(sourceBatchId);
+      if (selection !== campaignSelectionRef.current) return;
+
       setProductUrl(detail.productUrl ?? "");
       setCampaignGoal(detail.campaignGoal ?? "");
       setDestinationPlatform(detail.destinationPlatform ?? "");
@@ -148,9 +162,11 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
       setAiFilled(new Set());
       setCampaignDetailLoaded(true);
     } catch (e) {
+      if (selection !== campaignSelectionRef.current) return;
       setSubmitError(getErrorMessage(e, "Failed to load the campaign"));
     } finally {
-      setCampaignLoading(false);
+      // A stale fetch must not clear the spinner the newer one is still showing.
+      if (selection === campaignSelectionRef.current) setCampaignLoading(false);
     }
   }
 
@@ -172,17 +188,22 @@ export default function CampaignForm({ videos, images, batchId }: CampaignFormPr
         
   const missingAdvanced = missingRequiredAdvanced(advancedFields);
 
-  const isCreateValid =
+  const isCreateValid = Boolean(
     productUrl.trim() &&
-    campaignGoal &&
-    destinationPlatform &&
-    creativeBrief.trim() &&
-    missingAdvanced.length === 0;
+      campaignGoal &&
+      destinationPlatform &&
+      creativeBrief.trim() &&
+      missingAdvanced.length === 0,
+  );
+  // Existing mode writes the same columns as create mode, so it has to clear the
+  // same bar — prefilled fields stay editable, and requests.campaign_goal is
+  // nullable, so a prefill can leave one blank. Both campaign_goal and
+  // destination_platform are z.string().min(1) in AgentContextSchema, so a blank
+  // that gets through here doesn't degrade the review, it throws in
+  // loadAgentContext and kills every video in the batch after upload.
+  // The extra conditions are only about the selection itself.
   const isExistingValid =
-    Boolean(selectedCampaign) &&
-    campaignDetailLoaded &&
-    !campaignLoading &&
-    missingAdvanced.length === 0;
+    isCreateValid && Boolean(selectedCampaign) && campaignDetailLoaded && !campaignLoading;
   const isFormValid =
     (mode === "create" ? isCreateValid : isExistingValid) && hasCompletedVideo && noneUploading;
 
