@@ -103,7 +103,9 @@ not a full diff.
 - **2026-08-11** — "Use existing campaign" loads real batches via `lib/campaigns.ts`
   instead of `MOCK_CAMPAIGNS`, and prefills the shared brief fields from the
   selected batch. It copies settings only — submit still mints a new `batch_id`,
-  since no column links a batch to the one it came from.
+  since no column links a batch to the one it came from. Dropdown labels lead
+  with a snippet of the brief plus the product hostname: `campaign_goal` is one
+  of six fixed values, so labels built on it alone were indistinguishable.
 - **2026-08-09** — Split the advanced brief fields into required and optional in
   `AdvancedFieldsSection`. The four required ones (Brand Voice, Target Audience,
   Required Messages, Brand Guidelines) each gate a sub-check that the

@@ -5,6 +5,9 @@ import type { ParsedCreativeBrief } from "../types/brief";
 export type CampaignSummary = {
   batchId: string;
   campaignGoal: string | null;
+  /** Lead of the dropdown label — the closest thing this schema has to a name. */
+  userBrief: string | null;
+  productUrl: string | null;
   createdAt: string;
   videoCount: number;
 };
@@ -25,20 +28,23 @@ export type CampaignDetail = {
  * read shows up as an empty array, not an error.
  */
 export async function fetchCampaignSummaries(): Promise<CampaignSummary[]> {
+  // user_brief and product_url are label material only — campaign_goal is one of
+  // six fixed values, so on its own it can't tell two campaigns apart. Both live
+  // on `requests`, so widening the select costs no extra round trip.
   const { data, error } = await supabase
     .from("requests")
-    .select("batch_id, campaign_goal, created_at")
+    .select("batch_id, campaign_goal, user_brief, product_url, created_at")
     .order("created_at", { ascending: false });
 
   if (error) {
     throw new Error(getErrorMessage(error, "Failed to load your campaigns"));
   }
 
-  const byBatch = new Map<
-    string,
-    { campaignGoal: string | null; createdAt: string; videoCount: number }
-  >();
+  const byBatch = new Map<string, Omit<CampaignSummary, "batchId">>();
 
+  // Rows arrive newest-first and Map preserves insertion order, so the output
+  // stays sorted without a second pass. The first row seen for a batch is its
+  // newest, which is the one whose fields represent the batch.
   for (const row of data ?? []) {
     const existing = byBatch.get(row.batch_id);
     if (existing) {
@@ -46,6 +52,8 @@ export async function fetchCampaignSummaries(): Promise<CampaignSummary[]> {
     } else {
       byBatch.set(row.batch_id, {
         campaignGoal: (row.campaign_goal as string | null) ?? null,
+        userBrief: (row.user_brief as string | null) ?? null,
+        productUrl: (row.product_url as string | null) ?? null,
         createdAt: row.created_at as string,
         videoCount: 1,
       });

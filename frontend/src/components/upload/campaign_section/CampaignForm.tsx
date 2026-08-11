@@ -27,14 +27,56 @@ const PLATFORMS = [
   { value: "youtube_shorts", label: "YouTube Shorts" },
 ];
 
+/** Longest brief snippet that still leaves room for the metadata suffix. */
+const LABEL_BRIEF_CHARS = 42;
+
+function briefSnippet(brief: string | null): string | null {
+  // Briefs are multi-line textarea content; collapse the whitespace or the
+  // option text renders with gaps where the newlines were.
+  const text = brief?.trim().replace(/\s+/g, " ");
+  if (!text) return null;
+  return text.length <= LABEL_BRIEF_CHARS
+    ? text
+    : `${text.slice(0, LABEL_BRIEF_CHARS).trimEnd()}…`;
+}
+
+/** Hostname only — full URLs blow out the option width and the path rarely helps. */
+function urlHost(productUrl: string | null): string | null {
+  if (!productUrl) return null;
+  try {
+    return new URL(productUrl).hostname.replace(/^www\./, "");
+  } catch {
+    // product_url is plain text with no check constraint, so rows predating the
+    // type="url" input can hold anything. Throwing here would blank the dropdown.
+    return null;
+  }
+}
+
 function formatCampaignLabel(c: CampaignSummary): string {
-  const goal = c.campaignGoal?.trim();
-  const label = goal ? `"${goal}"` : "Untitled campaign";
-  const date = new Date(c.createdAt).toLocaleDateString(undefined, {
+  // The brief leads: it's the only field where the user described what this
+  // campaign actually is. campaign_goal comes from CAMPAIGN_GOALS, so it can
+  // label a campaign but never distinguish two of them.
+  //
+  // `||` rather than `??` throughout — handleSubmit writes these columns
+  // unconditionally, so "" is as common as null and `??` would let it through
+  // as a blank label.
+  const name = briefSnippet(c.userBrief) || c.campaignGoal?.trim() || "Untitled campaign";
+  // Time, not just date, is the backstop: when the brief and host are identical
+  // it's the only thing left separating two submissions on the same day.
+  const when = new Date(c.createdAt).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
-  return `${label} · ${c.videoCount} video${c.videoCount === 1 ? "" : "s"} · ${date}`;
+  return [
+    name,
+    urlHost(c.productUrl),
+    `${c.videoCount} video${c.videoCount === 1 ? "" : "s"}`,
+    when,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 const EMPTY_ADVANCED: ParsedCreativeBrief = {
