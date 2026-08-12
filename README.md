@@ -1,6 +1,6 @@
-# AdReady AI
+# [AdReady AI](https://adready-ai.up.railway.app/auth/signin)
 
-AdReady AI is an application for evaluating video ads before launch. A user can upload an ad,
+[AdReady AI](https://adready-ai.up.railway.app/) is an application for evaluating video ads before launch. A user can upload an ad,
 submit it for review, follow its progress, and inspect the final launch-readiness scorecard.
 
 The repository currently provides the application shell and local infrastructure for that flow.
@@ -9,8 +9,11 @@ produce a complete ad evaluation.
 
 ## Architecture
 
-The React SPA is the product interface. Supabase is the trusted backend platform and workflow
-control plane. Railway runs the Python media-processing worker.
+The React SPA is the product interface. 
+
+Supabase is the trusted backend platform and workflow control plane. 
+
+Railway runs the Python media-processing worker.
 
 ```text
 React frontend
@@ -36,53 +39,6 @@ Supabase
 - **Railway worker:** runs the long-lived Python process responsible for transcription, OCR, frame
   extraction, scene segmentation, and other Python-native media preprocessing.
 
-## Review workflow
-
-1. The user authenticates and uploads an ad through the React SPA.
-2. The SPA invokes a trusted Edge Function such as `submit-review`.
-3. The function authenticates and authorizes the user, validates the request, creates the review
-   and workflow records, initializes the workflow state, and enqueues a media-processing job.
-4. The Railway worker claims the job, downloads the source media, performs the required media
-   processing, and uploads larger generated artifacts to Supabase Storage.
-5. The worker persists an `EvidenceBundle` describing transcripts, frames, OCR output, scene data,
-   and other generated evidence. It marks the media-processing step complete and signals the
-   orchestration Edge Function.
-6. The orchestrator reads the durable workflow state, determines which steps are eligible, and
-   atomically claims them to prevent duplicate dispatch.
-7. The orchestrator runs grounding, fans out independent evaluators when grounding completes, and
-   dispatches final scoring and synthesis after all required evaluators finish.
-8. The SPA observes status changes and reads the completed results under RLS.
-
-Postgres is the system of record for reviews, workflow runs, workflow steps, evidence metadata,
-evaluator outputs, and final results. Storage contains uploaded videos and larger generated files.
-Queues provide durable background-work delivery, while Edge Functions own trusted state changes,
-grounding, evaluation, orchestration, and finalization.
-
-## Implementation status
-
-The architecture above is the target system design. This repository currently implements only an
-early subset of it.
-
-Currently implemented:
-
-- Frontend routing and shared layout for upload and result pages
-- Supabase browser-client configuration
-- Local Supabase configuration and database migrations
-- Initial PGMQ job creation and enqueue function
-- Containerized Python worker with retries and graceful shutdown
-- Component CI/CD pipelines with executable frontend and worker test foundations
-
-Not yet implemented:
-
-- Authentication screens, authorization policies, and user flow
-- Video upload and Storage policies
-- Review, workflow, evidence, evaluator, and result schemas
-- Trusted submission, retry, and cancellation Edge Functions
-- Orchestration, grounding, evaluator, and finalization Edge Functions
-- Frontend submission, subscriptions, and progress tracking
-- Python-native media processing and `EvidenceBundle` persistence
-- Final result rendering
-- Comprehensive domain, authorization, workflow, and media-processing test coverage
 
 ## Repository layout
 
