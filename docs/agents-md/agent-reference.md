@@ -51,6 +51,7 @@ Claims are extracted from transcript and OCR by this agent.
     "metric_id": "product_truth",
     "agent": "claims_accuracy",
     "metric_name": "Product Truth / Claim Support",
+    "question": "Are all explicit product claims supported by product page or source materials?",
     "result": "false",
     "severity": "critical",
     "confidence": "high",
@@ -155,8 +156,9 @@ Claims are extracted from transcript and OCR by this agent.
 *   **Directory**: `supabase/functions/storyline-clarity-agent/`
 
 ### Mapped Metrics & Internal Sub-Checks
-1.  **`channel_readiness`**: "Does the video fit the intended platform, placement, length, and viewing context?"
+1.  **`channel_readiness`**: "Is the video fully appropriate for the intended platform, placement, duration, viewing context, and target audience needs/motivations?"
     *   `format_noncompliant`: Aspect ratio, resolution, or duration doesn't match platform specs.
+    *   `placement_mismatch`: Content, tone, or viewing context doesn't fit the intended placement or target audience.
 
 2.  **`creative_effectiveness`**: "Does the ad have a clear hook, coherent message flow, and enough stopping power?"
     *   `hook_missing`: No hook present in opening 2-3 seconds.
@@ -197,7 +199,7 @@ Use frame-level visual context.
     "metric_id": "channel_readiness",
     "agent": "storyline_clarity",
     "metric_name": "Channel / Placement Readiness",
-    "question": "Does the video fit the intended platform, placement, length, and viewing context?",
+    "question": "Is the video fully appropriate for the intended platform, placement, duration, viewing context, and target audience needs/motivations?",
     "result": "false",
     "severity": "high",
     "confidence": "high",
@@ -218,6 +220,12 @@ Use frame-level visual context.
         "result": "failed",
         "severity": "high",
         "explanation": "Landscape resolution 1920x1080 was submitted for TikTok placement."
+      },
+      {
+        "check_id": "placement_mismatch",
+        "name": "Placement & Audience Fit",
+        "result": "passed",
+        "severity": "none"
       }
     ]
   },
@@ -296,6 +304,8 @@ Use frame-level visual context.
     *   `cta_mistimed`: CTA shown before product value payoff resolves.
     *   `cta_language_weak`: CTA phrasing is too passive, vague, or non-specific.
     *   `cta_goal_mismatch`: CTA style doesn't match campaign objective.
+    *   `cta_no_urgency`: CTA lacks urgency or timeliness to drive conversion.
+    *   `cta_destination_unclear`: CTA destination is ambiguous or not specified.
     *   `cta_low_visibility`: CTA contrast too low or font size too small.
     *   `cta_platform_mismatch`: Phrasing violates platform swipe/action conventions.
 
@@ -377,6 +387,18 @@ CTAs are extracted from transcript and OCR by this agent.
         "severity": "none"
       },
       {
+        "check_id": "cta_no_urgency",
+        "name": "CTA Urgency Check",
+        "result": "passed",
+        "severity": "none"
+      },
+      {
+        "check_id": "cta_destination_unclear",
+        "name": "CTA Destination Check",
+        "result": "passed",
+        "severity": "none"
+      },
+      {
         "check_id": "cta_low_visibility",
         "name": "CTA Visibility Check",
         "result": "passed",
@@ -407,7 +429,7 @@ CTAs are extracted from transcript and OCR by this agent.
 *   **Directory**: `supabase/functions/product-representation-agent/`
 
 ### Mapped Metrics & Internal Sub-Checks
-1.  **`product_clarity`**: "Can a viewer clearly identify what product is being advertised?"
+1.  **`product_clarity`**: "Can a viewer clearly identify the product being advertised?"
     *   `product_not_shown`: Product packaging or unit never visible.
     *   `product_obscured`: Product visible but hidden, heavily cropped, or too tiny.
     *   `product_appearance_wrong`: Packaging color, shape, or label design differs from references.
@@ -438,7 +460,7 @@ CTAs are extracted from transcript and OCR by this agent.
     "metric_id": "product_clarity",
     "agent": "product_representation",
     "metric_name": "Product Clarity",
-    "question": "Can a viewer clearly identify what product is being advertised?",
+    "question": "Can a viewer clearly identify the product being advertised?",
     "result": "false",
     "severity": "medium",
     "confidence": "high",
@@ -455,13 +477,13 @@ CTAs are extracted from transcript and OCR by this agent.
     "sub_checks": [
       {
         "check_id": "product_not_shown",
-        "name": "Product Presence Check",
+        "name": "Product Presence",
         "result": "passed",
         "severity": "none"
       },
       {
         "check_id": "product_obscured",
-        "name": "Product Visibility Check",
+        "name": "Product Visibility",
         "result": "failed",
         "severity": "medium",
         "explanation": "Packaging labels are heavily blurred due to depth-of-field focus issues."
@@ -474,7 +496,7 @@ CTAs are extracted from transcript and OCR by this agent.
       },
       {
         "check_id": "product_name_unspoken",
-        "name": "Brand Name Mention Check",
+        "name": "Product Name Presence",
         "result": "passed",
         "severity": "none"
       }
@@ -545,13 +567,13 @@ Use frame-level visual context.
     "sub_checks": [
       {
         "check_id": "video_corruption",
-        "name": "File Integrity",
+        "name": "Video corruption",
         "result": "passed",
         "severity": "none"
       },
       {
         "check_id": "dropped_frames",
-        "name": "Frame Sync Check",
+        "name": "Dropped frames",
         "result": "passed",
         "severity": "none"
       },
@@ -576,7 +598,7 @@ Use frame-level visual context.
       },
       {
         "check_id": "illegible_text",
-        "name": "Text Quality Check",
+        "name": "Illegible text",
         "result": "passed",
         "severity": "none"
       }
@@ -595,11 +617,11 @@ Use frame-level visual context.
 
 ## 6. Brand Alignment Agent (`brand-alignment-agent`)
 
-*   **Owner**: Yuchen Lin
+*   **Owner**: Anusha
 *   **Directory**: `supabase/functions/brand-alignment-agent/`
 
 ### Mapped Metrics & Internal Sub-Checks
-1.  **`brand_fit`**: "Does the video align with brand voice, positioning, and visual expectations?"
+1.  **`brand_fit`**: "Does the ad's logo, visual identity, and voice align with the supplied brand guidance?"
     *   `logo_absent`: Logo completely missing from key scenes.
     *   `logo_incorrect`: Wrong logo version, incorrect design layout, or distorted layout.
     *   `color_palette_off`: Dominant colors drift from style guide palette.
@@ -630,7 +652,7 @@ Use frame-level visual context.
     "metric_id": "brand_fit",
     "agent": "brand_alignment",
     "metric_name": "Brand Fit",
-    "question": "Does the video align with brand voice, positioning, and visual expectations?",
+    "question": "Does the ad's logo, visual identity, and voice align with the supplied brand guidance?",
     "result": "false",
     "severity": "low",
     "confidence": "high",
@@ -665,7 +687,7 @@ Use frame-level visual context.
       },
       {
         "check_id": "brand_voice_drift",
-        "name": "Brand Voice & Font Alignment",
+        "name": "Brand Voice Alignment",
         "result": "failed",
         "severity": "low",
         "explanation": "Subtitles use a generic Serif font face instead of the brand's approved sans-serif typography."
@@ -688,11 +710,11 @@ Use frame-level visual context.
 *   **Directory**: `supabase/functions/brief-alignment-agent/`
 
 ### Mapped Metrics & Internal Sub-Checks
-1.  **`audience_fit`**: "Does the video speak to the intended audience's needs, motivations, or context?"
+1.  **`audience_fit`**: "Does the Ad Creative speak to the intended audience's needs, motivations, and context?"
     *   `demographic_mismatch`: Slang, style, music, or vocabulary choices clash with target demographics.
     *   `demographic_restricted`: Target demographic contains legally restricted age groups.
   
-2.  **`brief_adherence`**: "Does the video satisfy the core campaign objective and required message from the creative brief?"
+2.  **`brief_adherence`**: "Does the Ad Creative satisfy the campaign objective and required messages in its Creative Brief?"
     *   `objective_missed`: Video objectives deviate from primary brief target goals.
     *   `required_message_missing`: Mandatory message points or product highlights from creative brief are omitted.
 
@@ -728,7 +750,7 @@ Use frame-level visual context.
     "metric_id": "audience_fit",
     "agent": "brief_alignment",
     "metric_name": "Audience Fit",
-    "question": "Does the video speak to the intended audience's needs, motivations, or context?",
+    "question": "Does the Ad Creative speak to the intended audience's needs, motivations, and context?",
     "result": "false",
     "severity": "medium",
     "confidence": "high",
@@ -745,14 +767,14 @@ Use frame-level visual context.
     "sub_checks": [
       {
         "check_id": "demographic_mismatch",
-        "name": "Demographic Profile Match",
+        "name": "Audience Profile Match",
         "result": "failed",
         "severity": "medium",
         "explanation": "Narrative flow is heavily corporate, which clashes with the Gen Z demographic target."
       },
       {
         "check_id": "demographic_restricted",
-        "name": "Age Restriction Check",
+        "name": "Audience Restriction Check",
         "result": "passed",
         "severity": "none"
       }
@@ -762,7 +784,7 @@ Use frame-level visual context.
     "metric_id": "brief_adherence",
     "agent": "brief_alignment",
     "metric_name": "Brief Adherence",
-    "question": "Does the video satisfy the core campaign objective and required message from the creative brief?",
+    "question": "Does the Ad Creative satisfy the campaign objective and required messages in its Creative Brief?",
     "result": "false",
     "severity": "medium",
     "confidence": "high",
@@ -790,7 +812,7 @@ Use frame-level visual context.
       },
       {
         "check_id": "required_message_missing",
-        "name": "Creative Brief Message Adherence",
+        "name": "Required Message Adherence",
         "result": "failed",
         "severity": "medium",
         "explanation": "Mandatory message point 'fun tropical snack energy' is completely missing."
